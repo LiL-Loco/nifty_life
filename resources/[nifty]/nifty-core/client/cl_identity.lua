@@ -87,17 +87,14 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
 end)
 
 RegisterNetEvent('nifty:client:needsCharacter', function()
-  -- The character creator UI is not built yet. Until it is, hold the player at
-  -- the creation point and tell them why, rather than dropping them into the
-  -- world as an unowned ped.
+  -- Open the creator. Until the player has a character they stay frozen and
+  -- hidden at the creation point rather than walking around the city as an
+  -- unowned ped.
   local ped = PlayerPedId()
   FreezeEntityPosition(ped, true)
   SetEntityVisible(ped, false)
 
-  TriggerEvent('chat:addMessage', {
-    color = { 214, 180, 105 },
-    args = { 'Nifty Life 2.0', 'Character creator not implemented yet — you have no character.' },
-  })
+  exports['nifty-core']:openCreator()
 end)
 
 RegisterNetEvent('nifty:client:creatorError', function(message)

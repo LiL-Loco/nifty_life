@@ -1,16 +1,18 @@
---- Appearance validation configuration (ADR-0017).
+--- Appearance and spawn configuration (ADR-0017).
+---
+--- SHARED: loaded on both client and server. The client uses it to offer only
+--- options the server will accept; the server uses it to reject anything else.
+--- It is deliberately one file — a duplicated allowlist would drift, and the
+--- failure mode of a drifted allowlist is a creator that offers something the
+--- server silently refuses.
 ---
 --- WHY THIS FILE EXISTS
 ---
---- The collection natives (GetNumberOfPedCollectionDrawableVariations and friends)
---- are CLIENT-ONLY. The server therefore cannot ask the engine whether a given
+--- The collection natives (GetNumberOfPedCollectionDrawableVariations and
+--- friends) are CLIENT-ONLY. The server cannot ask the engine whether a given
 --- component/collection/drawable combination is real. Appearance submitted by a
---- client is untrusted input, exactly like an item id in an inventory event.
----
---- So the server validates against this allowlist instead. Anything not
---- explicitly permitted here is rejected before it reaches the database. The
---- point is not to reimplement the engine's validity rules — it is to stop a
---- client persisting an appearance the game cannot render.
+--- client is therefore untrusted input, exactly like an item id in an inventory
+--- event. The allowlist below is what the server validates against instead.
 
 AppearanceConfig = {
   --- Hard bounds. Real drawable and texture counts sit comfortably inside these;
@@ -25,14 +27,14 @@ AppearanceConfig = {
   --- Collection names permitted. The base game collection is the empty string;
   --- the rest are GTA DLC collections present in a stock install.
   ---
-  --- This is deliberately an allowlist rather than a denylist: a new DLC
-  --- collection must be added here on purpose, so it can never start feeding
-  --- characters content nobody reviewed.
+  --- This is an allowlist rather than a denylist: a new DLC collection must be
+  --- added here on purpose, so it can never start feeding characters content
+  --- nobody reviewed.
   ALLOWED_COLLECTIONS = {
     ['']                  = true,  -- base game
     female_beach          = true,
     female_bikerdlc_01    = true,
-    female_biker         = true,
+    female_biker          = true,
     female_heist         = true,
     female_xmas           = true,
     male_bikerdlc_01      = true,
@@ -54,8 +56,6 @@ AppearanceConfig = {
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.
---- Default is where a new character arrives. `housing` is used once property
---- is built (ADR-0013).
 SpawnPoints = {
   default = {
     label  = 'Los Santos International',
@@ -65,4 +65,14 @@ SpawnPoints = {
     label  = 'Legion Square',
     x = 195.32, y = -933.77, z = 29.72, heading = 145.0,
   },
+}
+
+--- Where the character creator stages the player. Outdoors on purpose: the
+--- project buys no MLO (ADR-0012), so there is no bespoke studio interior.
+CreatorScene = {
+  x = -812.80, y = 175.31, z = 76.75,   -- Vinewood Hills overlook
+  heading = 195.0,
+  camHeight = 0.35,
+  camRadius = 2.6,
+  camPitch = -8.0,
 }
