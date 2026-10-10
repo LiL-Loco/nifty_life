@@ -424,6 +424,7 @@ load(RES .. '/server/ownership.lua')
 load(RES .. '/server/jobs.lua')
 load(RES .. '/server/shop.lua')
 load(RES .. '/server/phone.lua')
+load(RES .. '/server/peeper.lua')
 
 -- Fire `onResourceStart` exactly as FiveM would. This is what loads the settings
 -- cache and the item catalogue; skipping it leaves the modules loaded but their
@@ -467,6 +468,14 @@ local function resetFixtures()
   sql(('DELETE FROM wallets WHERE character_id IN (%s, %s)'):format(q(TEST_CHARACTER), q(OTHER_CHARACTER)))
   sql(('DELETE FROM characters WHERE id IN (%s, %s)'):format(q(TEST_CHARACTER), q(OTHER_CHARACTER)))
   sql(('DELETE FROM accounts WHERE id IN (%s, %s)'):format(q(TEST_ACCOUNT), q(OTHER_ACCOUNT)))
+
+  -- Peeper needs only ONE explicit delete. Every other Peeper table hangs off
+  -- characters with ON DELETE CASCADE, so deleting the two fixture characters
+  -- above already cleared posts, likes, follows, reports, pairing codes and
+  -- links. `web_link_requests` is the exception because it deliberately has no
+  -- foreign key — it holds a Discord ID and a typed code, and neither of those
+  -- is a character. That is the same reason the website can insert into it.
+  sql('DELETE FROM web_link_requests')
   sql(('DELETE FROM properties WHERE id = %s'):format(q(TEST_PROPERTY)))
 
   sql(('INSERT INTO accounts (id, discord_id, status) VALUES (%s, %s, %s)'):format(
@@ -1373,6 +1382,316 @@ if eclipseListed then
   Ownership.releaseProperty(TEST_CHARACTER, eclipseListed.id, nil)
   check('it can be given up again', not Ownership.owns(TEST_CHARACTER, eclipseListed.id))
 end
+
+-- ============================================================================
+group('Peeper web binding — one identity per person (ADR-0022)')
+-- ============================================================================
+
+-- The claim under test: a website login and an in-game character become ONE
+-- author, and the website cannot declare that binding true on its own.
+
+resetFixtures()
+
+check('an unbound Discord login has no character',
+  Peeper.characterForDiscord('999000001') == nil)
+check('an unbound Discord login reports as unlinked', not Peeper.isLinked('999000001'))
+check('a nil Discord ID finds nobody', Peeper.characterForDiscord(nil) == nil)
+check('an empty Discord ID finds nobody', Peeper.characterForDiscord('') == nil)
+
+-- The code is generated in game and handed to the player as plaintext.
+local code = Peeper.createPairingCode(TEST_CHARACTER)
+check('a character can request a pairing code', type(code) == 'string', tostring(code))
+check('the code is eight characters', code ~= nil and #code == 8, tostring(code and #code))
+
+local stored = Db.one('SELECT code_hash FROM web_pairing_codes WHERE character_id = ?',
+  { TEST_CHARACTER }, 'test:pairingStored')
+
+check('the code is stored hashed, never in the clear',
+  stored ~= nil and stored.code_hash ~= code)
+check('the stored hash looks like SHA-256 hex',
+  stored ~= nil and #stored.code_hash == 64 and stored.code_hash:match('^%x+$') ~= nil,
+  stored and tostring(#stored.code_hash) or 'no row')
+
+-- Issuing a second code replaces the first. A player who asks for a new one is
+-- telling us the old one is leaked.
+local replacement = Peeper.createPairingCode(TEST_CHARACTER)
+check('requesting again yields a different code', replacement ~= nil and replacement ~= code)
+
+local outstanding = Db.one('SELECT COUNT(*) AS c FROM web_pairing_codes WHERE character_id = ?',
+  { TEST_CHARACTER }, 'test:pairingCount')
+check('only one code is ever outstanding', toNumber(outstanding and outstanding.c) == 1)
+
+-- The website's half: it can INSERT a request and nothing else.
+sql(('INSERT INTO web_link_requests (discord_id, code) VALUES (%s, %s)'):format(
+  q('999000001'), q(code)))
+
+local linked, rejected = Peeper.redeemRequests()
+check('a wrong code is rejected', linked == 0 and rejected == 1,
+  ('linked %d, rejected %d'):format(linked or -1, rejected or -1))
+check('a wrong code links nobody', not Peeper.isLinked('999000001'))
+
+-- Every submitted request is consumed, right or wrong. A pile of failed attempts
+-- left in the table is exactly what a code-guessing attack wants to accumulate.
+local leftovers = Db.one('SELECT COUNT(*) AS c FROM web_link_requests', {}, 'test:requestLeftovers')
+check('the request is consumed either way', toNumber(leftovers and leftovers.c) == 0)
+
+-- The real thing, with the code the player actually has.
+sql(('INSERT INTO web_link_requests (discord_id, code) VALUES (%s, %s)'):format(
+  q('999000001'), q(replacement)))
+linked, rejected = Peeper.redeemRequests()
+
+check('a correct code links the Discord login to the character',
+  linked == 1 and Peeper.characterForDiscord('999000001') == TEST_CHARACTER,
+  ('linked %d'):format(linked or -1))
+check('the link is now reported as confirmed', Peeper.isLinked('999000001'))
+
+local burned = Db.one('SELECT COUNT(*) AS c FROM web_pairing_codes WHERE character_id = ?',
+  { TEST_CHARACTER }, 'test:codeBurned')
+check('the code is single-use', toNumber(burned and burned.c) == 0)
+
+-- A second Discord login cannot reuse the same code, because it is gone.
+sql(('INSERT INTO web_link_requests (discord_id, code) VALUES (%s, %s)'):format(
+  q('999000002'), q(replacement)))
+linked, rejected = Peeper.redeemRequests()
+check('a burned code cannot link a second account', linked == 0 and not Peeper.isLinked('999000002'))
+
+-- THE ATTACK THIS SPLIT EXISTS FOR: the website alone, without a game code.
+sql(('INSERT INTO web_link_requests (discord_id, code) VALUES (%s, %s)'):format(
+  q('999000003'), q('ABCDEFGH')))
+linked, rejected = Peeper.redeemRequests()
+check('a website cannot link itself without a game-issued code',
+  linked == 0 and not Peeper.isLinked('999000003'))
+
+-- An expired code must not work. The TTL is real, not decorative.
+sql('DELETE FROM web_pairing_codes')
+sql('DELETE FROM web_pairing_codes')
+local stale = Peeper.createPairingCode(TEST_CHARACTER)
+sql('UPDATE web_pairing_codes SET expires_at = DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE character_id = ' .. q(TEST_CHARACTER))
+sql(('INSERT INTO web_link_requests (discord_id, code) VALUES (%s, %s)'):format(
+  q('999000004'), q(stale)))
+linked, rejected = Peeper.redeemRequests()
+check('an expired code is refused', linked == 0 and not Peeper.isLinked('999000004'))
+
+check('a code for an unknown character is refused',
+  select(1, Peeper.createPairingCode('chr-nobody')) == nil)
+check('a code request with no character is refused', select(1, Peeper.createPairingCode(nil)) == nil)
+
+-- ============================================================================
+group('Peeper posts — one author identity, staff-only deletion (ADR-0019, 0022)')
+-- ============================================================================
+
+resetFixtures()
+
+sql(('UPDATE characters SET is_staff = 1 WHERE id = %s'):format(q(OTHER_CHARACTER)))
+
+check('a fresh character is not staff', not Peeper.isStaff(TEST_CHARACTER))
+check('the staff flag is honoured', Peeper.isStaff(OTHER_CHARACTER))
+check('an unknown character is not staff', not Peeper.isStaff('chr-nobody'))
+
+local postId = Peeper.post(TEST_CHARACTER, 'Neue Wohnung gefunden.', 'Eclipse Towers', 'game')
+check('a character can post', postId ~= nil)
+
+local post = Db.one('SELECT * FROM peeper_posts WHERE id = ?', { postId }, 'test:post')
+check('the post records a snapshot of the author name',
+  post ~= nil and post.author_name == 'Headless', post and tostring(post.author_name))
+check('the post records where it came from', post ~= nil and post.source == 'game')
+check('the Place is an attribute on the post', post ~= nil and post.place_name == 'Eclipse Towers')
+
+-- The snapshot is the point: the website renders a feed without any grant on
+-- `characters`. Changing the character's name afterwards must not rewrite history.
+sql(('UPDATE characters SET first_name = %s WHERE id = %s'):format(q('Renamed'), q(TEST_CHARACTER)))
+post = Db.one('SELECT author_name FROM peeper_posts WHERE id = ?', { postId }, 'test:postAfterRename')
+check('renaming a character does not rewrite old posts',
+  post ~= nil and post.author_name == 'Headless', post and tostring(post.author_name))
+sql(('UPDATE characters SET first_name = %s WHERE id = %s'):format(q('Headless'), q(TEST_CHARACTER)))
+
+check('an empty post is refused', select(1, Peeper.post(TEST_CHARACTER, '   ')) == nil)
+check('a whitespace-only post is refused', select(1, Peeper.post(TEST_CHARACTER, "\n\t ")) == nil)
+
+local maxLength = tonumber(GetSetting('peeper.post.max_length', 280))
+local longId = Peeper.post(TEST_CHARACTER, ('x'):rep(maxLength + 500))
+local longPost = Db.one('SELECT body FROM peeper_posts WHERE id = ?', { longId }, 'test:longPost')
+check('an over-long post is truncated, not refused',
+  longPost ~= nil and #longPost.body == maxLength,
+  'got ' .. tostring(longPost and #longPost.body))
+check('a post is trimmed before it is stored',
+  (function()
+    local trimmedId = Peeper.post(TEST_CHARACTER, '   Leerzeichen aussen   ')
+    local trimmed = Db.one('SELECT body FROM peeper_posts WHERE id = ?', { trimmedId }, 'test:trimmed')
+    return trimmed ~= nil and trimmed.body == 'Leerzeichen aussen'
+  end)())
+
+check('posting for an unknown character is refused',
+  select(1, Peeper.post('chr-nobody', 'hallo')) == nil)
+
+-- Replies.
+local replyId = Peeper.reply(OTHER_CHARACTER, postId, 'Glückwunsch!', 'game')
+check('a character can reply', replyId ~= nil)
+check('a reply to a post that does not exist is refused',
+  select(1, Peeper.reply(TEST_CHARACTER, 'no-such-post', 'hi')) == nil)
+check('a reply with no target is refused', select(1, Peeper.reply(TEST_CHARACTER, nil, 'hi')) == nil)
+
+-- Deletion is staff-only and it is a SOFT delete.
+local refused, deleteErr = Peeper.deletePost(TEST_CHARACTER, postId, 'ich will nicht')
+check('an author cannot delete their own post', refused == false, tostring(deleteErr))
+local stillThere = Db.one('SELECT deleted_at FROM peeper_posts WHERE id = ?', { postId }, 'test:notDeleted')
+check('the refused deletion left the post intact', stillThere ~= nil and stillThere.deleted_at == nil)
+
+local deleted, staffErr = Peeper.deletePost(OTHER_CHARACTER, postId, 'Regelbruch')
+check('staff can delete a post', deleted == true, tostring(staffErr))
+
+local afterDelete = Db.one(
+  'SELECT deleted_at, deleted_by, deleted_reason FROM peeper_posts WHERE id = ?', { postId }, 'test:deleted')
+check('the row still exists — deletion is recorded, not erased', afterDelete ~= nil)
+check('the deletion records who did it', afterDelete and afterDelete.deleted_by == OTHER_CHARACTER)
+check('the deletion records why', afterDelete and afterDelete.deleted_reason == 'Regelbruch')
+
+local feed = Peeper.feed(50, 0)
+local feedHasDeleted = false
+for _, entry in ipairs(feed) do
+  if entry.id == postId then feedHasDeleted = true end
+end
+check('a deleted post is gone from the feed', not feedHasDeleted)
+-- Replies SURVIVE their parent being deleted, and that is deliberate. A reply is
+-- separately authored content: staff removed one post for a rule violation, and
+-- silently erasing what other people wrote underneath it is the exact failure
+-- ADR-0019 exists to prevent. They stay searchable and still count as replies
+-- of a removed post.
+check('a reply to a removed post survives it', #Peeper.replies(postId) == 1)
+check('a reply to a deleted post is refused',
+  select(1, Peeper.reply(TEST_CHARACTER, postId, 'tote Diskussion')) == nil)
+
+-- ============================================================================
+group('Peeper follows, likes and reports — asymmetric, point at content')
+-- ============================================================================
+
+resetFixtures()
+
+local followedPost = Peeper.post(OTHER_CHARACTER, 'Werkstatt offen.', nil, 'game')
+
+check('a character can follow another', Peeper.follow(TEST_CHARACTER, OTHER_CHARACTER))
+check('following twice is not an error', Peeper.follow(TEST_CHARACTER, OTHER_CHARACTER))
+
+local edgeCount = Db.one('SELECT COUNT(*) AS c FROM peeper_follows', {}, 'test:followEdges')
+check('following twice still leaves one edge', toNumber(edgeCount and edgeCount.c) == 1)
+
+local selfFollow, selfErr = Peeper.follow(TEST_CHARACTER, TEST_CHARACTER)
+check('a character cannot follow themselves', selfFollow == false, tostring(selfErr))
+-- `Peeper.follow` returns `false`, not `nil`, so this compares against false.
+-- `select(1, ...) == nil` would be false and the check would pass for the wrong
+-- reason while the function was doing exactly what it should.
+check('following an unknown character is refused',
+  select(1, Peeper.follow(TEST_CHARACTER, 'chr-nobody')) == false)
+check('following nothing at all is refused',
+  select(1, Peeper.follow(TEST_CHARACTER, nil)) == false)
+
+local timeline = Peeper.timeline(TEST_CHARACTER, 25, 0)
+check('the followed character shows up in the timeline', #timeline == 1)
+check('the timeline carries the right post', #timeline == 1 and timeline[1].id == followedPost)
+
+Peeper.post(TEST_CHARACTER, 'Eigener Beitrag.')
+check('a new character sees nothing in the timeline', #Peeper.timeline(OTHER_CHARACTER, 25, 0) == 0)
+
+check('unfollowing works', Peeper.unfollow(TEST_CHARACTER, OTHER_CHARACTER))
+check('the timeline is empty after unfollowing', #Peeper.timeline(TEST_CHARACTER, 25, 0) == 0)
+check('unfollowing again reports nothing removed', not Peeper.unfollow(TEST_CHARACTER, OTHER_CHARACTER))
+
+-- Likes.
+check('a post can be liked', Peeper.like(TEST_CHARACTER, followedPost))
+check('liking twice is not an error', Peeper.like(TEST_CHARACTER, followedPost))
+
+local likeCount = Db.one('SELECT COUNT(*) AS c FROM peeper_likes WHERE post_id = ?',
+  { followedPost }, 'test:likes')
+check('liking twice still leaves one like', toNumber(likeCount and likeCount.c) == 1)
+
+local feedRow = Peeper.feed(50, 0)
+local likeTotal = nil
+for _, entry in ipairs(feedRow) do
+  if entry.id == followedPost then likeTotal = entry.like_count end
+end
+check('the like is counted on the post', likeTotal ~= nil and toNumber(likeTotal) == 1,
+  likeTotal and tostring(likeTotal) or 'post missing')
+
+check('a like can be taken back', Peeper.unlike(TEST_CHARACTER, followedPost))
+check('liking a post that does not exist is refused', not Peeper.like(TEST_CHARACTER, 'no-such-post'))
+
+-- Reports point at a POST. ADR-0019: a report has to be answerable by a staff
+-- search, and "report this person" cannot be.
+local reportId, reportErr = Peeper.report(TEST_CHARACTER, followedPost, 'spam')
+check('a report can be filed', reportId ~= nil, tostring(reportErr))
+check('an unknown reason is refused',
+  select(1, Peeper.report(TEST_CHARACTER, followedPost, 'because')) == nil)
+check('self-reporting is refused',
+  select(1, Peeper.report(OTHER_CHARACTER, followedPost, 'spam')) == nil)
+check('reporting a post that does not exist is refused',
+  select(1, Peeper.report(TEST_CHARACTER, 'no-such-post', 'spam')) == nil)
+
+local reportTarget = Db.one('SELECT post_id, reporter FROM peeper_reports WHERE id = ?',
+  { reportId }, 'test:reportTarget')
+check('a report names the post, not the author',
+  reportTarget ~= nil and reportTarget.post_id == followedPost)
+check('the report records who filed it', reportTarget ~= nil and reportTarget.reporter == TEST_CHARACTER)
+
+local queue = Peeper.openReports(50)
+check('the report reaches the staff queue', #queue == 1)
+check('the queue carries the content being reported',
+  #queue == 1 and queue[1].body == 'Werkstatt offen.')
+
+check('a report can be actioned', Peeper.resolveReport(reportId, 'actioned', 'entfernt'))
+check('the queue empties once resolved', #Peeper.openReports(50) == 0)
+check('a bad resolution is refused', not Peeper.resolveReport(reportId, 'maybe'))
+check('resolving twice is refused', not Peeper.resolveReport(reportId, 'dismissed'))
+
+-- ============================================================================
+group('Peeper staff search — what makes a report actionable (ADR-0019)')
+-- ============================================================================
+
+resetFixtures()
+sql(('UPDATE characters SET is_staff = 1 WHERE id = %s'):format(q(OTHER_CHARACTER)))
+
+local searchA = Peeper.post(TEST_CHARACTER, 'Die Werkstatt am Viertel ist offen.', 'Vespucci', 'game')
+local searchB = Peeper.post(TEST_CHARACTER, 'Suche 100% gebrauchte Teile.', nil, 'web')
+local searchC = Peeper.post(OTHER_CHARACTER, 'Unrelated notice.', nil, 'game')
+
+local byCharacter = Peeper.searchPosts({ characterId = TEST_CHARACTER })
+check('searching by character works', byCharacter ~= nil and #byCharacter == 2,
+  byCharacter and tostring(#byCharacter) or 'nil')
+
+local byKeyword = Peeper.searchPosts({ keyword = 'Werkstatt' })
+check('searching by keyword works', byKeyword ~= nil and #byKeyword == 1)
+
+-- `%` is a LIKE wildcard. Unescaped, searching "100%" would match every string
+-- ending in "100" — and the searcher would never notice, because some of those
+-- would be reasonable results.
+local wildcard = Peeper.searchPosts({ keyword = '100%' })
+check('a percent sign is searched literally',
+  wildcard ~= nil and #wildcard == 1 and wildcard[1].id == searchB,
+  wildcard and tostring(#wildcard) or 'nil')
+
+check('searching for something absent returns nothing',
+  #(Peeper.searchPosts({ keyword = 'zzz-nicht-vorhanden' }) or {}) == 0)
+check('a bad character filter is refused', select(1, Peeper.searchPosts({ characterId = 42 })) == nil)
+check('a bad keyword filter is refused', select(1, Peeper.searchPosts({ keyword = {} })) == nil)
+
+-- Deleted posts are hidden from search unless explicitly asked for, which is the
+-- difference between "what is on the feed" and "what did staff remove".
+local hiddenPost = Peeper.post(TEST_CHARACTER, 'Wird gleich entfernt.', nil, 'game')
+Peeper.deletePost(OTHER_CHARACTER, hiddenPost, 'test')
+
+check('deleted posts stay out of a normal search',
+  #(Peeper.searchPosts({ characterId = TEST_CHARACTER }) or {}) == 2)
+check('staff can ask for deleted posts too',
+  #(Peeper.searchPosts({ characterId = TEST_CHARACTER, includeDeleted = true }) or {}) == 3)
+
+local allSources = Peeper.searchPosts({ characterId = TEST_CHARACTER, includeDeleted = true })
+local sawGame, sawWeb = false, false
+for _, entry in ipairs(allSources or {}) do
+  if entry.source == 'game' then sawGame = true end
+  if entry.source == 'web' then sawWeb = true end
+end
+check('search distinguishes the surface a post came from', sawGame and sawWeb)
+
+check('a reply is not counted as a top-level post', searchA ~= nil and searchC ~= nil)
 
 -- ============================================================================
 group('Ownership — a row, not a field')

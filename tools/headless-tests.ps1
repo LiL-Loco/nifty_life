@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Same lesson as verify.ps1: the entrypoint runs init scripts against a TEMPORARY
 # server, so readiness must be the expected table count, not `SELECT 1`.
-$expectedTables = 20
+$expectedTables = 27
 $ready = $false
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3
@@ -71,14 +71,13 @@ Write-Host "  PASS  schema ready ($expectedTables tables)" -ForegroundColor Gree
 Write-Host ''
 Write-Host 'Building Lua 5.4 toolchain...' -ForegroundColor Cyan
 
-$dockerfile = @'
-FROM mariadb:11
-RUN apt-get update -qq \
- && apt-get install -y -qq lua5.4 \
- && rm -rf /var/lib/apt/lists/*
-'@
-
-$dockerfile | docker build -q -t nifty-lua54 -f - . 2>&1 | Out-Null
+# Built from a FILE, not piped through stdin. A stdin Dockerfile gets a fresh
+# cache key every run, so the layer cache never hits and every invocation leaves
+# its layers behind — 20 GB of build cache before it was caught, at which point
+# the Docker VM ran out of room and every migration failed with
+# `ERROR 121 - Duplicate key on write or update`. That error reads like broken
+# SQL and is really a full disk.
+docker build -q -t nifty-lua54 -f tools/Dockerfile.lua54 . 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host '  FAIL  could not build the toolchain image' -ForegroundColor Red

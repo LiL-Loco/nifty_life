@@ -33,6 +33,7 @@ server_script 'server/ownership.lua'
 server_script 'server/jobs.lua'
 server_script 'server/shop.lua'
 server_script 'server/phone.lua'
+server_script 'server/peeper.lua'
 server_script 'server/sv_main.lua'
 server_script 'server/sv_actions.lua'
 

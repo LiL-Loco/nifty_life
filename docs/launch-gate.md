@@ -22,6 +22,8 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
 12. Phone apps — Messages, Email, documents (licence, registration, medical)
 13. Social network "Peeper" — broadcast feed, asymmetric follows, posts, optional Place tag (ADR-0019)
 14. Social moderation — report button + staff search by character, keyword or date (ADR-0019)
+14a. **Peeper on the website**, bound to the character by a game-issued pairing code (ADR-0022). Not a
+    separate web identity — one author per person across both surfaces.
 15. Voice calls via temporary Teamspeak channels, rate-limited (ADR-0020)
 16. Dispatch for police + EMS (LSPD = Mission Row, EMS = Pillbox). **No fire service** — GTA ships no
     enterable fire station, and an emergency service without a building is worse than none (ADR-0012).
@@ -69,3 +71,6 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
   phone UI is built on it (ADR-0020)
 - **Interior count** — reachable stock apartments to be counted on a live server (ADR-0013)
 - **Contacts** — the contacts app is implied by Messages but its model is not yet decided
+- **Website author resolution** — ADR-0022 leaves one accepted gap: `INSERT ON peeper_posts` does not
+  constrain `author_character` to a linked Discord ID. A stored procedure that takes the Discord ID
+  closes it properly. Recorded in `database/grants.sql`; not yet written.
