@@ -73,7 +73,7 @@ if ($LASTEXITCODE -ne 0) {
 # The entrypoint applies init scripts to a TEMPORARY server, then restarts.
 # Polling `SELECT 1` is not enough — it succeeds mid-init. Wait for the expected
 # table count instead. (Getting this wrong hides half the schema.)
-$expectedTables = 16
+$expectedTables = 17
 $ready = $false
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3
@@ -120,13 +120,32 @@ Assert-Run -Name 'negative Stütze payout is refused' `
 # Inventory integrity
 # ---------------------------------------------------------------------------
 Write-Step 'Inventory integrity'
-Invoke-Sql -Sql "INSERT INTO item_defs (code,name,category) VALUES ('bread','Bread','food')" | Out-Null
+# Migration 004 already seeds 'bread', so the test uses its own code. Re-inserting
+# a seeded item would silently rewrite its display name for every real player.
+Invoke-Sql -Sql "INSERT INTO item_defs (code,name,category) VALUES ('test_bread','Bread','food')" | Out-Null
 Assert-Run -Name 'first item into slot 0' `
-    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i1','chr-1',0,'bread',1)" -Expect 'allow'
+    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i1','chr-1',0,'test_bread',1)" -Expect 'allow'
 Assert-Run -Name 'a second item cannot claim the same slot' `
-    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i2','chr-1',0,'bread',1)" -Expect 'reject'
+    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i2','chr-1',0,'test_bread',1)" -Expect 'reject'
 Assert-Run -Name 'quantity of zero is refused' `
-    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i3','chr-1',5,'bread',0)" -Expect 'reject'
+    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i3','chr-1',5,'test_bread',0)" -Expect 'reject'
+Assert-Run -Name 'an item code with no catalogue entry is refused' `
+    -Sql "INSERT INTO inventory_items (id,character_id,slot,item_code,quantity) VALUES ('i4','chr-1',6,'no_such_item',1)" -Expect 'reject'
+
+# ---------------------------------------------------------------------------
+# ADR-0009 — the ledger explains a balance, it does not replace one
+# ---------------------------------------------------------------------------
+Write-Step 'ADR-0009 — ledger is append-only and explains the balance'
+Assert-Run -Name 'a normal movement is recorded' `
+    -Sql "INSERT INTO ledger (character_id,account,delta,balance_after,reason) VALUES ('chr-1','cash',250.00,750.00,'stuetze')" -Expect 'allow'
+Assert-Run -Name 'a Stütze payout that would go negative is refused' `
+    -Sql "INSERT INTO ledger (character_id,account,delta,balance_after,reason) VALUES ('chr-1','cash',-10000.00,-9750.00,'stuetze')" -Expect 'reject'
+Assert-Run -Name 'rewriting a historical entry is refused' `
+    -Sql "UPDATE ledger SET delta = 999999.00 WHERE character_id='chr-1'" -Expect 'reject'
+Assert-Run -Name 'deleting history is refused' `
+    -Sql "DELETE FROM ledger WHERE character_id='chr-1'" -Expect 'reject'
+Assert-Run -Name 'a movement without a reason is refused' `
+    -Sql "INSERT INTO ledger (character_id,account,delta,balance_after) VALUES ('chr-1','cash',10.00,760.00)" -Expect 'reject'
 
 # ---------------------------------------------------------------------------
 # ADR-0004 — vehicle state bounds
