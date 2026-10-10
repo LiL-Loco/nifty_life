@@ -1,6 +1,6 @@
 # Housing Catalogue — 60 properties
 
-Working plan for ~60 residences across Los Santos, built only from stock GTA V assets (ADR-0012).
+Working plan for 61 residences across Los Santos, built only from stock GTA V assets (ADR-0012).
 Every entry is a real IPL name or a real shell coordinate taken from the IPL reference. Nothing here is
 invented; entries marked ⚠ need on-server verification before they are committed.
 
@@ -81,7 +81,7 @@ Office interiors reused as small flats. Desk-and-chair rooms read as studio apar
 | Franklin's Aunt House | `(-67, -809)` |
 | 2677 Whispymound Drive | `(120.50, 549.95, 184.10)` ⚠ |
 
-## District 8 — Outskirts & rural (9) · Character tier
+## District 8 — Outskirts & rural (8) · Character tier
 
 | Address | Coords | Note |
 |---|---|---|
@@ -106,22 +106,27 @@ rather than pretending the north has housing.
 | Grapeseed Bunker | `gr_case5_bunkerclosed` | `(1823.96, 4708.14, 42.50)` |
 | Chumash Bunker | `gr_case11_bunkerclosed` | `(-3180.47, 1374.19, 19.96)` |
 
-**Total: 60.**
+**Total: 61.**
+
+> **Correction (2026-10-11).** This document previously claimed 60. It listed 60 while
+> counting Madrazos Ranch twice in the tier table, and the District 8 heading said 9
+> against 8 listed rows. Counting what is actually written down gives 61, which is what
+> `database/migrations/008_property_catalogue.sql` seeds and what the harness asserts.
 
 ---
 
 ## Tiers
 
-Scarcity is reintroduced by **tier**, not by count — at 60 properties against a 20–40 player base there is no
+Scarcity is reintroduced by **tier**, not by count — at 61 properties against a 20–40 player base there is no
 scarcity left in the raw numbers.
 
-| Tier | Count | Examples | Role |
-|---|---|---|---|
-| Luxury | 5 | Casino Penthouse, Franklin's Mansion, 3× Hillcrest | Top of the wealth sink |
-| Premium | 26 | Eclipse Towers ×24, Vinewood Hills ×2 | Main housing market |
-| Standard | 8 | North Conker ×2, Davis ×2, Mad Wayne Thunder, Little Seoul, Motor Motel, trailer | Most players land here |
-| Entry | 15 | Downtown ×9, Del Perro ×6 studios | Free-to-enter floor |
-| Outlier | 6 | 3 bunkers, 2 ranches, Madrazos | Rural/rough, geographically necessary |
+| Tier | Count | Examples | Role | Storage |
+|---|---|---|---|---|
+| Luxury | 4 | Casino Penthouse, 3× Hillcrest | Top of the wealth sink | 25 |
+| Premium | 26 | Eclipse Towers ×24, Vinewood Hills ×2 | Main housing market | 15 |
+| Standard | 11 | North Conker ×2, Davis ×2, Mad Wayne Thunder, Michael's, Floyd's, Molina's, Motor Motel, trailer | Most players land here | 10 |
+| Entry | 15 | Downtown ×9, Del Perro ×6 studios | Free-to-enter floor | 6 |
+| Outlier | 5 | 3 bunkers, O'Neil Ranch, Madrazos Ranch | Rural/rough, geographically necessary | 8 |
 
 Ownership is **free to own**; tier governs *rent and upkeep*, which is where the sink lives (ADR-0009).
 A player never becomes permanently homeless, and wealth still costs something.
@@ -143,6 +148,31 @@ what the resource exists for, and it resolves every item below.
 
 Only the first two block the launch gate. The rest are quality-of-life items that can be resolved during
 content work.
+
+### How verification flips a row
+
+`properties.is_active` is one flag and the catalogue has **two different kinds of gap**, which must not be
+confused:
+
+| Gap | Symptom | Effect |
+|---|---|---|
+| **Interior unverified** | The IPL name or shell has never been confirmed to load | `is_active = 0` — the residence does not exist as far as the game is concerned |
+| **Door unmeasured** | The residence is real, but its street entrance was never measured | Stays `is_active = 1` and stays listed. `cl_housing` simply draws no marker and logs it |
+
+The 15 studios are entirely door-unmeasured: their entrances appear here only as `(-141.x, -620.9, 168.8)`,
+where `.x` is a gap in the source rather than a truncated digit. They are valid, confirmed interiors and they
+must not be hidden for want of a coordinate.
+
+The 11 entries marked ⚠ above are interior-unverified and are seeded with `is_active = 0`, so they do not appear
+in `Ownership.listProperties` at all — an interior that fails to load silently produces no error, so an
+unconfirmed house is worse than an absent one. Once an IPL has been seen to load:
+
+```sql
+UPDATE properties SET is_active = 1 WHERE code = 'nconker-2044';
+```
+
+The seed deliberately does **not** update `is_active` on re-run, so this flip is not undone by
+re-applying the migration.
 
 **Reference:** CodeWalker's IPL browser (`forge.plebmasters.de`) is the authoritative cross-check, but it is
 JS-rendered and could not be queried programmatically.

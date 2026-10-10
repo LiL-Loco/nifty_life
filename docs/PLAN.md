@@ -51,7 +51,11 @@ proven privately before any content work starts. See ADR-0014.
    This is the single number most likely to be got wrong.
 3. **Housing pool (ADR-0013).** The larger apartment set is GTA Online and probably not loadable in FiveM.
    If the reachable pool lands near four rather than twelve, housing becomes the binding constraint on the
-   entire economy.
+   entire economy. *Partly answered:* the catalogue is seeded with 61 residences
+   (`database/migrations/008_property_catalogue.sql`), of which **50 are confirmed loadable** and 11 are held
+   back with `is_active = 0` pending the Bob74_IPL round. The risk is therefore no longer "how many exist" but
+   "how many of the 11 survive verification" — and those 11 are all shells or unconfirmed IPL names, so the
+   confirmed floor of 50 is already safe without them.
 
 ## Open items
 

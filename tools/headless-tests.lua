@@ -971,7 +971,12 @@ sql('DELETE FROM wallets')
 sql('DELETE FROM sessions')
 sql('DELETE FROM characters')
 sql('DELETE FROM accounts')
-sql('DELETE FROM properties')
+
+-- Only the fixture property. A bare `DELETE FROM properties` used to sit here and
+-- wiped the entire housing catalogue (migration 008) before the Housing group ran
+-- — every one of its 20 checks then reported "got 0" and looked like a seeding
+-- failure. Catalogue rows are server content, not test data.
+sql(('DELETE FROM properties WHERE id = %s'):format(q(TEST_PROPERTY)))
 
 FakePlayers.connect(1, '777000001')
 
@@ -1184,6 +1189,190 @@ check('a bad resolution status is refused', not Phone.resolveReport(queue[1].id,
 local before = Phone.getAccount(PHONE_ONE)
 check('the number cannot be changed by any exported function',
   Phone.getAccount(PHONE_ONE).number == before.number and before.number == PHONE_NUMBER_ONE)
+
+-- ============================================================================
+group('Housing catalogue — 61 rows, derived IDs, honest coordinates')
+-- ============================================================================
+
+-- The catalogue is data, so its integrity is a testable claim, not a promise.
+-- `headless_flat` is the harness's own fixture and is excluded everywhere below.
+
+local catalogue = Db.all([[
+  SELECT p.code, p.tier, p.is_active, p.storage_slots, p.rent_amount, p.upkeep_amount,
+         p.interior_ipl, p.entrance_x, p.entrance_y, p.id,
+         CONCAT(
+           SUBSTR(SHA1(CONCAT('nl2:housing:', p.code)),  1,  8), '-',
+           SUBSTR(SHA1(CONCAT('nl2:housing:', p.code)),  9,  4), '-5',
+           SUBSTR(SHA1(CONCAT('nl2:housing:', p.code)), 14,  3), '-a',
+           SUBSTR(SHA1(CONCAT('nl2:housing:', p.code)), 18,  3), '-',
+           SUBSTR(SHA1(CONCAT('nl2:housing:', p.code)), 21, 12)
+         ) AS derived_id
+    FROM properties p
+   WHERE p.kind = 'housing' AND p.code <> 'headless_flat'
+]], {}, 'test:catalogue')
+
+check('the catalogue holds 61 residences', #catalogue == 61, 'got ' .. tostring(#catalogue))
+
+-- The reason IDs are derived rather than UUID(): a re-seed must not orphan the
+-- owners pointing at a property. This compares every seeded ID against the ID its
+-- own code derives to, which is the whole claim in one query.
+local mismatched = 0
+for _, row in ipairs(catalogue) do
+  if row.id ~= row.derived_id then mismatched = mismatched + 1 end
+end
+check('every property ID is the SHA1 of its own code', mismatched == 0,
+  mismatched .. ' mismatched')
+
+local codes = {}
+local duplicateCodes = 0
+for _, row in ipairs(catalogue) do
+  if codes[row.code] then duplicateCodes = duplicateCodes + 1 end
+  codes[row.code] = true
+end
+check('no code appears twice', duplicateCodes == 0, duplicateCodes .. ' duplicates')
+
+-- Tier distribution, corrected against docs/housing-catalogue.md. The old table
+-- summed to 60 and double-counted Madrazos Ranch.
+local byTier = { entry = 0, standard = 0, premium = 0, luxury = 0, outlier = 0 }
+local activeCount, activeWithoutXY, unknownTier = 0, 0, 0
+local noPositionCodes = {}
+for _, row in ipairs(catalogue) do
+  if byTier[row.tier] == nil then
+    unknownTier = unknownTier + 1
+  else
+    byTier[row.tier] = byTier[row.tier] + 1
+  end
+
+  if toNumber(row.is_active) == 1 then
+    activeCount = activeCount + 1
+    -- Two DIFFERENT gaps share this table, and conflating them is the bug this
+    -- group exists to prevent. A residence can be a real, loadable interior and
+    -- still have no measured street door — that is all 15 studios, whose
+    -- entrances the catalogue records only as `-141.x`. They stay active and stay
+    -- in the list; `cl_housing` skips drawing a marker and says so in the log.
+    if row.entrance_x == nil or row.entrance_y == nil then
+      activeWithoutXY = activeWithoutXY + 1
+      noPositionCodes[row.code] = true
+    end
+  end
+end
+
+check('every tier is one of the five the schema allows', unknownTier == 0,
+  unknownTier .. ' unknown tier(s)')
+check('entry tier: 15 studios', byTier.entry == 15, 'got ' .. tostring(byTier.entry))
+check('premium tier: 24 Eclipse Towers + 2 Vinewood Hills = 26', byTier.premium == 26,
+  'got ' .. tostring(byTier.premium))
+check('standard tier: 11', byTier.standard == 11, 'got ' .. tostring(byTier.standard))
+check('luxury tier: 3 Hillcrest + 1 casino penthouse = 4', byTier.luxury == 4,
+  'got ' .. tostring(byTier.luxury))
+check('outlier tier: 3 bunkers + 2 ranches = 5', byTier.outlier == 5,
+  'got ' .. tostring(byTier.outlier))
+
+check('50 residences are confirmed loadable', activeCount == 50, 'got ' .. tostring(activeCount))
+check('11 are held back pending IPL verification', activeCount == 61 - 11)
+
+-- The 15 without a door are exactly the studios, and every other active
+-- residence has a real position. Anything else here would put a marker at 0,0,0.
+local missingOutsideStudios = 0
+for code in pairs(noPositionCodes) do
+  if not code:match('^dt%-') and not code:match('^dp%-') then
+    missingOutsideStudios = missingOutsideStudios + 1
+  end
+end
+check('the 15 door-less residences are exactly the studios', activeWithoutXY == 15 and
+  missingOutsideStudios == 0,
+  activeWithoutXY .. ' without X/Y, ' .. missingOutsideStudios .. ' outside the studios')
+check('all other active residences have a place to stand', 50 - activeWithoutXY == 35)
+
+-- The verification flag is meaningful in both directions.
+local unverifiedWithNoPosition = 0
+for _, row in ipairs(catalogue) do
+  if toNumber(row.is_active) == 0 and row.entrance_x == nil then
+    unverifiedWithNoPosition = unverifiedWithNoPosition + 1
+  end
+end
+check('exactly the two position-less entries (Floyd, Harvey Molina) are unverified',
+  unverifiedWithNoPosition == 2, 'got ' .. tostring(unverifiedWithNoPosition))
+
+-- ADR-0009/ADR-0013: ownership is free, and the numbers are a deferred pass.
+-- Asserting zero here is deliberate — it fails loudly if someone invents a rent.
+local priced = 0
+for _, row in ipairs(catalogue) do
+  if toNumber(row.rent_amount) ~= 0 or toNumber(row.upkeep_amount) ~= 0 then
+    priced = priced + 1
+  end
+end
+check('no rent or upkeep is committed before the economy pass', priced == 0,
+  priced .. ' row(s) carry a price')
+
+local zeroSlots = 0
+for _, row in ipairs(catalogue) do
+  if (tonumber(row.storage_slots) or 0) <= 0 then zeroSlots = zeroSlots + 1 end
+end
+check('every residence has storage', zeroSlots == 0, zeroSlots .. ' without storage')
+
+-- The catalogue has to actually reach the client, minus the unverified rows.
+-- `headless_flat` is the harness's own fixture and legitimately appears here,
+-- so it is excluded by name rather than by assuming a bare count.
+local listed = Ownership.listProperties('housing')
+check('the list holds the 50 confirmed residences plus the fixture',
+  #listed == 51, 'got ' .. tostring(#listed))
+
+-- Only `is_active = 0` hides a residence. Having no measured street door does NOT:
+-- the 15 studios are real properties with an unmeasured entrance, and they must
+-- stay in the list.
+local unverifiedCodes = {}
+for _, row in ipairs(catalogue) do
+  if toNumber(row.is_active) == 0 then unverifiedCodes[row.code] = true end
+end
+
+local leaksUnverified = 0
+for _, entry in ipairs(listed) do
+  if unverifiedCodes[entry.code] then leaksUnverified = leaksUnverified + 1 end
+end
+check('no unverified residence reaches the list', leaksUnverified == 0,
+  leaksUnverified .. ' unverified row(s) listed')
+
+local studiosListed = 0
+for _, entry in ipairs(listed) do
+  if noPositionCodes[entry.code] then studiosListed = studiosListed + 1 end
+end
+check('the door-less studios are still listed', studiosListed == 15,
+  'got ' .. tostring(studiosListed))
+
+-- Ownership works on a seeded row, not only on the fixture.
+local eclipse, eclipseDerivedId = nil, nil
+for _, row in ipairs(catalogue) do
+  if row.code == 'ecl-modern-1' then
+    eclipse, eclipseDerivedId = row, row.derived_id
+  end
+end
+
+local eclipseListed
+for _, entry in ipairs(listed) do
+  if entry.code == 'ecl-modern-1' then eclipseListed = entry end
+end
+
+check('a seeded residence is listed with its entrance',
+  eclipseListed ~= nil and eclipseListed.entrance.x ~= nil and
+    toNumber(eclipseListed.entrance.z) == 217.63,
+  eclipseListed and tostring(eclipseListed.entrance.z) or 'not listed')
+
+if eclipseListed then
+  local took, takeErr = Ownership.acquireProperty(TEST_CHARACTER, eclipseListed.id)
+  check('a seeded residence can be taken', took, tostring(takeErr))
+  check('ownership survives as a row, not a field on the property',
+    Ownership.owns(TEST_CHARACTER, eclipseListed.id))
+
+  local ownerRow = Db.one('SELECT property_id FROM property_owners WHERE character_id = ?',
+    { TEST_CHARACTER }, 'test:catalogue-owner')
+  check('the owner row points at the derived ID',
+    ownerRow ~= nil and ownerRow.property_id == eclipseDerivedId,
+    ownerRow and tostring(ownerRow.property_id) .. ' vs ' .. tostring(eclipseDerivedId) or 'no row')
+
+  Ownership.releaseProperty(TEST_CHARACTER, eclipseListed.id, nil)
+  check('it can be given up again', not Ownership.owns(TEST_CHARACTER, eclipseListed.id))
+end
 
 -- ============================================================================
 group('Ownership — a row, not a field')
