@@ -74,6 +74,7 @@ if ($LASTEXITCODE -ne 0) {
 # Polling `SELECT 1` is not enough — it succeeds mid-init. Wait for the expected
 # table count instead. (Getting this wrong hides half the schema.)
 $expectedTables = 17
+$expectedJobDefs = 8
 $ready = $false
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3
@@ -91,6 +92,52 @@ if (-not $ready) {
 }
 Write-Host "  PASS  all $expectedTables tables created" -ForegroundColor Green
 
+$jobs = Invoke-Sql -Sql "SELECT COUNT(*) FROM job_defs"
+$script:Checks++
+# `SELECT COUNT(*)` output is header line + value line, so the number is the LAST
+# line. Matching with `-match "^8"` silently fails and looks like a data bug.
+$jobCount = ($jobs.Output -split "`n" | Select-Object -Last 1).Trim()
+if ($jobCount -eq "$expectedJobDefs") {
+    Write-Host "  PASS  $expectedJobDefs job definitions seeded" -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  expected $expectedJobDefs job definitions, found: $jobCount" -ForegroundColor Red
+}
+
+# A job whose wage setting is missing pays nothing, and it fails SILENTLY: the
+# character works a whole shift, the ledger records nothing, and nobody notices
+# for a week. So every job code must have a wage row.
+$script:Checks++
+$unpaid = Invoke-Sql -Sql @"
+SELECT d.code FROM job_defs d
+  LEFT JOIN settings s ON s.`key` = CONCAT('job.wage_per_hour.', d.code)
+ WHERE s.`key` IS NULL
+"@
+if ($unpaid.Exit -eq 0 -and -not $unpaid.Output.Trim()) {
+    Write-Host '  PASS  every job has a wage setting (allow)' -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  jobs with no wage setting would earn nothing: $($unpaid.Output)" -ForegroundColor Red
+}
+
+# The roster from migration 003 was confirmed with the owner. A later migration
+# that renames or recodes one of those four is a silent content change.
+$script:Checks++
+$renamed = Invoke-Sql -Sql @"
+SELECT d.code FROM job_defs d
+  LEFT JOIN (SELECT 'police' AS code, 'Los Santos Police Department' AS n
+             UNION ALL SELECT 'ems', 'Pillbox Medical'
+             UNION ALL SELECT 'taxi', 'Taxi Driver'
+             UNION ALL SELECT 'mechanic', 'Mechanic') o ON o.code = d.code
+ WHERE o.code IS NOT NULL AND d.name <> o.n
+"@
+if ($renamed.Exit -eq 0 -and -not $renamed.Output.Trim()) {
+    Write-Host '  PASS  the owner-confirmed roster survived migration 005 (allow)' -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  migration 005 renamed confirmed jobs: $($renamed.Output)" -ForegroundColor Red
+}
+
 # ---------------------------------------------------------------------------
 # ADR-0008 — one character per account
 # ---------------------------------------------------------------------------
@@ -102,6 +149,61 @@ Assert-Run -Name 'second character for the SAME account is refused' `
     -Sql "INSERT INTO characters (id, account_id, first_name) VALUES ('chr-2','acc-1','Grace')" -Expect 'reject'
 Assert-Run -Name 'a Discord ID cannot be reused by a second account' `
     -Sql "INSERT INTO accounts (id, discord_id, status) VALUES ('acc-2','111','active')" -Expect 'reject'
+
+# A second character on a second account. ADR-0008 allows one character per
+# ACCOUNT, not per server — and without it every ownership test below would be
+# proving a foreign key instead of the unique key it claims to prove.
+Invoke-Sql -Sql "INSERT INTO accounts (id, discord_id, status) VALUES ('acc-3','222','active')" | Out-Null
+Invoke-Sql -Sql "INSERT INTO characters (id, account_id, first_name) VALUES ('chr-3','acc-3','Grace')" | Out-Null
+
+# ---------------------------------------------------------------------------
+# ADR-0008 — jobs are open to anyone
+# ---------------------------------------------------------------------------
+Write-Step 'ADR-0008 — jobs have no qualification gate'
+$cols = Invoke-Sql -Sql "SELECT column_name FROM information_schema.columns WHERE table_schema='nifty_life' AND table_name='character_jobs'"
+$script:Checks++
+if ($cols.Output -notmatch 'qualification' -and $cols.Output -notmatch 'exam' -and $cols.Output -notmatch 'rank') {
+    Write-Host '  PASS  character_jobs has no qualification/rank column (allow)' -ForegroundColor Green
+} else {
+    $script:Failures++; Write-Host "  FAIL  a qualification column exists: $($cols.Output)" -ForegroundColor Red
+}
+
+Invoke-Sql -Sql "INSERT INTO character_jobs (character_id, job_code, is_duty) VALUES ('chr-1','taxi',0)" | Out-Null
+Assert-Run -Name 'anyone may sign up for a job' `
+    -Sql "INSERT INTO character_jobs (character_id, job_code, is_duty) VALUES ('chr-1','police',0)" -Expect 'allow'
+Assert-Run -Name 'signing up twice for the same job is refused' `
+    -Sql "INSERT INTO character_jobs (character_id, job_code, is_duty) VALUES ('chr-1','taxi',0)" -Expect 'reject'
+Assert-Run -Name 'a job that does not exist is refused' `
+    -Sql "INSERT INTO character_jobs (character_id, job_code, is_duty) VALUES ('chr-1','astronaut',0)" -Expect 'reject'
+
+# ---------------------------------------------------------------------------
+# ADR-0013 — ownership is a row, not a field
+# ---------------------------------------------------------------------------
+Write-Step 'ADR-0013 — ownership invariants'
+Invoke-Sql -Sql @"
+INSERT INTO properties (id, code, name, district, kind, tier) VALUES ('p1','test_flat','Test Flat','Vinewood','housing','entry');
+INSERT INTO properties (id, code, name, district, kind, tier) VALUES ('p2','test_shop','Test Shop','La Mesa','business','standard');
+"@ | Out-Null
+
+Assert-Run -Name 'a property can be owned' `
+    -Sql "INSERT INTO property_owners (property_id, character_id) VALUES ('p1','chr-1')" -Expect 'allow'
+Assert-Run -Name 'a property cannot have two owners (reject)' `
+    -Sql "INSERT INTO property_owners (property_id, character_id) VALUES ('p1','chr-3')" -Expect 'reject'
+Assert-Run -Name 'a character may own several properties' `
+    -Sql "INSERT INTO property_owners (property_id, character_id) VALUES ('p2','chr-1')" -Expect 'allow'
+Assert-Run -Name 'a property code cannot be duplicated' `
+    -Sql "INSERT INTO properties (id, code, name, district) VALUES ('p3','test_flat','Copy','Vinewood')" -Expect 'reject'
+
+# The reason the second-owner test above matters: the refusal must leave the
+# first owner alone. chr-3 exists on purpose, so this proves the UNIQUE key and
+# not a foreign key that happened to be in the way.
+$script:Checks++
+$r = Invoke-Sql -Sql "SELECT character_id FROM property_owners WHERE property_id='p1'"
+if ($r.Output -match 'chr-1') {
+    Write-Host '  PASS  the refused second owner left the first owner intact (reject)' -ForegroundColor Green
+} else {
+    $script:Failures++; Write-Host "  FAIL  ownership corrupted: $($r.Output)" -ForegroundColor Red
+}
 
 # ---------------------------------------------------------------------------
 # ADR-0009 — money cannot go negative

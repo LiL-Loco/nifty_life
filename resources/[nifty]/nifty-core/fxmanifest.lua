@@ -29,6 +29,8 @@ server_script 'server/identity.lua'
 server_script 'server/economy.lua'
 server_script 'server/stuetze.lua'
 server_script 'server/inventory.lua'
+server_script 'server/ownership.lua'
+server_script 'server/jobs.lua'
 server_script 'server/sv_main.lua'
 
 client_script 'client/cl_identity.lua'
