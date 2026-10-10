@@ -55,6 +55,14 @@ function Inventory.getDefinition(code)
   return Definitions[code]
 end
 
+--- The whole catalogue. Read-only: callers get the live definitions, so this is
+--- for crossing the catalogue with something else (the shop prices it by code),
+--- never for editing. Item definitions are reference data and change only when
+--- the resource restarts.
+function Inventory.getAllDefinitions()
+  return Definitions
+end
+
 -- ---------------------------------------------------------------------------
 -- Capacity
 -- ---------------------------------------------------------------------------

@@ -31,10 +31,13 @@ server_script 'server/stuetze.lua'
 server_script 'server/inventory.lua'
 server_script 'server/ownership.lua'
 server_script 'server/jobs.lua'
+server_script 'server/shop.lua'
 server_script 'server/sv_main.lua'
+server_script 'server/sv_actions.lua'
 
 client_script 'client/cl_identity.lua'
 client_script 'client/cl_creator.lua'
+client_script 'client/cl_world.lua'
 
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.

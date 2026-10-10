@@ -400,6 +400,35 @@ if ($r.Exit -eq 0 -and $r.Output.Trim()) {
     $script:Failures++; Write-Host '  FAIL  the parked stack could not be found — inventory was destroyed' -ForegroundColor Red
 }
 
+# The shop is built by crossing item_defs with `economy.price.<code>` settings.
+# A typo in either produces a shelf that silently lacks an item — no error, just
+# something a player cannot buy and staff cannot explain.
+$script:Checks++
+$shop = Invoke-Sql -Sql @"
+SELECT d.code FROM item_defs d
+  LEFT JOIN settings s ON s.`key` = CONCAT('economy.price.', d.code)
+ WHERE s.`key` IS NOT NULL AND CAST(s.value AS DECIMAL(14,2)) <= 0
+"@
+if ($shop.Exit -eq 0 -and -not $shop.Output.Trim()) {
+    Write-Host '  PASS  every priced shop item has a price above zero (allow)' -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  items priced at zero or less would be listed but unbuyable: $($shop.Output)" -ForegroundColor Red
+}
+
+$script:Checks++
+$shopCount = Invoke-Sql -Sql @"
+SELECT COUNT(*) FROM item_defs d
+  JOIN settings s ON s.`key` = CONCAT('economy.price.', d.code)
+"@
+$shopRows = ($shopCount.Output -split "`n" | Select-Object -Last 1).Trim()
+if ([int]$shopRows -ge 7) {
+    Write-Host "  PASS  shop shelf has $shopRows priced items" -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  shop shelf has only $shopRows priced items — migration 006 did not apply" -ForegroundColor Red
+}
+
 # ---------------------------------------------------------------------------
 Write-Step 'Result'
 if ($script:Failures -eq 0) {

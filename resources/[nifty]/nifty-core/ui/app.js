@@ -279,5 +279,276 @@ window.addEventListener('message', (event) => {
 
 document.addEventListener('DOMContentLoaded', () => {
   wireForms();
+  wireHud();
   $('creator').classList.add('hidden');
 });
+
+// ===========================================================================
+// HUD and panels - the vertical slice surface.
+//
+// Same rule as the creator above (ADR-0011): this section renders what the
+// server sent and forwards clicks. It never decides whether a purchase is
+// affordable, a job can be joined, or an item exists. Every button here sends
+// a code; the server answers with what actually happened.
+// ===========================================================================
+
+const hud = {
+  money: { cash: 0, bank: 0 },
+  inventory: { items: [], usedSlots: 0, totalSlots: 0, usedWeight: 0, maxWeight: 0 },
+  jobs: [],
+  jobCatalogue: [],
+  shop: [],
+  properties: [],
+  vehicles: [],
+  panel: null,
+};
+
+let toastTimer = null;
+
+// German number formatting. Prices arrive as JSON numbers already rounded by
+// the server to two decimals - this only lays them out, it never reformats a
+// value back into something the server did not send.
+const money = (n) => `${Number(n || 0).toLocaleString('de-DE', {
+  minimumFractionDigits: 2, maximumFractionDigits: 2,
+})} $`;
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function showToast(ok, message) {
+  const toast = $('toast');
+  if (!toast) return;
+
+  toast.textContent = message || (ok ? 'Erledigt.' : 'Das hat nicht geklappt.');
+  toast.classList.toggle('toast--error', !ok);
+  toast.classList.remove('hidden');
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+// ------------------------------------------------------------------- panels
+
+function panelInventory() {
+  const wrap = el('div', 'stack');
+
+  const summary = el('p', 'panel-shell__summary');
+  summary.textContent =
+    `${hud.inventory.usedSlots}/${hud.inventory.totalSlots} Plätze · ` +
+    `${money(hud.inventory.usedWeight)} / ${money(hud.inventory.maxWeight)}`;
+  wrap.appendChild(summary);
+
+  if (!hud.inventory.items.length) {
+    wrap.appendChild(el('p', 'panel-shell__empty', 'Du trägst nichts.'));
+    return wrap;
+  }
+
+  const list = el('ul', 'itemlist');
+
+  for (const item of hud.inventory.items) {
+    const row = el('li', 'itemlist__row');
+    row.appendChild(el('span', 'itemlist__name', `${item.name}`));
+
+    const weight = el('span', 'itemlist__weight',
+      `${item.quantity} × ${money(item.unitWeight)}`);
+    row.appendChild(weight);
+
+    const use = el('button', 'btn btn--ghost btn--small', 'Benutzen');
+    use.addEventListener('click', () => nui('useItem', {
+      code: item.code, quantity: 1,
+    }));
+    row.appendChild(use);
+
+    list.appendChild(row);
+  }
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function panelShop() {
+  const wrap = el('div', 'stack');
+
+  const cash = el('p', 'panel-shell__summary',
+    `Bargeld: ${money(hud.money.cash)}`);
+  wrap.appendChild(cash);
+
+  const list = el('ul', 'itemlist');
+
+  for (const entry of hud.shop) {
+    const row = el('li', 'itemlist__row');
+    row.appendChild(el('span', 'itemlist__name', entry.name));
+    row.appendChild(el('span', 'itemlist__price', money(entry.price)));
+
+    const buy = el('button', 'btn btn--ghost btn--small', 'Kaufen');
+    buy.addEventListener('click', () => nui('buy', { code: entry.code, quantity: 1 }));
+    row.appendChild(buy);
+
+    // Only show "sell" for things actually carried. The server would refuse
+    // anyway; hiding it keeps the panel honest about what is possible.
+    const carried = hud.inventory.items.find((i) => i.code === entry.code);
+    if (carried) {
+      const sell = el('button', 'btn btn--ghost btn--small', `Verkaufen (${carried.quantity})`);
+      sell.addEventListener('click', () =>
+        nui('sell', { code: entry.code, quantity: carried.quantity }));
+      row.appendChild(sell);
+    }
+
+    list.appendChild(row);
+  }
+
+  wrap.appendChild(list);
+
+  const bank = el('div', 'row-actions');
+  const deposit = el('button', 'btn btn--primary btn--small', '100 $ einzahlen');
+  deposit.addEventListener('click', () => nui('deposit', { amount: 100 }));
+  const withdraw = el('button', 'btn btn--ghost btn--small', '100 $ abheben');
+  withdraw.addEventListener('click', () => nui('withdraw', { amount: 100 }));
+  bank.append(deposit, withdraw);
+  wrap.appendChild(bank);
+
+  return wrap;
+}
+
+function panelJobs() {
+  const wrap = el('div', 'stack');
+  const mine = new Map(hud.jobs.map((j) => [j.code, j]));
+
+  // Every job in the server's roster, not just the ones this character has.
+  // The server decides whether a join succeeds; this panel only offers it.
+  const roster = (hud.jobCatalogue || []).length
+    ? hud.jobCatalogue
+    : hud.jobs;
+
+  if (!roster.length) {
+    wrap.appendChild(el('p', 'panel-shell__empty', 'Keine Jobs verfügbar.'));
+    return wrap;
+  }
+
+  const list = el('ul', 'itemlist');
+
+  for (const job of roster) {
+    const row = el('li', 'itemlist__row');
+    row.appendChild(el('span', 'itemlist__name', job.name));
+
+    const rate = el('span', 'itemlist__price', `${money(job.wagePerHour)}/h`);
+    row.appendChild(rate);
+
+    const joined = mine.get(job.code);
+
+    if (!joined) {
+      const join = el('button', 'btn btn--primary btn--small', 'Anmelden');
+      join.addEventListener('click', () => nui('jobJoin', { code: job.code }));
+      row.appendChild(join);
+    } else if (joined.onDuty) {
+      const end = el('button', 'btn btn--primary btn--small', 'Schicht beenden');
+      end.addEventListener('click', () => nui('dutyEnd', { code: job.code }));
+      row.appendChild(end);
+    } else {
+      const start = el('button', 'btn btn--primary btn--small', 'Schicht beginnen');
+      start.addEventListener('click', () => nui('dutyStart', { code: job.code }));
+      row.appendChild(start);
+
+      const leave = el('button', 'btn btn--ghost btn--small', 'Kündigen');
+      leave.addEventListener('click', () => nui('jobLeave', { code: job.code }));
+      row.appendChild(leave);
+    }
+
+    list.appendChild(row);
+  }
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderPanel() {
+  const shell = $('panel');
+  const body = $('panelBody');
+  const title = $('panelTitle');
+  if (!shell || !body || !title) return;
+
+  if (!hud.panel) {
+    shell.classList.add('hidden');
+    return;
+  }
+
+  const builders = {
+    inventory: ['Inventar', panelInventory],
+    shop: ['Shop', panelShop],
+    jobs: ['Arbeit', panelJobs],
+  };
+  const entry = builders[hud.panel];
+  if (!entry) {
+    shell.classList.add('hidden');
+    return;
+  }
+
+  title.textContent = entry[0];
+  body.innerHTML = '';
+  body.appendChild(entry[1]());
+  shell.classList.remove('hidden');
+}
+
+function renderHud() {
+  const root = $('hud');
+  if (!root) return;
+
+  root.classList.remove('hidden');
+
+  const cash = $('hudCash');
+  const bank = $('hudBank');
+  if (cash) cash.textContent = money(hud.money.cash);
+  if (bank) bank.textContent = money(hud.money.bank);
+
+  const dutyBox = $('hudDuty');
+  const dutyLabel = $('hudDutyLabel');
+  const active = hud.jobs.find((j) => j.onDuty);
+
+  if (dutyBox && dutyLabel) {
+    if (active) {
+      dutyBox.classList.remove('hidden');
+      dutyLabel.textContent = active.name;
+    } else {
+      dutyBox.classList.add('hidden');
+    }
+  }
+
+  renderPanel();
+}
+
+// -------------------------------------------------------------- NUI messages
+
+window.addEventListener('message', (event) => {
+  const { action, data } = event.data || {};
+  if (!action) return;
+
+  if (action === 'render') {
+    // Replace wholesale rather than merge. A field the server omitted (because
+    // it no longer exists) must disappear, not linger from the last update.
+    Object.assign(hud, {
+      money: data.money || hud.money,
+      inventory: data.inventory || hud.inventory,
+      jobs: data.jobs || [],
+      jobCatalogue: data.jobCatalogue || [],
+      shop: data.shop || [],
+      properties: data.properties || [],
+      vehicles: data.vehicles || [],
+      panel: data.panel || null,
+    });
+    renderHud();
+    return;
+  }
+
+  if (action === 'result') {
+    showToast(data.ok, data.message);
+  }
+});
+
+function wireHud() {
+  const close = $('panelClose');
+  if (close) close.addEventListener('click', () => nui('closePanel', {}));
+}

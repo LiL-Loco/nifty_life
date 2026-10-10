@@ -84,6 +84,12 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
 
   print(('[nifty-core] entered world as %s %s'):format(
     data.character.firstName, data.character.lastName or ''))
+
+  -- Ask for money, items, jobs and the shop once the ped is real. The server
+  -- already pushed these in enterWorld (server side); this is the client's own
+  -- confirmation, and it covers the case where the push arrived before the HUD
+  -- existed to receive it.
+  TriggerEvent('nifty:client:worldReady')
 end)
 
 RegisterNetEvent('nifty:client:needsCharacter', function()
