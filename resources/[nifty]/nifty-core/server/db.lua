@@ -28,8 +28,27 @@ local function guard(label, sql, params)
 end
 
 --- Single row.
+---
+--- Drivers return a ROW ARRAY for a SELECT. Handing that array back to a caller
+--- that expects a row does not fail loudly — it fails silently, because in Lua
+--- `row.cash` on an array is nil and `rows ~= nil` on an empty array is TRUE.
+--- The second of those is the dangerous one: the whitelist check would treat
+--- "no such account" as "account found".
+---
+--- So this normalises both driver shapes — array or bare row — and, crucially,
+--- turns "no rows" into nil rather than an empty table.
 function Db.one(sql, params, label)
-  return guard(label or 'one', sql, params)
+  local result = guard(label or 'one', sql, params)
+  if type(result) ~= 'table' then return nil end
+
+  -- An array: take the first row.
+  if result[1] ~= nil then return result[1] end
+
+  -- No rows at all. Must be nil, not {} — see above.
+  if next(result) == nil then return nil end
+
+  -- Already a bare row.
+  return result
 end
 
 --- Row list.

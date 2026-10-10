@@ -45,8 +45,16 @@ local VALID_ACCOUNTS = { cash = true, bank = true }
 --- Money is DECIMAL(14,2) in the database and a Lua double in memory. Rounding is
 --- centralised here so no call site can invent its own, which is how a server ends
 --- up with balances that are off by a cent per transaction.
+---
+--- The earlier version of this function also nudged the value by half a unit
+--- before flooring. That was wrong: it shifted EVERY amount by exactly 0.50, so
+--- a 250.00 Stütze paid out 250.50 and a 12.00 bread cost 12.50. Half-up on the
+--- scaled integer is the whole rule; no pre-adjustment belongs here.
 local function round2(value)
-  return math.floor((value + (value >= 0 and 0.5 or -0.5)) * 100 + 0.5) / 100
+  if value >= 0 then
+    return math.floor(value * 100 + 0.5) / 100
+  end
+  return -math.floor(-value * 100 + 0.5) / 100
 end
 
 Economy.round = round2
@@ -169,12 +177,24 @@ function Economy.apply(characterId, account, delta, reason, refType, refId)
   -- Record it. `balance_after` is read by the INSERT itself rather than passed
   -- in, so the number written is the balance as the database sees it immediately
   -- after the UPDATE above — one statement, no value travelling through Lua.
+  --
+  -- `reference_type` / `reference_id` are wrapped in NULLIF. They are optional,
+  -- and a nil in the middle of a Lua table ends the table: `#{a, b, nil, d}`
+  -- can legitimately be 2 or 3, so the parameter list would be shorter than the
+  -- placeholder list and the whole statement would fail to bind. Passing '' and
+  -- converting it back to NULL in SQL keeps the parameter list hole-free while
+  -- the column stays genuinely NULL.
+  --
+  -- This was not theoretical. `Economy.transfer` calls `apply` with no reference
+  -- at all, so depositing and withdrawing money could never write a ledger row —
+  -- and a balance that moved without a record is precisely what the ledger
+  -- exists to prevent.
   local recorded = Db.insert(
     ([[INSERT INTO ledger
          (character_id, account, delta, balance_after, reason, reference_type, reference_id)
-       SELECT character_id, ?, ?, %s, ?, ?, ?
+       SELECT character_id, ?, ?, %s, ?, NULLIF(?, ''), NULLIF(?, '')
          FROM wallets WHERE character_id = ?]]):format(account),
-    { account, tostring(amount), reason, refType, refId, characterId },
+    { account, tostring(amount), reason, refType or '', refId or '', characterId },
     'economy:ledger')
 
   if recorded == nil then

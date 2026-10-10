@@ -31,7 +31,7 @@ local function loadDefinitions()
       code = row.code,
       name = row.name,
       kind = row.kind,
-      isEmergency = row.is_emergency == 1,
+      isEmergency = tonumber(row.is_emergency) == 1,
       base = { x = row.base_x, y = row.base_y, z = row.base_z },
     }
   end
@@ -131,7 +131,7 @@ function Jobs.listFor(characterId)
       code = row.job_code,
       name = row.name,
       kind = row.kind,
-      onDuty = row.is_duty == 1,
+      onDuty = tonumber(row.is_duty) == 1,
       dutySince = row.duty_since,
     }
   end
@@ -166,7 +166,7 @@ function Jobs.isOnDuty(characterId, code)
     SELECT is_duty FROM character_jobs WHERE character_id = ? AND job_code = ?
   ]], { characterId, code }, 'jobs:isOnDuty')
 
-  return row ~= nil and row.is_duty == 1
+  return row ~= nil and tonumber(row.is_duty) == 1
 end
 
 --- One character, one shift. Enforced here rather than by a partial unique

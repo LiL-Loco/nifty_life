@@ -25,6 +25,11 @@ Inventory = {}
 --- so a catalogue edit is never half-applied to players mid-session.
 local Definitions = {}
 
+--- Catalogue reference data (see `loadDefinitions`). `tonumber` on every flag is
+--- not defensive noise: a driver is free to hand back TINYINT as the string
+--- `"1"`, and `"1" == 1` is false in Lua. Without it every item reads as
+--- non-stackable, so the first pickup of anything is refused as "not
+--- stackable" and the inventory silently accepts nothing at all.
 local function loadDefinitions()
   Definitions = {}
 
@@ -39,9 +44,9 @@ local function loadDefinitions()
       name = row.name,
       category = row.category,
       weight = Db.money.toNumber(row.weight),
-      stackable = row.stackable == 1,
+      stackable = tonumber(row.stackable) == 1,
       maxStack = tonumber(row.max_stack) or 1,
-      isWeapon = row.is_weapon == 1,
+      isWeapon = tonumber(row.is_weapon) == 1,
     }
   end
 
@@ -107,7 +112,10 @@ function Inventory.view(characterId)
       -- The client draws a weight label from this; it must not compute it from
       -- its own copy of the catalogue.
       unitWeight = def and def.weight or 0,
-      metadata = row.metadata and json.decode(row.metadata) or nil,
+      -- `metadata` is a nullable JSON column. An empty string is truthy in Lua,
+      -- so `row.metadata and json.decode(row.metadata)` would call the decoder
+      -- with '' and crash on a row that simply has no metadata.
+      metadata = (row.metadata ~= nil and row.metadata ~= '') and json.decode(row.metadata) or nil,
     }
 
     usedWeight = usedWeight + (def and def.weight or 0) * quantity
@@ -196,13 +204,29 @@ function Inventory.add(characterId, code, quantity)
   local slot, err, existing = findTargetSlot(characterId, def, quantity)
   if not slot then return false, err end
 
-  if existing and existing + quantity > def.maxStack then
+  -- A stack may never be created larger than its own max_stack. `findTargetSlot`
+  -- already guarantees the MERGE case fits; this covers the new-stack case, where
+  -- `existing` is 0 and nothing else looks at max_stack.
+  --
+  -- The earlier version of this check was `existing and existing + quantity >
+  -- def.maxStack`, which Lua's 0-is-truthy rule made fire on the very first
+  -- pickup: `0 and (0 + 10 > 10)` is 0, which is truthy, so buying exactly one
+  -- full stack of bread was refused as "stack full". The guard has to test the
+  -- quantity alone — never `existing and ...`.
+  if def.stackable and quantity > def.maxStack then
     return false, 'stack full'
   end
 
   local statements
 
-  if existing and existing > 0 then
+  -- `existing > 0` on its own, never `existing and existing > 0`.
+  --
+  -- Lua treats 0 as TRUTHY, so `existing and existing > 0` evaluates to 0 when
+  -- there is nothing to merge into — which is always true for the very first
+  -- item a character picks up. The condition passed, the UPDATE branch ran
+  -- against an empty slot, matched no rows, and reported success while storing
+  -- nothing. The inventory silently accepted every first pickup and lost it.
+  if existing > 0 then
     statements = { {
       sql = [[UPDATE inventory_items SET quantity = quantity + ? WHERE character_id = ? AND slot = ?]],
       params = { quantity, characterId, slot },

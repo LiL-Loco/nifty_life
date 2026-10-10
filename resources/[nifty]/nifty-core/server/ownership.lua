@@ -172,7 +172,7 @@ function Ownership.listVehicles(characterId)
       fuel = Db.money.toNumber(row.fuel),
       engineHealth = Db.money.toNumber(row.engine_health),
       bodyHealth = Db.money.toNumber(row.body_health),
-      stored = row.is_stored == 1,
+      stored = tonumber(row.is_stored) == 1,
     }
   end
 
