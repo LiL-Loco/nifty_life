@@ -57,6 +57,11 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
   end
 
   if not isWhitelisted(discordId) then
+    -- Approval is a human act (ADR-0007) and the website that performs it does
+    -- not exist yet, so an admin currently approves by inserting a row. That
+    -- means the ID has to be obtainable without a debugger — print it.
+    print(('[%s] whitelist rejection: Discord ID %s (name "%s")').format(
+      RESOURCE, discordId, tostring(name)))
     deferrals.done('You are not whitelisted on Nifty Life 2.0.\n' ..
       'Apply on the website — a human has to approve your application first.')
     return
