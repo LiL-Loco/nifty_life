@@ -15,35 +15,37 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
 5. Money — cash, bank, transfers
 6. Inventory
 7. Job system + police, EMS, taxi, mechanic — **open to anyone, no qualification** (ADR-0008)
-8. Teamspeak voice — linked to the whitelist, closed to non-approved accounts (ADR-0015)
-9. Housing — buy/rent, storage, keys
-10. Vehicle ownership — buy, store, fuel, insurance, repair
-11. Businesses — own, stock, staff, revenue
-12. Phone + documents (licence, registration, medical)
-13. Dispatch for police + EMS (LSPD = Mission Row, EMS = Pillbox). **No fire service** — GTA ships no
+8. Housing — buy/rent, storage, keys
+9. Vehicle ownership — buy, store, fuel, insurance, repair
+10. Businesses — own, stock, staff, revenue
+11. Phone device as an inventory item + phone account with a permanent server-assigned number (ADR-0018, 0021)
+12. Phone apps — Messages, Email, documents (licence, registration, medical)
+13. Social network "Peeper" — broadcast feed, asymmetric follows, posts, optional Place tag (ADR-0019)
+14. Social moderation — report button + staff search by character, keyword or date (ADR-0019)
+15. Voice calls via temporary Teamspeak channels, rate-limited (ADR-0020)
+16. Dispatch for police + EMS (LSPD = Mission Row, EMS = Pillbox). **No fire service** — GTA ships no
     enterable fire station, and an emergency service without a building is worse than none (ADR-0012).
-14. Criminal layer — drugs, robberies
+17. Criminal layer — drugs, robberies
 
 ## Platform
 
-15. txAdmin configured, permissions, ban system
-16. Server convars hardened — `sv_entityLockdown`, entity lockdown mode, `sv_kick_players_cnl_*` set
-17. Scheduled restart automation for the weekend window — Fri 19:00 start, Sun 22:00 stop (ADR-0010)
-18. Event security — every client event validated server-side
+18. txAdmin configured, permissions, ban system
+19. Teamspeak server + UID linking, access driven by the whitelist (ADR-0015)
+20. Server convars hardened — `sv_entityLockdown`, entity lockdown mode, `sv_kick_players_cnl_*` set
+21. Scheduled restart automation for the weekend window — Fri 19:00 start, Sun 22:00 stop (ADR-0010)
+22. Event security — every client event validated server-side
 
 ## Operations
 
-19. Website (Node/TS) live, with the application form + application status page
-20. Whitelist enforcement wired to the website — Discord ID at `playerConnecting`, **and Teamspeak access
-    driven from the same whitelist** so non-approved accounts cannot listen (ADR-0015)
-21. Rules page, accepted by players
-22. Player onboarding — first job, first property, expectations
-23. Staff SOP for bans and applications
-24. Automated backups — hourly dumps + binlog PITR, offsite encrypted, retention 7d/4w/12m (ADR-0006)
-25. **One proven full restore** into an empty database, FXServer booted against it
-26. Discord OAuth application + staff bot with approve/reject buttons (ADR-0007)
-27. Two DB users with split privilege: `fivem` full, `website` INSERT-only on applications (ADR-0007)
-28. Application state machine: submitted → under review → approved / rejected
+23. Website (Node/TS) live, with the application form + application status page
+24. Rules page, accepted by players
+25. Player onboarding — first job, first property, expectations
+26. Staff SOP for bans and applications
+27. Automated backups — hourly dumps + binlog PITR, offsite encrypted, retention 7d/4w/12m (ADR-0006)
+28. **One proven full restore** into an empty database, FXServer booted against it
+29. Discord OAuth application + staff bot with approve/reject buttons (ADR-0007)
+30. Two DB users with split privilege: `fivem` full, `website` INSERT-only on applications (ADR-0007)
+31. Application state machine: submitted → under review → approved / rejected
 
 ## Design principles
 
@@ -53,12 +55,17 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
 - **Vanilla geography.** GTA's map and landmarks are used as-is. "Vanilla" does **not** mean "no scripts"
   (that would contradict ADR-0002) nor "every building is GTA's" (ADR-0012) — interiors are repurposed.
 - **Generic primitives.** Ownership is one system that houses, vehicles and businesses are data for, so
-  later features are rows rather than new subsystems.
+  later features are rows rather than new subsystems. The same pattern applies to the phone: one device
+  concept, one account concept, several apps on top.
 - **Downtime is the reset.** The server is down Monday–Thursday; nothing decays while it is off (ADR-0004).
-- **Nothing is lost.** Persistent entities are server-owned; the world survives indefinitely.
+- **Nothing is lost.** Persistent entities are server-owned; the world survives indefinitely. This applies to
+  *the world* — property, vehicles, money — and deliberately **not** to social posts (ADR-0019).
 
 ## Not decided yet
 
 - **Economy numbers** — Stütze amount, all prices, wages, sink costs (structure fixed in ADR-0009)
 - **Teamspeak licensing** — licence tier must be verified against 48 slots (ADR-0015)
+- **Teamspeak channel automation** — the query-based call lifecycle needs an early end-to-end proof before
+  phone UI is built on it (ADR-0020)
 - **Interior count** — reachable stock apartments to be counted on a live server (ADR-0013)
+- **Contacts** — the contacts app is implied by Messages but its model is not yet decided
