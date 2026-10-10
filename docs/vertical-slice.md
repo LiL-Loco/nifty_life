@@ -166,6 +166,7 @@ cannot see:
 | `Resource "sessionmanager" not found` | Ensured but not downloaded. We roll our own sessions (ADR-0002) — it should never have been listed. |
 | `sv_projectname` / `sv_projectdesc` command not found | Portal convars that only exist with a Cfx key set. |
 | `ECONNREFUSED 127.0.0.1:3306` | No database was running at all. |
+| `attempt to call a nil value (global 'GetPlayerIdentifiersByType')` | A FiveM native that does not exist on this build. The throw sat inside `playerConnecting`, so it killed the resource and rejected every player. The harness had defined that same native itself, which is why 285/285 stayed green. |
 
 **The pattern is the same one as the phone:** code that is complete, tested and
 unreachable. A harness stubs the layer it cannot provide, so it proves nothing

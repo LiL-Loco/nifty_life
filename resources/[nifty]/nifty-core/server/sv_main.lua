@@ -14,9 +14,10 @@ local RESOURCE = GetCurrentResourceName()
 local BootstrapAttempts = {}
 local MAX_BOOTSTRAP_ATTEMPTS = 10
 
+--- Identity.discordIdOf owns the identifier read (identity.lua). This file only
+--- decides what an answer means.
 local function discordIdOf(src)
-  local ids = GetPlayerIdentifiersByType(src, 'discord') or {}
-  return ids[1]
+  return Identity.discordIdOf(src)
 end
 
 --- True when the account is active and not currently banned. The Discord ID is

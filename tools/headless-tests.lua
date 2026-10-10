@@ -126,12 +126,21 @@ _G.RegisterNetEvent = function() end
 _G.RegisterCommand = function() end
 _G.DropPlayer = function() end
 _G.GetPlayers = function() return {} end
---- Fake connections. `GetPlayerIdentifiersByType` must answer truthfully, because
---- the whitelist and identity layers read the Discord ID straight off the
---- connection — that is the point of ADR-0007. A stub returning an empty list
---- would make every identity test exercise the "no account" path instead.
+--- Fake connections. The whitelist and identity layers read the Discord ID straight
+--- off the connection — that is the point of ADR-0007. A stub returning an empty
+--- list would make every identity test exercise the "no account" path instead.
+---
+--- This shim mirrors the REAL API and nothing else. It deliberately does NOT define
+--- `GetPlayerIdentifiersByType`: that native does not exist on every server build,
+--- inventing it here certified code that crashes on the first player connection.
+--- `FakePlayers.exposeByType` turns it on for the one test that covers the
+--- optional-native branch, so the shim cannot silently certify a crash again.
 local FakePlayers = {}
 _G.FakePlayers = FakePlayers
+
+--- When false, `GetPlayerIdentifiersByType` is absent — the default, matching a
+--- stock FXServer build.
+FakePlayers.exposeByType = false
 
 --- Register a fake connection with a Discord ID. Returns the slot id.
 function FakePlayers.connect(src, discordId)
@@ -143,11 +152,12 @@ function FakePlayers.disconnect(src)
   FakePlayers[src] = nil
 end
 
-_G.GetPlayerIdentifiersByType = function(src, kind)
-  if kind == 'discord' and FakePlayers[src] then
-    return { FakePlayers[src] }
+_G.GetPlayerIdentifiers = function(src)
+  local out = { 'license:' .. tostring(src), 'ip:127.0.0.1' }
+  if FakePlayers[src] then
+    out[#out + 1] = 'discord:' .. FakePlayers[src]
   end
-  return {}
+  return out
 end
 
 _G.GetPlayerLicense = function(src) return 'license-' .. tostring(src) end
@@ -1119,6 +1129,48 @@ check('a pending application does NOT resolve to a playable account',
   Identity.resolveAccount(3) == nil, 'a pending account must stay inert')
 check('an unknown Discord ID resolves to nothing', Identity.resolveAccount(99) == nil)
 FakePlayers.disconnect(3)
+
+-- ============================================================================
+group('Identifier resolution — the API that is actually there')
+
+-- Regression. `discordIdOf` called `GetPlayerIdentifiersByType`, a native that does
+-- NOT exist on this FXServer build. Every player got rejected, because the throw
+-- inside the `playerConnecting` handler killed the resource on first contact. 285
+-- green checks did not catch it: the harness shim had been written to define that
+-- same native, so it was certifying a world where the crash was impossible.
+check('the harness does not pretend the optional native exists',
+  type(GetPlayerIdentifiersByType) ~= 'function',
+  'if this fails, the shim re-invented a native again')
+
+check('a connected player resolves to a bare Discord ID',
+  Identity.discordIdOf(1) == '777000001', 'got ' .. tostring(Identity.discordIdOf(1)))
+
+check('a slot with no Discord link resolves to nothing',
+  Identity.discordIdOf(99) == nil, 'got ' .. tostring(Identity.discordIdOf(99)))
+
+FakePlayers.connect(50, '550000001')
+check('the prefix is stripped, not carried into the column',
+  Identity.discordIdOf(50) == '550000001', 'got ' .. tostring(Identity.discordIdOf(50)))
+
+-- Fail closed. An identifier that is not a plain ID must never reach the whitelist
+-- query, where a crafted value could be matched against a column by accident.
+local realIdentifiers = GetPlayerIdentifiers
+_G.GetPlayerIdentifiers = function() return { 'discord:not-a-number' } end
+check('a malformed identifier fails closed', Identity.discordIdOf(50) == nil,
+  'got ' .. tostring(Identity.discordIdOf(50)))
+_G.GetPlayerIdentifiers = realIdentifiers
+
+-- The optional native, when a build provides it, must give the same answer — and
+-- its value still arrives prefixed, so it exercises the normalisation too.
+_G.GetPlayerIdentifiersByType = function(_, kind)
+  if kind == 'discord' then return { 'discord:550000001' } end
+  return {}
+end
+check('the optional native path yields the same bare ID',
+  Identity.discordIdOf(50) == '550000001', 'got ' .. tostring(Identity.discordIdOf(50)))
+_G.GetPlayerIdentifiersByType = nil
+
+FakePlayers.disconnect(50)
 
 -- The exact payload a player with no second name and no date of birth sends.
 -- Both fields are optional, and both arrive as nil — the case that broke the

@@ -27,10 +27,48 @@ end
 
 Identity = {}
 
+--- The Discord ID behind a connection, or nil.
+---
+--- Two APIs can answer this and only one is guaranteed to exist. `GetPlayerIdentifiers`
+--- has been in the server runtime since forever and returns prefixed entries like
+--- `discord:123456`. `GetPlayerIdentifiersByType` is a newer convenience wrapper that
+--- is NOT present on every build — calling it unconditionally kills the resource on
+--- the first connection, which is exactly what happened on this server. So the
+--- guaranteed API is primary and the optional one is only used when it exists.
+---
+--- The returned value is normalised to a bare digit string, because the two APIs
+--- disagree about the prefix and `accounts.discord_id` is stored bare.
 local function discordIdOf(src)
-  local ids = GetPlayerIdentifiersByType(src, 'discord') or {}
-  return ids[1]
+  local ids = nil
+
+  if type(GetPlayerIdentifiersByType) == 'function' then
+    ids = GetPlayerIdentifiersByType(src, 'discord')
+  end
+
+  if not ids or #ids == 0 then
+    for _, entry in ipairs(GetPlayerIdentifiers(src) or {}) do
+      local kind, value = string.match(entry, '^(%w+):(.+)$')
+      if kind == 'discord' then
+        ids = { value }
+        break
+      end
+    end
+  end
+
+  local raw = ids and ids[1]
+  if type(raw) ~= 'string' then return nil end
+
+  -- Defensive: strip a prefix if one survived, then refuse anything that is not
+  -- a plain ID. An unparseable value must fail closed, never reach the whitelist.
+  local id = string.match(raw, '^(%d+)$') or string.match(raw, '^discord:(%d+)$')
+  if not id or id == '' then return nil end
+
+  return id
 end
+
+--- Public because sv_main.lua's connection gate needs the same answer, and two
+--- copies of this logic are two places for them to disagree.
+Identity.discordIdOf = discordIdOf
 
 --- Resolve the account behind a connection. Identity comes from the connection,
 --- never from anything the client sends.
