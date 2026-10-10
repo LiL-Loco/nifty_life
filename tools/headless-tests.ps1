@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Same lesson as verify.ps1: the entrypoint runs init scripts against a TEMPORARY
 # server, so readiness must be the expected table count, not `SELECT 1`.
-$expectedTables = 17
+$expectedTables = 20
 $ready = $false
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3

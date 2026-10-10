@@ -107,6 +107,13 @@ function Identity.createCharacter(src, payload)
   local characterId = uuid()
   local encoded = json.encode(appearance)
 
+  -- ADR-0021: the number is assigned here, inside the same transaction as the
+  -- character. A character with no number could not be messaged, and the number
+  -- is permanent, so it cannot be added later as a convenience — it has to exist
+  -- from the first second of the character's life.
+  local number = Phone.newNumber()
+  if not number then return nil, 'no free phone number' end
+
   -- ADR-0008 is enforced by UNIQUE, not by this check. If two requests race,
   -- the second insert fails here and is reported honestly.
   --
@@ -138,6 +145,11 @@ function Identity.createCharacter(src, payload)
     {
       sql = [[UPDATE accounts SET status = 'active' WHERE id = ?]],
       params = { account.id },
+    },
+    {
+      sql = [[INSERT INTO phone_accounts (character_id, number, is_active)
+              VALUES (?, ?, 1)]],
+      params = { characterId, number },
     },
   }, 'identity:createCharacter')
 

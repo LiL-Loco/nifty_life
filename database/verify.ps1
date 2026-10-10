@@ -73,7 +73,7 @@ if ($LASTEXITCODE -ne 0) {
 # The entrypoint applies init scripts to a TEMPORARY server, then restarts.
 # Polling `SELECT 1` is not enough — it succeeds mid-init. Wait for the expected
 # table count instead. (Getting this wrong hides half the schema.)
-$expectedTables = 17
+$expectedTables = 20
 $expectedJobDefs = 8
 $ready = $false
 for ($i = 0; $i -lt 100; $i++) {

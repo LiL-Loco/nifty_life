@@ -423,6 +423,7 @@ load(RES .. '/server/inventory.lua')
 load(RES .. '/server/ownership.lua')
 load(RES .. '/server/jobs.lua')
 load(RES .. '/server/shop.lua')
+load(RES .. '/server/phone.lua')
 
 -- Fire `onResourceStart` exactly as FiveM would. This is what loads the settings
 -- cache and the item catalogue; skipping it leaves the modules loaded but their
@@ -441,6 +442,7 @@ local function sql(statement)
 end
 
 local TEST_ACCOUNT = 'acct-test'
+local OTHER_ACCOUNT = 'acct-test-2'
 local TEST_CHARACTER = 'chr-headless-0001'
 local OTHER_CHARACTER = 'chr-headless-0002'
 local TEST_PROPERTY = 'prp-headless-0001'
@@ -464,14 +466,27 @@ local function resetFixtures()
   sql(('DELETE FROM inventory_items WHERE character_id = %s'):format(q(TEST_CHARACTER)))
   sql(('DELETE FROM wallets WHERE character_id IN (%s, %s)'):format(q(TEST_CHARACTER), q(OTHER_CHARACTER)))
   sql(('DELETE FROM characters WHERE id IN (%s, %s)'):format(q(TEST_CHARACTER), q(OTHER_CHARACTER)))
-  sql(('DELETE FROM accounts WHERE id = %s'):format(q(TEST_ACCOUNT)))
+  sql(('DELETE FROM accounts WHERE id IN (%s, %s)'):format(q(TEST_ACCOUNT), q(OTHER_ACCOUNT)))
   sql(('DELETE FROM properties WHERE id = %s'):format(q(TEST_PROPERTY)))
 
   sql(('INSERT INTO accounts (id, discord_id, status) VALUES (%s, %s, %s)'):format(
     q(TEST_ACCOUNT), q('999000001'), q('active')))
   sql(('INSERT INTO characters (id, account_id, first_name, appearance) VALUES (%s, %s, %s, %s)'):format(
     q(TEST_CHARACTER), q(TEST_ACCOUNT), q('Headless'), q('{}')))
+  -- The second character is created properly, on its own account, WITH a phone
+  -- account. Before this it was only a wallet row, so every test that expected a
+  -- refusal from it was really testing a missing foreign key and passing for the
+  -- wrong reason.
+  sql(('INSERT INTO accounts (id, discord_id, status) VALUES (%s, %s, %s)'):format(
+    q(OTHER_ACCOUNT), q('999000002'), q('active')))
+  sql(('INSERT INTO characters (id, account_id, first_name, appearance) VALUES (%s, %s, %s, %s)'):format(
+    q(OTHER_CHARACTER), q(OTHER_ACCOUNT), q('Second'), q('{}')))
+  sql(('INSERT INTO phone_accounts (character_id, number, is_active) VALUES (%s, %s, 1)'):format(
+    q(TEST_CHARACTER), q('555-0001')))
+  sql(('INSERT INTO phone_accounts (character_id, number, is_active) VALUES (%s, %s, 1)'):format(
+    q(OTHER_CHARACTER), q('555-9999')))
   sql(('INSERT INTO wallets (character_id, cash, bank) VALUES (%s, 500.00, 200.00)'):format(q(TEST_CHARACTER)))
+  sql(('INSERT INTO wallets (character_id, cash, bank) VALUES (%s, 500.00, 200.00)'):format(q(OTHER_CHARACTER)))
   sql(('INSERT INTO properties (id, code, name, district, kind, tier) VALUES (%s, %s, %s, %s, %s, %s)'):format(
     q(TEST_PROPERTY), q('headless_flat'), q('Headless Flat'), q('Testburg'), q('housing'), q('entry')))
 end
@@ -706,8 +721,12 @@ group('Inventory - stacking, capacity, swapping')
 
 resetFixtures()
 
-Inventory.add(TEST_CHARACTER, 'bread', 10)
-Inventory.add(TEST_CHARACTER, 'bread', 5)
+local okA, errA = Inventory.add(TEST_CHARACTER, 'bread', 10)
+check('a full stack of bread is accepted', okA, tostring(errA))
+
+local okB, errB = Inventory.add(TEST_CHARACTER, 'bread', 5)
+check('a second stack is accepted', okB, tostring(errB))
+
 check('stacks merge up to max_stack', itemCount('bread') == 15)
 
 local rows = Db.all('SELECT slot, quantity FROM inventory_items WHERE character_id = ? AND item_code = ?',
@@ -1024,6 +1043,18 @@ if created then
   check('a new character carries a handset (ADR-0018)', Inventory.count(created.id, 'phone') == 1)
   check('a new character carries an ID card', Inventory.count(created.id, 'id_card') == 1)
 
+  -- ADR-0021: the number is assigned at creation, inside the same transaction,
+  -- and it is permanent. A character with no number could not be messaged.
+  local accountRow = Phone.getAccount(created.id)
+  check('a phone account was created with the character', accountRow ~= nil)
+  check('the number matches the configured format',
+    accountRow ~= nil and accountRow.number:match('^555%-%d%d%d%d$') ~= nil,
+    'got ' .. tostring(accountRow and accountRow.number))
+  check('the account is active', accountRow ~= nil and accountRow.active == true)
+
+  PHONE_ONE = created.id
+  PHONE_NUMBER_ONE = accountRow and accountRow.number
+
   -- A second attempt from the same account must be refused by ADR-0008.
   local again, againErr = Identity.createCharacter(1, {
     firstName = 'Grace', gender = 'female',
@@ -1059,6 +1090,100 @@ Identity.endSession(1)
 check('the session closes', Identity.getActiveCharacter(1) == nil)
 
 FakePlayers.disconnect(1)
+
+-- ============================================================================
+group('Phone — device, account, permanent number, permanent messages')
+-- ============================================================================
+
+-- ADR-0018 and ADR-0021 meet. The handset is an item; the account is the
+-- character; the number is permanent and was assigned before anyone asked.
+--
+-- Self-contained: the character-creation group above truncates everything it
+-- touches, so this group rebuilds its own two characters through the same
+-- fixture path rather than relying on rows that no longer exist.
+
+resetFixtures()
+
+PHONE_ONE = TEST_CHARACTER
+PHONE_NUMBER_ONE = Phone.getAccount(PHONE_ONE) and Phone.getAccount(PHONE_ONE).number
+
+check('the fixture character has a phone account', Phone.getAccount(PHONE_ONE) ~= nil)
+check('the second character has a DIFFERENT number',
+  Phone.getAccount(OTHER_CHARACTER) ~= nil and
+  Phone.getAccount(OTHER_CHARACTER).number ~= PHONE_NUMBER_ONE,
+  'got ' .. tostring(Phone.getAccount(OTHER_CHARACTER) and Phone.getAccount(OTHER_CHARACTER).number))
+
+check('the number was found by number lookup',
+  Phone.findByNumber(PHONE_NUMBER_ONE) ~= nil and Phone.findByNumber(PHONE_NUMBER_ONE).id == PHONE_ONE)
+check('an unknown number finds nobody', Phone.findByNumber('555-0000') == nil)
+check('a nil number is refused rather than matching everything', Phone.findByNumber(nil) == nil)
+
+local searchResults = Phone.search('Headless')
+check('a character can be found by name', type(searchResults) == 'table' and #searchResults >= 1)
+check('a one-character search is refused (matches everyone)', #Phone.search('a') == 0)
+
+local otherNumber = Phone.newNumber()
+check('a second number is different from the first', otherNumber ~= PHONE_NUMBER_ONE)
+
+-- Messages.
+local messageId, sendErr = Phone.send(PHONE_ONE, OTHER_CHARACTER, '  Hallo, bin neu hier.  ')
+check('a message is sent', messageId ~= nil, tostring(sendErr))
+
+local inbox = Phone.inbox(OTHER_CHARACTER, 25, 0)
+check('it lands in the recipient inbox', #inbox == 1)
+check('the body is trimmed', inbox[1] and inbox[1].body == 'Hallo, bin neu hier.',
+  'got ' .. tostring(inbox[1] and inbox[1].body))
+check('it starts unread', Phone.unreadCount(OTHER_CHARACTER) == 1)
+
+check('the sender can see it in their outbox', #Phone.outbox(PHONE_ONE, 25, 0) == 1)
+check('the recipient cannot see it in an outbox', #Phone.outbox(OTHER_CHARACTER, 25, 0) == 0)
+
+Phone.markAllRead(OTHER_CHARACTER)
+check('marking read clears the unread count', Phone.unreadCount(OTHER_CHARACTER) == 0)
+
+local rejected
+rejected = Phone.send(PHONE_ONE, PHONE_ONE, 'an internal monologue')
+check('a character cannot message themselves', rejected == nil)
+rejected = Phone.send(PHONE_ONE, OTHER_CHARACTER, '   ')
+check('an empty message is refused', rejected == nil)
+rejected = Phone.send(PHONE_ONE, 'chr-does-not-exist', 'into the void')
+check('messaging a non-existent character is refused', rejected == nil)
+rejected = Phone.send(PHONE_ONE, OTHER_CHARACTER, ('x'):rep(2000))
+check('an over-long message is truncated, not refused',
+  rejected ~= nil and #Phone.inbox(OTHER_CHARACTER, 25, 0)[1].body ==
+    tonumber(GetSetting('phone.message.max_length', 1000)),
+  'got ' .. tostring(#Phone.inbox(OTHER_CHARACTER, 25, 0)[1].body))
+
+-- Deleting is private: your inbox, not theirs.
+check('clearing a message works for its recipient', Phone.clear(OTHER_CHARACTER, messageId))
+-- One message remains: the over-long one sent above. What matters is that the
+-- cleared one is GONE and the other is untouched — not that the inbox emptied.
+local afterClear = Phone.inbox(OTHER_CHARACTER, 25, 0)
+check('the cleared message is gone from their inbox',
+  #afterClear == 1 and afterClear[1].id ~= messageId,
+  'inbox still holds ' .. tostring(#afterClear))
+check('the other message is untouched',
+  afterClear[1] ~= nil and #afterClear[1].body == tonumber(GetSetting('phone.message.max_length', 1000)))
+check('the sender still has their copy', #Phone.outbox(PHONE_ONE, 25, 0) >= 1)
+check('a character cannot clear a message that is not theirs',
+  not Phone.clear(PHONE_ONE, messageId))
+
+-- Reporting (ADR-0019): the target is derived from the message, never supplied.
+check('a report can be filed', Phone.report(OTHER_CHARACTER, PHONE_ONE, messageId, 'spam') ~= nil)
+check('a report with an unknown reason is refused', Phone.report(OTHER_CHARACTER, PHONE_ONE, messageId, 'because') == nil)
+check('self-reporting is refused', Phone.report(PHONE_ONE, PHONE_ONE, messageId, 'spam') == nil)
+
+local queue = Phone.openReports(10)
+check('the report reaches the staff queue', #queue == 1)
+check('the queue names the reported character', queue[1] and queue[1].reported_first ~= nil)
+check('a report can be actioned', Phone.resolveReport(queue[1].id, 'actioned'))
+check('the queue empties once resolved', #Phone.openReports(10) == 0)
+check('a bad resolution status is refused', not Phone.resolveReport(queue[1].id, 'maybe'))
+
+-- Numbers are permanent: nothing in the module may change one.
+local before = Phone.getAccount(PHONE_ONE)
+check('the number cannot be changed by any exported function',
+  Phone.getAccount(PHONE_ONE).number == before.number and before.number == PHONE_NUMBER_ONE)
 
 -- ============================================================================
 group('Ownership — a row, not a field')

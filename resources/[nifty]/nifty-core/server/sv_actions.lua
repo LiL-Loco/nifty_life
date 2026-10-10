@@ -247,6 +247,99 @@ RegisterNetEvent('nifty:server:useItem', function(code, quantity)
 end)
 
 -- ---------------------------------------------------------------------------
+-- Phone (ADR-0018, ADR-0019, ADR-0021)
+-- ---------------------------------------------------------------------------
+
+--- The handset is an inventory item, so holding one is checked here rather than
+--- assumed. A character without the item cannot open the account behind someone
+--- else's back — which is the entire reason the device is not the identity.
+local function hasPhone(characterId)
+  return Inventory.has(characterId, 'phone', 1)
+end
+
+RegisterNetEvent('nifty:server:phoneInbox', function()
+  local src = source
+  local characterId = sessionCharacter(src)
+  if not characterId or not hasPhone(characterId) then return end
+
+  TriggerClientEvent('nifty:client:phone', src, {
+    account = Phone.getAccount(characterId),
+    inbox = Phone.inbox(characterId, 25, 0),
+    unread = Phone.unreadCount(characterId),
+  })
+end)
+
+RegisterNetEvent('nifty:server:phoneSend', function(recipientNumber, body)
+  local src = source
+  local allowed, tooFast = allowAction(src)
+  if not allowed then return respond(src, false, tooFast) end
+
+  local characterId = sessionCharacter(src)
+  if not characterId then return end
+  if not hasPhone(characterId) then return respond(src, false, 'you have no phone') end
+
+  if type(recipientNumber) ~= 'string' or type(body) ~= 'string' then
+    return respond(src, false, 'bad request')
+  end
+
+  -- The recipient is resolved from a NUMBER the player typed, never from a
+  -- character id the client supplied — that would let anyone message anyone.
+  local recipient = Phone.findByNumber(recipientNumber)
+  if not recipient then return respond(src, false, 'unknown number') end
+
+  local _, err = Phone.send(characterId, recipient.id, body)
+  respond(src, err == nil, err)
+end)
+
+RegisterNetEvent('nifty:server:phoneRead', function()
+  local src = source
+  local characterId = sessionCharacter(src)
+  if not characterId then return end
+
+  Phone.markAllRead(characterId)
+  TriggerClientEvent('nifty:client:phoneUnread', src, 0)
+end)
+
+RegisterNetEvent('nifty:server:phoneClear', function(messageId)
+  local src = source
+  local characterId = sessionCharacter(src)
+  if not characterId then return end
+
+  if type(messageId) ~= 'string' then return end
+  if not Phone.clear(characterId, messageId) then return end
+
+  TriggerClientEvent('nifty:client:phone', src, {
+    account = Phone.getAccount(characterId),
+    inbox = Phone.inbox(characterId, 25, 0),
+    unread = Phone.unreadCount(characterId),
+  })
+end)
+
+RegisterNetEvent('nifty:server:phoneReport', function(messageId, reason)
+  local src = source
+  local allowed, tooFast = allowAction(src)
+  if not allowed then return respond(src, false, tooFast) end
+
+  local characterId = sessionCharacter(src)
+  if not characterId then return end
+
+  if type(messageId) ~= 'string' or type(reason) ~= 'string' then
+    return respond(src, false, 'bad request')
+  end
+
+  -- Who is being reported is derived from the MESSAGE, never from the client.
+  -- Otherwise a player could file a report against anyone by typing their name.
+  local message = Db.one(
+    'SELECT sender_id FROM phone_messages WHERE id = ? AND recipient_id = ?',
+    { messageId, characterId }, 'phone:reportTarget')
+
+  if not message then return respond(src, false, 'unknown message') end
+
+  local _, err = Phone.report(characterId, message.sender_id, messageId, reason)
+  respond(src, err == nil, err)
+end)
+
+-- ---------------------------------------------------------------------------
 -- Ownership
 -- ---------------------------------------------------------------------------
 
