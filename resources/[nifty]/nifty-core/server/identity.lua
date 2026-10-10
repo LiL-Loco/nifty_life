@@ -22,11 +22,7 @@ local CreationAttempts = {}
 local MAX_CREATE_ATTEMPTS = 5
 
 local function uuid()
-  local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-  return (string.gsub(template, '[xy]', function(c)
-    local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
-    return string.format('%x', v)
-  end))
+  return Nifty.newUuid()
 end
 
 Identity = {}
@@ -129,6 +125,10 @@ function Identity.createCharacter(src, payload)
 
   Db.update([[UPDATE accounts SET status = 'active' WHERE id = ?]], { account.id }, 'identity:activate')
 
+  -- ADR-0018: every character starts with a handset and an ID. The handset is
+  -- inert until activated, which is the moment a player buys a number.
+  Inventory.grantStartingItems(characterId)
+
   print(('[%s] created character %s for account %s'):format(RESOURCE, characterId, account.id))
 
   return Identity.getCharacter(account.id)
@@ -148,6 +148,14 @@ end
 function Identity.getActiveCharacter(src)
   local entry = ActiveSessions[src]
   return entry and entry.characterId or nil
+end
+
+--- The DB session id for this connection, or nil. Used by the Stütze to link a
+--- payout to the session it was paid in — ADR-0009 needs that link to tell
+--- "someone stayed online too long" apart from "someone was paid too much".
+function Identity.getActiveSessionId(src)
+  local entry = ActiveSessions[src]
+  return entry and entry.sessionId or nil
 end
 
 --- Persist a character's mutable state. Always keyed by character UUID.

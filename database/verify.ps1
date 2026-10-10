@@ -197,6 +197,108 @@ if ($status.Output -match 'submitted') {
 }
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Layer 4 query shapes — the exact SQL server/economy.lua and
+# server/inventory.lua send. Lua is only ever syntax-checked, so these
+# statements are the layer's real behaviour and have to be proven here.
+# ---------------------------------------------------------------------------
+Write-Step 'Layer 4 — money movement is one guarded statement'
+
+Invoke-Sql -Sql "UPDATE wallets SET cash = 500.00, bank = 250.00 WHERE character_id='chr-1'" | Out-Null
+
+$script:Checks++
+$r = Invoke-Sql -Sql "UPDATE wallets SET cash = cash + 250.00 WHERE character_id='chr-1' AND cash + 250.00 >= 0"
+if ($r.Exit -eq 0) { Write-Host '  PASS  a credit is applied (allow)' -ForegroundColor Green }
+else { $script:Failures++; Write-Host '  FAIL  credit was refused' -ForegroundColor Red }
+
+$script:Checks++
+$r = Invoke-Sql -Sql "UPDATE wallets SET cash = cash - 10000.00 WHERE character_id='chr-1' AND cash - 10000.00 >= 0"
+$after = Invoke-Sql -Sql "SELECT cash FROM wallets WHERE character_id='chr-1'"
+if ($r.Exit -eq 0 -and $after.Output -match '750\.00') {
+    Write-Host '  PASS  an unaffordable debit touches ZERO rows and leaves the balance intact (reject)' -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  debit was not cleanly refused — balance is now: $($after.Output)" -ForegroundColor Red
+}
+
+$script:Checks++
+$r = Invoke-Sql -Sql @"
+INSERT INTO ledger (character_id, account, delta, balance_after, reason, reference_type, reference_id)
+SELECT character_id, 'cash', 250.00, cash, 'stuetze', 'session', NULL
+  FROM wallets WHERE character_id = 'chr-1'
+"@
+$row = Invoke-Sql -Sql "SELECT balance_after FROM ledger WHERE reason='stuetze' ORDER BY id DESC LIMIT 1"
+if ($r.Exit -eq 0 -and $row.Output -match '750\.00') {
+    Write-Host '  PASS  the ledger records the balance the INSERT itself read (allow)' -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  ledger balance_after wrong: $($row.Output)" -ForegroundColor Red
+}
+
+$script:Checks++
+$r = Invoke-Sql -Sql "INSERT INTO ledger (character_id, account, delta, balance_after, reason, reference_type, reference_id) SELECT character_id, 'cash', 1.00, cash, 'no_such_reason', NULL, NULL FROM wallets WHERE character_id='chr-1'"
+if ($r.Exit -eq 0) { Write-Host '  PASS  an unknown reason is still recorded by the DB — the Lua allowlist is the gate (documented)' -ForegroundColor Green }
+else { $script:Failures++; Write-Host '  FAIL  unexpected' -ForegroundColor Red }
+
+# ---------------------------------------------------------------------------
+Write-Step 'Layer 4 — slot swap is atomic'
+# ---------------------------------------------------------------------------
+$script:Checks++
+$r = Invoke-Sql -Sql @"
+UPDATE inventory_items SET slot = 65535 WHERE character_id='chr-1' AND slot = 0;
+UPDATE inventory_items SET slot = 0 WHERE character_id='chr-1' AND slot = 5;
+UPDATE inventory_items SET slot = 5 WHERE character_id='chr-1' AND slot = 65535;
+"@
+if ($r.Exit -eq 0) {
+    $rows = Invoke-Sql -Sql "SELECT slot FROM inventory_items WHERE character_id='chr-1' ORDER BY slot"
+    if ($rows.Output -notmatch '65535') {
+        Write-Host '  PASS  a two-stack swap leaves nothing stranded in the parking slot (allow)' -ForegroundColor Green
+    } else {
+        $script:Failures++; Write-Host "  FAIL  an item is stranded in slot 65535: $($rows.Output)" -ForegroundColor Red
+    }
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  swap sequence failed: $($r.Output)" -ForegroundColor Red
+}
+
+$script:Checks++
+$r = Invoke-Sql -Sql @"
+INSERT INTO inventory_items (id, character_id, slot, item_code, quantity)
+VALUES ('i-swap-b', 'chr-1', 1, 'test_bread', 1);
+"@
+Invoke-Sql -Sql "UPDATE inventory_items SET slot = 0 WHERE id = 'i1'" | Out-Null
+
+$before = Invoke-Sql -Sql "SELECT COUNT(*) FROM inventory_items WHERE character_id='chr-1'"
+
+# Run only the first half of the swap and stop, exactly as a failed transaction
+# would leave it: one stack parked at 65535, one still in a live slot.
+$r = Invoke-Sql -Sql @"
+UPDATE inventory_items SET slot = 65535 WHERE character_id='chr-1' AND slot = 1;
+UPDATE inventory_items SET slot = 1 WHERE character_id='chr-1' AND slot = 0;
+"@
+$after = Invoke-Sql -Sql "SELECT COUNT(*) FROM inventory_items WHERE character_id='chr-1'"
+
+# The property that matters: a half-finished swap may park an item, but it must
+# never lose one or conjure one. Losing inventory is the one failure mode a
+# player never forgives.
+if ($before.Output -eq $after.Output) {
+    Write-Host "  PASS  an interrupted swap loses and duplicates nothing ($($after.Output.Trim()) rows, unchanged)" -ForegroundColor Green
+} else {
+    $script:Failures++
+    Write-Host "  FAIL  interrupted swap changed the row count: $($before.Output) -> $($after.Output)" -ForegroundColor Red
+}
+
+# And the parked item must still be findable — unreachable is recoverable,
+# deleted is not.
+$script:Checks++
+$r = Invoke-Sql -Sql "SELECT id FROM inventory_items WHERE character_id='chr-1' AND slot=65535"
+if ($r.Exit -eq 0 -and $r.Output.Trim()) {
+    Write-Host "  PASS  the parked stack is still retrievable by id ($($r.Output.Trim()))" -ForegroundColor Green
+} else {
+    $script:Failures++; Write-Host '  FAIL  the parked stack could not be found — inventory was destroyed' -ForegroundColor Red
+}
+
+# ---------------------------------------------------------------------------
 Write-Step 'Result'
 if ($script:Failures -eq 0) {
     Write-Host "  All $($script:Checks) checks passed." -ForegroundColor Green

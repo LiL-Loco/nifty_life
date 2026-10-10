@@ -4,6 +4,19 @@
 
 Nifty = {}
 
+--- Row identifier generator. Every player-owned row is keyed by a UUID (ADR-0001):
+--- slot IDs get recycled and must never end up in a key. Shared so the identity
+--- and inventory layers mint identical-shaped IDs.
+function Nifty.newUuid()
+  math.randomseed(os.time() + math.floor(os.clock() * 1000))
+  local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+
+  return (string.gsub(template, '[xy]', function(c)
+    local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
+    return string.format('%x', v)
+  end))
+end
+
 Nifty.Schema = {
   -- Table names. Centralised so a rename is one edit, not a grep across
   -- every resource.

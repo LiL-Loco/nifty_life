@@ -68,6 +68,13 @@ end)
 local function enterWorld(src, character)
   Identity.beginSession(src, character.id)
 
+  -- Layer 4. Order matters: money and items are pushed before the Stütze arms,
+  -- so the first balance a player sees is the truth rather than the truth plus
+  -- an instalment that arrives a frame later.
+  Economy.push(src, character.id)
+  Inventory.push(src, character.id)
+  Stuetze.start(src, character.id)
+
   TriggerClientEvent('nifty:client:enterWorld', src, {
     character = {
       id = character.id,
@@ -148,6 +155,7 @@ end)
 AddEventHandler('playerDropped', function()
   local src = source
   BootstrapAttempts[src] = nil
+  Stuetze.stop(src)
   Identity.endSession(src)
   print(('[%s] session ended for slot %s'):format(RESOURCE, src))
 end)
