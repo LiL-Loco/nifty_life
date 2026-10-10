@@ -42,6 +42,21 @@ website/                 Node/TS website + Discord staff bot (ADR-0007)
 docs/                    Plan, ADRs, housing catalogue
 ```
 
+## Verifying the schema
+
+The ADRs above make claims that the database is meant to *enforce*. `database/verify.ps1` proves it by
+applying the migrations to a throwaway MariaDB and attempting the operations that must fail:
+
+```powershell
+pwsh -File database\verify.ps1
+```
+
+17 checks: one-character-per-account, non-negative money, inventory slot collisions, vehicle state bounds,
+and the ADR-0007 website privilege boundary. **A check that passes when it should fail means the invariant
+is being held up by application code instead of the schema — which means it is held up nowhere.**
+
+Current status: all 17 passing on MariaDB 11.8.9.
+
 ## Setup
 
 Database credentials go in `server.cfg` (git-ignored) or a `.env` — never in code or a commit.
