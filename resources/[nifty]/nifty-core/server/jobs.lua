@@ -283,17 +283,14 @@ end
 AddEventHandler('onResourceStart', function(resource)
   if resource ~= RESOURCE then return end
 
-  if GetResourceState('oxmysql') ~= 'started' then
-    return SetTimeout(2000, function()
-      loadDefinitions()
-      Db.update([[UPDATE character_jobs SET is_duty = 0, duty_since = NULL WHERE is_duty = 1]],
-        {}, 'jobs:clearDuty')
-    end)
-  end
-
-  loadDefinitions()
-  Db.update([[UPDATE character_jobs SET is_duty = 0, duty_since = NULL WHERE is_duty = 1]],
-    {}, 'jobs:clearDuty')
+  -- Wait for the connection, not for the resource: see the note in settings.lua.
+  -- Without a live database this used to report "loaded 0 job definitions" and
+  -- carry on, which is a server that accepts players it cannot pay.
+  Db.ready(function()
+    loadDefinitions()
+    Db.update([[UPDATE character_jobs SET is_duty = 0, duty_since = NULL WHERE is_duty = 1]],
+      {}, 'jobs:clearDuty')
+  end)
 end)
 
 --- Leaving a job that pays out is the last chance to settle up, so it happens

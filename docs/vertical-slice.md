@@ -31,16 +31,41 @@ wiring is where the bugs live.
 ## How to run it
 
 ```
-# 1. copy the config and fill in the connection string
-Copy-Item server.cfg.example server.cfg
+# 1. the schema — reads the connection string out of server.cfg, applies only
+#    what is missing, and records each version in schema_migrations
+pwsh -File tools\migrate.ps1
 
-# 2. MariaDB — the schema is applied by the entrypoint in filename order
-docker run --name nifty-db -e MARIADB_ROOT_PASSWORD=dev -e MARIADB_DATABASE=nifty_life `
-  -p 3306:3306 -v "${PWD}/database/migrations:/docker-entrypoint-initdb.d:ro" -d mariadb:11
-
-# 3. FiveM
+# 2. the server
 FXServer.exe +exec server.cfg
 ```
+
+The database is a **local MariaDB service**, not a container. `migrate.ps1`
+finds the client itself — on Windows it is usually installed but not on `PATH`,
+so the script also looks under `Program Files`.
+
+Re-running it is safe and cheap: it applies nothing that is already recorded.
+`-List` shows what is pending without touching anything.
+
+### A healthy boot
+
+```
+[nifty-core] persistence layer loaded
+[oxmysql] Successfully connected to database
+[nifty-core] loaded 38 settings
+[nifty-core] loaded 13 item definitions
+[nifty-core] loaded 8 job definitions
+```
+
+**`loaded 0 settings` means the database was not reachable**, not that it is
+empty. Those two look identical in the log and mean opposite things, which is
+why the load waits for the connection rather than a fixed delay.
+
+Two errors that are harmless locally and worth recognising:
+
+- `sv_projectname` / `sv_projectdesc` — portal convars, commented out in
+  `server.cfg` on purpose. Uncomment only with a Cfx key set.
+- `Server list query returned an error` — the server is trying to register with
+  the Cfx backend from a local machine. Expected without keys.
 
 ## Manual test script
 
@@ -120,6 +145,26 @@ Being blunt about it, because the alternative is a false sense of coverage:
 - **No NUI frame has been rendered.** The HTML, CSS and JS parse, and the message
   contract matches the Lua side by inspection. Nobody has seen the panel.
 - **Collection natives, ped setup and teleports have still never run.**
+
+### What the first real FXServer run found (2026-10-10)
+
+The first boot on real hardware produced more genuine bugs than the entire
+headless suite, and every one of them is a class the harness structurally
+cannot see:
+
+| Symptom in the log | Cause |
+|---|---|
+| `No such export await in resource oxmysql` | `exports.oxmysql:await` no longer exists; the API is `MySQL.query.await`. The harness shim still offered the old export, so 279/279 were green while every real query failed. |
+| `loaded 0 settings` with the server otherwise "fine" | The boot waited two seconds for the resource, not for the connection, then ran against an empty database and carried on. Now `Db.ready` waits for the connection and queues callbacks in order. |
+| `Resource "sessionmanager" not found` | Ensured but not downloaded. We roll our own sessions (ADR-0002) — it should never have been listed. |
+| `sv_projectname` / `sv_projectdesc` command not found | Portal convars that only exist with a Cfx key set. |
+| `ECONNREFUSED 127.0.0.1:3306` | No database was running at all. |
+
+**The pattern is the same one as the phone:** code that is complete, tested and
+unreachable. A harness stubs the layer it cannot provide, so it proves nothing
+about that layer's *shape*. Anything that crosses a version boundary — a driver's
+API, a FiveM convar, a resource list — has to be verified against the real
+artifact, not against a shim.
 
 ### Added after the first run
 

@@ -3,13 +3,16 @@
 
 # ---- Identity -------------------------------------------------------------
 sv_hostname "Nifty Life 2.0"
-sv_projectName "nifty-life-2"
-sv_projectDesc "A whitelisted weekend roleplay server."
 
 # Keys live on the Cfx Portal. Not in this repo, not in any commit.
 sv_authMaxVariance 1.0
 sv_authMinTrust 0.0
-sv_pure_verify_client_settings 1
+
+# `sv_projectName`, `sv_projectDesc` and `sv_pure_verify_client_settings` are
+# NOT set here on purpose. They are declared by the Cfx Portal for a keyed
+# server; without keys they do not exist and FXServer logs
+# "Command not found (sv_projectname)" for each one on every start. Add them
+# back once a key set exists — not before.
 
 # ---- Database (ADR-0005) --------------------------------------------------
 # Local MariaDB. The password belongs here and nowhere else.
@@ -46,9 +49,13 @@ sets sv_maxClients 48
 ensure oxmysql
 ensure Bob74_IPL           # ADR-0016 — downloaded per release, never committed
 ensure mapmanager
-ensure sessionmanager
 ensure spawnmanager
 ensure chat
+
+# NO sessionmanager. ADR-0002 rolls our own sessions in `server/identity.lua`,
+# and ensuring a resource that is not present fails the boot with
+# `Resource "sessionmanager" not found`. If you ever add it back, delete this
+# comment with it.
 
 ensure [nifty]
 

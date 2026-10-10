@@ -17,23 +17,30 @@
 [CmdletBinding()]
 param(
     [string]$ToolImage = 'nifty-lua54',
-    [string]$Path = 'resources'
+    # ONLY our own resources. This used to scan everything under `resources/`,
+    # which worked until oxmysql, Bob74_IPL, mapmanager and spawnmanager were
+    # downloaded — and then six of THEIR files failed to parse under plain
+    # lua5.4, because they are written for FiveM's Lua, not Debian's.
+    #
+    # Linting another project's release tells us nothing about ours, and it
+    # turns a green suite red for a reason nobody can act on. Same rule as
+    # .gitignore: external dependencies are downloaded, not maintained.
+    [string]$Path = 'resources/[nifty]',
+    [switch]$All
 )
 
 $ErrorActionPreference = 'Continue'
 
 # ---------------------------------------------------------------------------
-# Toolchain image
+# Toolchain image — see tools/Dockerfile.lua54 for why it is a file and not a
+# here-string piped into `docker build -f -`.
 # ---------------------------------------------------------------------------
-$dockerfile = @'
-FROM mariadb:11
-RUN apt-get update -qq \
- && apt-get install -y -qq lua5.4 \
- && rm -rf /var/lib/apt/lists/*
-'@
 
 Write-Host 'Ensuring Lua 5.4 toolchain image...' -ForegroundColor Cyan
-$dockerfile | docker build -q -t $ToolImage -f - . 2>&1 | Out-Null
+# Built from tools/Dockerfile.lua54, not piped through stdin. A Dockerfile
+# arriving on stdin gets a fresh cache key every run and leaves its layers
+# behind — that accumulated 20 GB of build cache across this project's history.
+docker build -q -t $ToolImage -f tools/Dockerfile.lua54 . 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host '  FAIL  could not build the toolchain image' -ForegroundColor Red
@@ -61,9 +68,21 @@ echo "RESULT $fail $total"
 '@
 
 Write-Host ''
-Write-Host "Parsing Lua files under $Path with luac 5.4..." -ForegroundColor Cyan
 
-$result = $check | docker run --rm -i -v "${PWD}:/work" -w /work --entrypoint bash $ToolImage -s $Path 2>&1
+$scanPath = if ($All) { 'resources' } else { $Path }
+
+if ($All) {
+    Write-Host 'Parsing EVERY Lua file under resources/ — this includes third-party' -ForegroundColor Yellow
+    Write-Host 'resources, which are written for FiveM''s Lua and may fail. Expect noise.' -ForegroundColor Yellow
+} else {
+    Write-Host "Parsing Lua files under $scanPath with luac 5.4..." -ForegroundColor Cyan
+}
+
+# The path reaches the inner bash as $1 and is quoted there, so the square
+# brackets in `resources/[nifty]` stay literal. PowerShell's own `-Path` would
+# treat them as a character class, which is why this is `$scanPath` and never
+# `-Path`.
+$result = $check | docker run --rm -i -v "${PWD}:/work" -w /work --entrypoint bash $ToolImage -s $scanPath 2>&1
 
 $result | ForEach-Object {
     if ($_ -match '^OK ') { Write-Host "  $_" -ForegroundColor Green }

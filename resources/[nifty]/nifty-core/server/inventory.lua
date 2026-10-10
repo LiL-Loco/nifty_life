@@ -387,13 +387,11 @@ end
 AddEventHandler('onResourceStart', function(resource)
   if resource ~= RESOURCE then return end
 
-  -- Settings may still be loading; the catalogue must be read after them,
-  -- because every capacity answer depends on both.
-  if GetResourceState('oxmysql') ~= 'started' then
-    SetTimeout(2000, loadDefinitions)
-  else
-    loadDefinitions()
-  end
+  -- The catalogue must be read AFTER settings, because every capacity answer
+  -- depends on both. `Db.ready` callbacks fire in registration order and
+  -- settings.lua registers before inventory.lua in fxmanifest, so this one runs
+  -- second — same guarantee the fixed two-second timeout was only hoping for.
+  Db.ready(loadDefinitions)
 end)
 
 --- A new character starts with what a person actually has on them. This is the

@@ -377,9 +377,73 @@ function Oxmysql:await_transaction(queries)
   return true
 end
 
--- The modules call `exports.oxmysql:await(sql, params)` and also register their
--- own exports with `exports('name', fn)`. FiveM's `exports` is both indexable
--- and callable, so the shim must be too — an earlier version was a plain table
+-- The modules talk to oxmysql through the CURRENT API, which is
+-- `MySQL.<method>.await` and `MySQL.ready` (see resources/oxmysql/lib/MySQL.lua).
+-- The old `exports.oxmysql:await` export no longer exists — calling it raised
+-- "No such export await" on a real FXServer while this harness reported 279/279
+-- green, because the shim here still provided it.
+--
+-- So the shim mirrors the real shape and is STRICT about it: an unknown method
+-- raises instead of being conjured up, so the next API drift fails here rather
+-- than on a server at 23:36 on a Friday.
+--
+-- The mapping matters: oxmysql's method names are `query` / `insert` /
+-- `transaction`, while this shim's implementations are `await` /
+-- `await_transaction`. Aliasing one to the other by identity produced a nil call
+-- on the very first query.
+local REAL_METHODS = {
+  query = 'await', insert = 'await', update = 'await', prepare = 'await',
+  rawExecute = 'await', transaction = 'await_transaction',
+}
+
+_G.MySQL = setmetatable({
+  ready = setmetatable({
+    -- oxmysql's ready is callable AND has .await. The harness has no connection
+    -- to wait for, so both run the callback immediately.
+    await = function(cb)
+      if cb then cb() end
+      return true
+    end,
+  }, {
+    __call = function(_, cb) return _G.MySQL.ready.await(cb) end,
+  }),
+
+  -- `single` and `scalar` return DIFFERENT shapes from `query` in real
+  -- oxmysql — a row, and a bare value, never an array. Implemented properly
+  -- rather than aliased to `query`, because an alias hands back an array and
+  -- hides exactly the row-vs-array confusion this harness was built to catch.
+  single = {
+    await = function(...)
+      local rows = Oxmysql.await(Oxmysql, ...)
+      return rows and rows[1] or nil
+    end,
+  },
+  scalar = {
+    await = function(...)
+      local rows = Oxmysql.await(Oxmysql, ...)
+      local first = rows and rows[1]
+      if first == nil then return nil end
+      for _, value in pairs(first) do return value end
+      return nil
+    end,
+  },
+}, {
+  __index = function(_, name)
+    local impl = REAL_METHODS[name]
+    if not impl then
+      error(('MySQL.%s is not an oxmysql method — this harness mirrors the real API only, ' ..
+        'so reaching this means the modules target a driver call that does not exist')
+        :format(tostring(name)))
+    end
+
+    local wrapper = { await = function(...) return Oxmysql[impl](Oxmysql, ...) end }
+    rawset(_G.MySQL, name, wrapper)
+    return wrapper
+  end,
+})
+
+-- FiveM's `exports` is both indexable and callable — the modules register their
+-- own exports with `exports('name', fn)`. An earlier version was a plain table
 -- and identity.lua crashed on load. That mismatch is exactly the class of bug
 -- this harness exists to find.
 local registeredExports = {}
@@ -515,6 +579,53 @@ local function itemCount(code)
   return Inventory.count(TEST_CHARACTER, code)
 end
 
+-- ============================================================================
+group('UUIDs — unique under back-to-back calls')
+-- ============================================================================
+
+-- Regression with teeth. `Nifty.newUuid` used to call `math.randomseed` on every
+-- invocation, so two calls in the same millisecond returned the SAME uuid and
+-- MariaDB refused the second insert with
+-- `ERROR 1062 Duplicate entry for key 'PRIMARY'`. It appeared as an intermittent
+-- Peeper-post failure several runs in, which is exactly how long a bug like that
+-- hides when nobody is looking for it.
+--
+-- This group runs BEFORE the others deliberately: a duplicate id here would
+-- otherwise show up as an unrelated failure somewhere further down.
+local seenUuids = {}
+local duplicates = {}
+local wrongShape = 0
+local wrongVersion = 0
+
+for i = 1, 5000 do
+  local id = Nifty.newUuid()
+
+  if type(id) ~= 'string' or #id ~= 36 or id:match('^%x%x%x%x%x%x%x%x%-') == nil then
+    wrongShape = wrongShape + 1
+  elseif id:sub(15, 15) ~= '4' then
+    -- Version 4 marker. A template that drifts stops being a UUID, and the
+    -- derived-UUID hash in the housing catalogue assumes the v5 shape.
+    wrongVersion = wrongVersion + 1
+  end
+
+  if seenUuids[id] then duplicates[#duplicates + 1] = id end
+  seenUuids[id] = true
+end
+
+check('5000 UUIDs contain no duplicate', #duplicates == 0,
+  #duplicates .. ' duplicate(s), first: ' .. tostring(duplicates[1]))
+check('every UUID has the canonical 8-4-4-4-12 shape', wrongShape == 0,
+  wrongShape .. ' malformed')
+check('every UUID carries the version-4 marker', wrongVersion == 0,
+  wrongVersion .. ' wrong version nibble')
+
+-- Two UUIDs minted back to back, with nothing in between, are the exact case
+-- the reseeding bug broke. Asserted separately so the failure message points at
+-- the real scenario rather than at a statistical claim.
+local immediateA, immediateB = Nifty.newUuid(), Nifty.newUuid()
+check('two UUIDs minted back to back differ', immediateA ~= immediateB)
+
+-- ============================================================================
 group('Money rounding — half-up, and nothing else')
 
 -- Regression: the first implementation nudged the value by half a unit before
@@ -1163,10 +1274,20 @@ check('an empty message is refused', rejected == nil)
 rejected = Phone.send(PHONE_ONE, 'chr-does-not-exist', 'into the void')
 check('messaging a non-existent character is refused', rejected == nil)
 rejected = Phone.send(PHONE_ONE, OTHER_CHARACTER, ('x'):rep(2000))
+
+-- Read THIS message by id. `inbox[1]` is the wrong thing to assert on: two
+-- messages sent within the same second share a `sent_at`, the inbox falls back
+-- to `id DESC`, and the id is a random UUID — so which of them lands first is
+-- arbitrary and the check fails on roughly every other run.
+local longBody = ''
+if rejected then
+  local longRow = Db.one('SELECT body FROM phone_messages WHERE id = ?', { rejected }, 'test:longMessage')
+  longBody = longRow and longRow.body or ''
+end
+
 check('an over-long message is truncated, not refused',
-  rejected ~= nil and #Phone.inbox(OTHER_CHARACTER, 25, 0)[1].body ==
-    tonumber(GetSetting('phone.message.max_length', 1000)),
-  'got ' .. tostring(#Phone.inbox(OTHER_CHARACTER, 25, 0)[1].body))
+  rejected ~= nil and #longBody == tonumber(GetSetting('phone.message.max_length', 1000)),
+  'got ' .. tostring(#longBody))
 
 -- Deleting is private: your inbox, not theirs.
 check('clearing a message works for its recipient', Phone.clear(OTHER_CHARACTER, messageId))
@@ -1652,6 +1773,19 @@ sql(('UPDATE characters SET is_staff = 1 WHERE id = %s'):format(q(OTHER_CHARACTE
 local searchA = Peeper.post(TEST_CHARACTER, 'Die Werkstatt am Viertel ist offen.', 'Vespucci', 'game')
 local searchB = Peeper.post(TEST_CHARACTER, 'Suche 100% gebrauchte Teile.', nil, 'web')
 local searchC = Peeper.post(OTHER_CHARACTER, 'Unrelated notice.', nil, 'game')
+
+-- The fixtures are asserted, not assumed. When `searchB` failed to be written,
+-- the next six checks all failed with misleading counts — "searching by
+-- character works — 1" reads like a query bug and was not one. A fixture that
+-- cannot materialise must fail HERE, on its own line, before it poisons
+-- everything downstream.
+check('all three search fixtures were written',
+  searchA ~= nil and searchB ~= nil and searchC ~= nil,
+  ('A=%s B=%s C=%s'):format(tostring(searchA), tostring(searchB), tostring(searchC)))
+
+check('a post with no Place is stored without one',
+  searchB ~= nil and (Db.one('SELECT place_name FROM peeper_posts WHERE id = ?',
+    { searchB }, 'test:placeNull') or {}).place_name == nil)
 
 local byCharacter = Peeper.searchPosts({ characterId = TEST_CHARACTER })
 check('searching by character works', byCharacter ~= nil and #byCharacter == 2,

@@ -13,9 +13,16 @@ Db = {}
 
 --- Wrap oxmysql's await-style calls so every failure is logged once, here,
 --- rather than being handled (or not) in a hundred call sites.
+---
+--- The API is `MySQL.<method>.await`, NOT `exports.oxmysql:await`. The export
+--- existed in older oxmysql builds and is gone from the current one; calling it
+--- raises "No such export await in resource oxmysql" on the first query, which
+--- is what a real FXServer run showed. Every failure then returns nil, the
+--- module reports "loaded 0 settings", and the server runs happily on an empty
+--- world — which is the worst possible failure mode and worth the extra lines.
 local function guard(label, sql, params)
   local ok, result = pcall(function()
-    return exports.oxmysql:await(sql, params or {})
+    return MySQL.query.await(sql, params or {})
   end)
 
   if not ok then
@@ -25,6 +32,63 @@ local function guard(label, sql, params)
   end
 
   return result
+end
+
+--- Run `cb` once the database connection is actually up, in the order the
+--- callbacks were registered.
+---
+--- The previous approach was `GetResourceState('oxmysql') ~= 'started'` plus a
+--- fixed two-second timeout, which is a guess: oxmysql starts, then opens the
+--- socket, and a database that is not running produces ECONNREFUSED in between.
+---
+--- Ordering is implemented here rather than assumed. `MySQL.ready(cb)` spins up
+--- a THREAD PER CALL, so two calls made in the same tick race — and the order
+--- genuinely matters: the item catalogue reads capacities that only exist once
+--- settings are loaded. A queue makes the dependency explicit instead of
+--- leaving it to thread scheduling.
+local readyQueue = {}
+local readyStarted = false
+local readyComplete = false
+
+local function runReady(callback)
+  local ok, err = pcall(callback)
+  if not ok then
+    print(('[%s] startup callback failed: %s'):format(RESOURCE, tostring(err)))
+  end
+end
+
+local function drainReady()
+  while #readyQueue > 0 do
+    runReady(table.remove(readyQueue, 1))
+  end
+end
+
+function Db.ready(cb)
+  if type(cb) ~= 'function' then return end
+
+  -- Already connected: run it now. This branch is not an optimisation, it is
+  -- the fix for a real bug — an earlier version registered the connection
+  -- callback only on the FIRST call, so every later caller queued a callback
+  -- that nothing would ever drain. Settings loaded and then jobs, inventory and
+  -- the item catalogue silently never ran.
+  if readyComplete then
+    return runReady(cb)
+  end
+
+  readyQueue[#readyQueue + 1] = cb
+
+  if readyStarted then return end
+  readyStarted = true
+
+  if not MySQL or not MySQL.ready then
+    print(('[%s] FATAL: oxmysql did not load — it must start before this resource.'):format(RESOURCE))
+    return
+  end
+
+  MySQL.ready(function()
+    readyComplete = true
+    drainReady()
+  end)
 end
 
 --- Single row.
@@ -79,7 +143,7 @@ function Db.transaction(statements, label)
   end
 
   local ok, result = pcall(function()
-    return exports.oxmysql:await_transaction(queries)
+    return MySQL.transaction.await(queries)
   end)
 
   if not ok or not result then

@@ -46,10 +46,10 @@ end
 AddEventHandler('onResourceStart', function(resource)
   if resource ~= RESOURCE then return end
 
-  -- oxmysql may still be starting; wait for it rather than racing it.
-  if GetResourceState('oxmysql') ~= 'started' then
-    SetTimeout(2000, function() LoadSettings() end)
-  else
-    LoadSettings()
-  end
+  -- Wait for the CONNECTION, not for the resource. The previous version polled
+  -- `GetResourceState('oxmysql')` and waited a fixed two seconds, which is a
+  -- guess: oxmysql starts first and opens its socket afterwards, so with the
+  -- database down the load ran anyway and the server came up reporting
+  -- "loaded 0 settings" — an empty world that looks like it worked.
+  Db.ready(function() LoadSettings() end)
 end)

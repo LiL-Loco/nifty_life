@@ -7,8 +7,21 @@ Nifty = {}
 --- Row identifier generator. Every player-owned row is keyed by a UUID (ADR-0001):
 --- slot IDs get recycled and must never end up in a key. Shared so the identity
 --- and inventory layers mint identical-shaped IDs.
+---
+--- SEEDING IS A ONE-TIME EVENT, done here at load. An earlier version called
+--- `math.randomseed` INSIDE this function, which is a real bug and not a style
+--- point: reseeding resets the generator's state, so two calls in the same
+--- millisecond got the same seed and returned the IDENTICAL uuid. That surfaced
+--- as `ERROR 1062 Duplicate entry ... for key 'PRIMARY'` on a Peeper post,
+--- intermittently, a few runs in. It applies to every table keyed by this —
+--- characters, inventory rows, phone accounts, messages — where a collision is
+--- not a failed insert but a refused player.
+---
+--- The random stream is now advanced continuously across calls, which is what
+--- makes consecutive UUIDs independent rather than a pure function of the clock.
+math.randomseed(os.time() + math.floor((tonumber(os.clock()) or 0) * 1000000))
+
 function Nifty.newUuid()
-  math.randomseed(os.time() + math.floor(os.clock() * 1000))
   local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
 
   return (string.gsub(template, '[xy]', function(c)
