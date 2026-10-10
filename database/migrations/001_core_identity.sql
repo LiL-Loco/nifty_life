@@ -32,6 +32,31 @@ CREATE TABLE IF NOT EXISTS accounts (
 -- ---------------------------------------------------------------------------
 -- characters — the primary entity. Owns money, inventory, property, vehicles.
 -- uq_characters_account is what enforces "one character per person" (ADR-0008).
+--
+-- `appearance` holds the character-creator output. STRUCTURE (ADR-0017) — store
+-- collection name + LOCAL index per slot, never a global drawable index:
+--
+--   {
+--     "model": "mp_m_freemode_01",
+--     "components": {
+--       "0": { "collection": "", "drawable": 27, "texture": 0 },
+--       "4": { "collection": "female_heist", "drawable": 9, "texture": 3 }
+--     },
+--     "props": {
+--       "0": { "collection": "mp_f_bikerdlc_01", "drawable": 0, "texture": 0 }
+--     }
+--   }
+--
+-- Component ids run 0..12; prop anchor points run 0..12.
+--
+-- Global drawable indexes are deliberately NOT used: they shift on every Title
+-- Update, which would silently restyle every existing character. Collection
+-- names and local indexes stay stable across TUs, which is exactly what a
+-- server that must keep working after the next game update needs.
+--
+-- Validation is the server's job. The collection natives are CLIENT-ONLY, so a
+-- client can submit any JSON it likes — the server must check collection names
+-- against an allowlist and index ranges per collection before storing.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS characters (
   id            CHAR(36)    NOT NULL,

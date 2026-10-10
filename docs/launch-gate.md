@@ -8,40 +8,42 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
 ## Systems
 
 1. Whitelist gate at connection
-2. Character — name, age, appearance; **exactly one per account** (ADR-0008)
-3. Persistence layer (ID-safe keys, no FiveM slot ID as key)
-4. Money — cash, bank, transfers
-5. Inventory
-6. Job system + police, EMS, taxi, mechanic — **open to anyone, no qualification** (ADR-0008)
-7. Teamspeak voice — linked to the whitelist, closed to non-approved accounts (ADR-0015)
-8. Housing — buy/rent, storage, keys
-9. Vehicle ownership — buy, store, fuel, insurance, repair
-10. Businesses — own, stock, staff, revenue
-11. Phone + documents (licence, registration, medical)
-12. Dispatch for police + EMS (LSPD = Mission Row, EMS = Pillbox). **No fire service** — GTA ships no
+2. Character — name, age, gender; **exactly one per account** (ADR-0008)
+3. **Full character creator** — NUI appearance editor, all 13 components + 13 prop anchors,
+   collection-based storage, server-side validation (ADR-0017)
+4. Persistence layer (ID-safe keys, no FiveM slot ID as key)
+5. Money — cash, bank, transfers
+6. Inventory
+7. Job system + police, EMS, taxi, mechanic — **open to anyone, no qualification** (ADR-0008)
+8. Teamspeak voice — linked to the whitelist, closed to non-approved accounts (ADR-0015)
+9. Housing — buy/rent, storage, keys
+10. Vehicle ownership — buy, store, fuel, insurance, repair
+11. Businesses — own, stock, staff, revenue
+12. Phone + documents (licence, registration, medical)
+13. Dispatch for police + EMS (LSPD = Mission Row, EMS = Pillbox). **No fire service** — GTA ships no
     enterable fire station, and an emergency service without a building is worse than none (ADR-0012).
-13. Criminal layer — drugs, robberies
+14. Criminal layer — drugs, robberies
 
 ## Platform
 
-13. txAdmin configured, permissions, ban system
-14. Server convars hardened — `sv_entityLockdown`, entity lockdown mode, `sv_kick_players_cnl_*` set
-15. Scheduled restart automation for the weekend window — Fri 19:00 start, Sun 22:00 stop (ADR-0010)
-16. Event security — every client event validated server-side
+15. txAdmin configured, permissions, ban system
+16. Server convars hardened — `sv_entityLockdown`, entity lockdown mode, `sv_kick_players_cnl_*` set
+17. Scheduled restart automation for the weekend window — Fri 19:00 start, Sun 22:00 stop (ADR-0010)
+18. Event security — every client event validated server-side
 
 ## Operations
 
-17. Website (Node/TS) live, with the application form + application status page
-18. Whitelist enforcement wired to the website — Discord ID at `playerConnecting`, **and Teamspeak access
+19. Website (Node/TS) live, with the application form + application status page
+20. Whitelist enforcement wired to the website — Discord ID at `playerConnecting`, **and Teamspeak access
     driven from the same whitelist** so non-approved accounts cannot listen (ADR-0015)
-19. Rules page, accepted by players
-20. Player onboarding — first job, first property, expectations
-21. Staff SOP for bans and applications
-22. Automated backups — hourly dumps + binlog PITR, offsite encrypted, retention 7d/4w/12m (ADR-0006)
-23. **One proven full restore** into an empty database, FXServer booted against it
-24. Discord OAuth application + staff bot with approve/reject buttons (ADR-0007)
-25. Two DB users with split privilege: `fivem` full, `website` INSERT-only on applications (ADR-0007)
-26. Application state machine: submitted → under review → approved / rejected
+21. Rules page, accepted by players
+22. Player onboarding — first job, first property, expectations
+23. Staff SOP for bans and applications
+24. Automated backups — hourly dumps + binlog PITR, offsite encrypted, retention 7d/4w/12m (ADR-0006)
+25. **One proven full restore** into an empty database, FXServer booted against it
+26. Discord OAuth application + staff bot with approve/reject buttons (ADR-0007)
+27. Two DB users with split privilege: `fivem` full, `website` INSERT-only on applications (ADR-0007)
+28. Application state machine: submitted → under review → approved / rejected
 
 ## Design principles
 
