@@ -1,0 +1,47 @@
+# ---- Secrets & credentials (NEVER commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.lua
+server.cfg
+!server.cfg.example
+
+# ---- Database ----
+*.sql.gz
+*.dump
+/backups/
+/backups/**
+
+# ---- FiveM runtime ----
+cache/
+server-cache/
+*.log
+logs/
+txData/
+/txData/**
+profile/
+*.log
+
+# ---- Node (website + Discord bot, ADR-0007) ----
+node_modules/
+dist/
+build/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# ---- Editors / OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- Local test artefacts ----
+*.sql.bak
+/tmp/
+*.local.*
