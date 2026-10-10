@@ -41,6 +41,24 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
+# ---- Third-party resources (downloaded, not authored) ----
+# `server.cfg.example` ensures all of these at startup. They are EXTERNAL
+# dependencies: download them, do not vendor them. Tracking them would put
+# someone else's repository into this one's history, tie us to their release
+# cadence, and bury our own diff under theirs.
+#
+# `/resources/[nifty]` is OUR code and stays tracked — the bracket is literal
+# gitignore syntax, so it must not be repeated here.
+# One of these was already committed by accident; the follow-up commit removes
+# them again. Verified with `git ls-tree -r HEAD~1 resources/`.
+/resources/oxmysql/
+/resources/bob74_ipl*/
+/resources/mapmanager/
+/resources/spawnmanager/
+/resources/sessionmanager/
+/resources/chat/
+/resources/[map]/
+
 # ---- Local test artefacts ----
 *.sql.bak
 /tmp/
