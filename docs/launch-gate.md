@@ -64,7 +64,7 @@ development are logged as v2 and do not block launch. See ADR-0003 for why there
 ## Not decided yet
 
 - **Economy numbers** — Stütze amount, all prices, wages, sink costs (structure fixed in ADR-0009)
-- **Teamspeak licensing** — licence tier must be verified against 48 slots (ADR-0015)
+
 - **Teamspeak channel automation** — the query-based call lifecycle needs an early end-to-end proof before
   phone UI is built on it (ADR-0020)
 - **Interior count** — reachable stock apartments to be counted on a live server (ADR-0013)

@@ -57,7 +57,9 @@ proven privately before any content work starts. See ADR-0014.
 
 - **Economy numbers** — Stütze amount, all prices, wages, sink costs. Structure is fixed (ADR-0009);
   numbers deliberately deferred. Any placeholder committed to the database must be bulk-editable.
-- **Teamspeak licensing** — verify the licence tier covers 48 slots before launch (ADR-0015).
+- ~~**Teamspeak licensing**~~ — **resolved, and it is free.** TS3 Server is 32 slots unlicensed / 512 on the
+  Non-Commercial Licence; SaltyChat (GPL-3.0) is free under 100 slots. 48 slots fits comfortably in both
+  (ADR-0015).
 - **Interior count verification** — count reachable stock apartments on a live server before committing to a
   housing count (ADR-0013).
 - **Teamspeak onboarding friction** — players must install and configure Teamspeak before their first session;
