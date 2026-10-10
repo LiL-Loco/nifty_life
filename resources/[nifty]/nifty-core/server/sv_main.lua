@@ -87,6 +87,13 @@ local function enterWorld(src, character)
     },
     spawn = SpawnPoints[character.spawn_point or 'default'],
   })
+
+  -- The unread badge has to exist before the player first presses the key,
+  -- otherwise the phone opens with no idea how many messages are waiting. Sent
+  -- only if the character is actually carrying a handset (ADR-0018).
+  if Inventory.has(character.id, 'phone', 1) then
+    TriggerClientEvent('nifty:client:phoneUnread', src, Phone.unreadCount(character.id))
+  end
 end
 
 --- Client signals its resources are up. Used instead of guessing when the

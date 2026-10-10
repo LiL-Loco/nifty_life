@@ -88,6 +88,27 @@ screen and you will be debugging the wrong thing.
 12. **Open a second client and run step 5.**
     *Pass:* both sessions pay out independently; neither sees the other's balance.
 
+13. **Press F4.** *Pass:* the phone overlay opens on the right, the status bar
+    shows **your own** number (`555-00xx`, four digits), and the Messages tab
+    shows either your messages or `Keine Nachrichten.`
+    *Fail tells you:* an empty device frame means the NUI file never loaded; a
+    number of `—` means `Phone.getAccount` returned nothing; a *stuck mouse
+    cursor* after closing means `SetNuiFocus` was not released.
+
+14. **Switch to the Schreiben tab and send `Hallo Test` to the second client's
+    number** (`/niftystate` or the inventory will show it; the number is on that
+    client's F4 status bar). *Pass:* the message appears in the recipient's inbox
+    within a second or two, and the sender's copy is **not** in the sender's
+    inbox. Then press F4 again on the recipient: the badge must be non-zero
+    before it is opened and zero after.
+
+15. **Open the phone without the handset in your inventory.** *Pass:* a toast
+    says `Du hast kein Telefon dabei.` and no overlay appears. This is the check
+    that ADR-0018's device/account split is actually enforced somewhere.
+
+16. **Report the message.** *Pass:* a toast confirms, and the sender still sees
+    their copy — only admins remove content from both sides (ADR-0019).
+
 ## What this does **not** prove
 
 Being blunt about it, because the alternative is a false sense of coverage:
@@ -99,6 +120,17 @@ Being blunt about it, because the alternative is a false sense of coverage:
 - **No NUI frame has been rendered.** The HTML, CSS and JS parse, and the message
   contract matches the Lua side by inspection. Nobody has seen the panel.
 - **Collection natives, ped setup and teleports have still never run.**
+
+### Added after the first run
+
+- **The phone's field contract is unverified.** The client was written against
+  the column names in `Phone.inbox` (`sender_first`, `sender_last`, `sent_at`,
+  `read_at`), but "written against" is inspection, not execution. A rename in
+  the SELECT would leave the server green and the list empty, which is exactly
+  what happened the first time this was built. Steps 13–16 exist to catch it.
+- **`SetNuiFocus` behaviour is unverified.** A phone that leaves the cursor
+  captured after closing cannot be caught by any harness, only by opening and
+  closing it in the game.
 
 ## Known rough edges
 

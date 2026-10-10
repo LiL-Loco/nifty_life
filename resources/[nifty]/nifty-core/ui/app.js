@@ -280,6 +280,7 @@ window.addEventListener('message', (event) => {
 document.addEventListener('DOMContentLoaded', () => {
   wireForms();
   wireHud();
+  wirePhone();
   $('creator').classList.add('hidden');
 });
 
@@ -546,7 +547,230 @@ window.addEventListener('message', (event) => {
   if (action === 'result') {
     showToast(data.ok, data.message);
   }
+
+  if (action === 'phone') {
+    renderPhone(data);
+  }
+
+  if (action === 'phoneBadge') {
+    renderPhoneBadge(Number(data.unread) || 0);
+  }
 });
+
+// ---------------------------------------------------------------- phone UI
+//
+// Presentation only. Every value drawn here came from the server in the last
+// push; nothing is recomputed, and the send button does not decide whether the
+// message is allowed — `phoneSend` hands a typed number to the server, which
+// resolves it to a character itself.
+
+const phone = {
+  account: null,
+  inbox: [],
+  unread: 0,
+  activeApp: 'messages',
+};
+
+function renderPhoneBadge(unread) {
+  phone.unread = unread;
+
+  const badge = $('phoneBadgeTop');
+  if (!badge) return;
+
+  // Compared as a number, not by truthiness: `0` is truthy in this codebase's
+  // Lua heritage and has already caused one bug per language.
+  if (unread > 0) {
+    badge.textContent = String(unread);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+/** "555-0042" stays as is. Anything the server sends as an ISO string is
+ *  formatted in the browser's locale rather than assumed to be UTC. */
+function formatTime(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+
+  return parsed.toLocaleString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function messageRow(message) {
+  const row = document.createElement('article');
+  row.className = 'phone__message';
+
+  // `read_at` is NULL for an unread message, so the key is simply absent from
+  // the table the server sent. `undefined` is the check — `!message.read_at`
+  // would also be true for a legitimate epoch timestamp.
+  const unread = message.read_at === undefined || message.read_at === null;
+  if (unread) row.classList.add('phone__message--unread');
+
+  const meta = document.createElement('div');
+  meta.className = 'phone__meta';
+
+  const from = document.createElement('span');
+  from.className = 'phone__from';
+  // Names come from the server's JOIN on characters; the number is the
+  // LEFT JOIN fallback for a sender without a phone account. Never a raw id in
+  // the UI — an id on screen reads as a bug, even when it is correct.
+  const senderName = [message.sender_first, message.sender_last]
+    .filter((part) => typeof part === 'string' && part !== '')
+    .join(' ')
+    .trim();
+  from.textContent = senderName !== ''
+    ? senderName
+    : (message.sender_number || 'Unbekannt');
+
+  const time = document.createElement('span');
+  time.className = 'phone__time';
+  time.textContent = formatTime(message.sent_at);
+
+  meta.appendChild(from);
+  meta.appendChild(time);
+
+  const body = document.createElement('div');
+  body.className = 'phone__body';
+  // textContent, never innerHTML: the body is player-authored text, and this is
+  // the one place in this UI where that matters most.
+  body.textContent = message.body || '';
+
+  const actions = document.createElement('div');
+  actions.className = 'phone__actions';
+
+  const reply = document.createElement('button');
+  reply.type = 'button';
+  reply.className = 'btn btn--ghost btn--small';
+  reply.textContent = 'Antworten';
+  reply.addEventListener('click', () => {
+    const to = $('phoneTo');
+    if (to) to.value = message.sender_number || '';
+    switchPhoneApp('compose');
+    nui('phoneOpenMessage', { id: message.id });
+  });
+
+  // Reasons are picked, not typed. `Phone.report` validates against exactly
+  // these four and refuses anything else, so the list here is the server's
+  // list — a free-text field would mostly produce rejections the player cannot
+  // act on.
+  const reason = document.createElement('select');
+  reason.className = 'phone__reason';
+  [
+    ['spam', 'Spam'],
+    ['harassment', 'Belästigung'],
+    ['impersonation', 'Identitätsmissbrauch'],
+    ['other', 'Sonstiges'],
+  ].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    reason.appendChild(option);
+  });
+
+  const report = document.createElement('button');
+  report.type = 'button';
+  report.className = 'btn btn--ghost btn--small';
+  report.textContent = 'Melden';
+  report.addEventListener('click', () => {
+    nui('phoneReport', { id: message.id, reason: reason.value });
+  });
+
+  actions.appendChild(reply);
+  actions.appendChild(reason);
+  actions.appendChild(report);
+
+  row.appendChild(meta);
+  row.appendChild(body);
+  row.appendChild(actions);
+
+  return row;
+}
+
+function switchPhoneApp(name) {
+  phone.activeApp = name;
+
+  document.querySelectorAll('.phone__tab').forEach((tab) => {
+    tab.classList.toggle('is-active', tab.dataset.app === name);
+  });
+
+  $('appMessages')?.classList.toggle('is-active', name === 'messages');
+  $('appCompose')?.classList.toggle('is-active', name === 'compose');
+}
+
+function renderPhone(data) {
+  phone.account = data.account || null;
+  phone.inbox = Array.isArray(data.inbox) ? data.inbox : [];
+  renderPhoneBadge(Number(data.unread) || 0);
+
+  const shell = $('phone');
+  if (!shell) return;
+
+  shell.classList.toggle('hidden', data.open !== true);
+  if (data.open !== true) return;
+
+  const number = $('phoneNumber');
+  if (number) {
+    // The server's number, always. The UI has no way to set it.
+    number.textContent = phone.account && phone.account.number
+      ? phone.account.number
+      : '—';
+  }
+
+  const list = $('phoneList');
+  if (list) {
+    list.innerHTML = '';
+
+    if (phone.inbox.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'phone__empty';
+      empty.textContent = 'Keine Nachrichten.';
+      list.appendChild(empty);
+    } else {
+      phone.inbox.forEach((message) => list.appendChild(messageRow(message)));
+    }
+  }
+}
+
+function wirePhone() {
+  document.querySelectorAll('.phone__tab').forEach((tab) => {
+    tab.addEventListener('click', () => switchPhoneApp(tab.dataset.app));
+  });
+
+  // The homebar doubles as the close target, which is why there is no X button.
+  const homebar = document.querySelector('.phone__homebar');
+  if (homebar) homebar.addEventListener('click', () => nui('phoneClose', {}));
+
+  const send = $('phoneSend');
+  if (send) {
+    send.addEventListener('click', () => {
+      const number = ($('phoneTo')?.value || '').trim();
+      const body = ($('phoneBody')?.value || '').trim();
+
+      // Empty input is stopped here so the player does not wait for a round
+      // trip to be told nothing. This is convenience, NOT a rule — the server
+      // performs the same check and is the only thing that enforces it.
+      if (number === '' || body === '') {
+        showToast(false, 'Nummer und Nachricht werden beide gebraucht.');
+        return;
+      }
+
+      nui('phoneSend', { number, body });
+
+      const to = $('phoneTo');
+      const text = $('phoneBody');
+      if (to) to.value = '';
+      if (text) text.value = '';
+
+      switchPhoneApp('messages');
+    });
+  }
+}
 
 function wireHud() {
   const close = $('panelClose');

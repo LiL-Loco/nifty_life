@@ -260,7 +260,15 @@ end
 RegisterNetEvent('nifty:server:phoneInbox', function()
   local src = source
   local characterId = sessionCharacter(src)
-  if not characterId or not hasPhone(characterId) then return end
+  if not characterId then return end
+
+  -- Answered, not ignored. A player who presses the key and gets no reaction
+  -- cannot tell "you have no phone" from "the server is broken", and the second
+  -- reading is the expensive one — it sends them to look for a bug that is not
+  -- there.
+  if not hasPhone(characterId) then
+    return respond(src, false, 'Du hast kein Telefon dabei.')
+  end
 
   TriggerClientEvent('nifty:client:phone', src, {
     account = Phone.getAccount(characterId),
