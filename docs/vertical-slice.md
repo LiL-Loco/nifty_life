@@ -60,12 +60,19 @@ Re-running it is safe and cheap: it applies nothing that is already recorded.
 empty. Those two look identical in the log and mean opposite things, which is
 why the load waits for the connection rather than a fixed delay.
 
-Two errors that are harmless locally and worth recognising:
+Two things that are harmless during local development and worth recognising:
 
-- `sv_projectname` / `sv_projectdesc` — portal convars, commented out in
-  `server.cfg` on purpose. Uncomment only with a Cfx key set.
-- `Server list query returned an error` — the server is trying to register with
-  the Cfx backend from a local machine. Expected without keys.
+- `sv_projectname` / `sv_projectdesc` — declared by the Cfx Portal per project, not
+  by the key alone. Without a project they are undefined, not "wrong", so they are
+  commented out in `server.cfg` with a note to restore them when there is one.
+- `Server list query returned an error: Cfx failed to reach <ip>:30120` — the Cfx
+  master cannot reach this machine **inbound**. The advertised IP is correct
+  (194.99.110.218 is what the outside world sees), so the gap is between that
+  address and the box: no port forward, or an ISP address that is really
+  CGNAT. Nothing about the server is broken — `http://127.0.0.1:30120/info.json`
+  answers fine. For development it does not matter at all: connect with
+  `connect localhost:30120` and the listing is irrelevant. It only becomes a real
+  problem at launch, and ADR-0010 means it stays irrelevant until then.
 
 ## Manual test script
 
