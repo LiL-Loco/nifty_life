@@ -34,6 +34,13 @@ end
 
 --- Resolve the account behind a connection. Identity comes from the connection,
 --- never from anything the client sends.
+---
+--- `status = 'active'` is filtered HERE as well as in the `playerConnecting`
+--- whitelist check. The connecting check is the gate, but this function is also
+--- reached from `nifty:server:ready`, and a gate that only exists in one of two
+--- paths to the same privilege is not a gate. A pending or suspended account must
+--- resolve to nothing here, so that being whitelisted once and suspended later
+--- actually stops something.
 function Identity.resolveAccount(src)
   local discordId = discordIdOf(src)
   if not discordId then return nil end
@@ -42,6 +49,7 @@ function Identity.resolveAccount(src)
     SELECT id, discord_id, teamspeak_uid, status
       FROM accounts
      WHERE discord_id = ?
+       AND status = 'active'
      LIMIT 1
   ]], { discordId }, 'identity:account')
 end
@@ -101,12 +109,24 @@ function Identity.createCharacter(src, payload)
 
   -- ADR-0008 is enforced by UNIQUE, not by this check. If two requests race,
   -- the second insert fails here and is reported honestly.
+  --
+  -- `last_name` and `date_of_birth` are both OPTIONAL — most characters will have
+  -- no second name, and the date of birth is only refused when it is malformed,
+  -- not when it is absent. So both arrive here as nil, and a nil in the middle
+  -- of a Lua table ends the table: `#{a, b, nil, nil, c, d}` has an undefined
+  -- length, the driver receives fewer values than there are placeholders, and
+  -- the whole INSERT fails to bind. Character creation was broken for exactly
+  -- the players who left a field empty.
+  --
+  -- NULLIF(?, '') keeps the parameter list hole-free while the columns stay
+  -- genuinely NULL, which is what "optional" has to mean in the schema.
   local ok = Db.transaction({
     {
       sql = [[INSERT INTO characters
                 (id, account_id, first_name, last_name, date_of_birth, gender, appearance, spawn_point)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)]],
-      params = { characterId, account.id, firstName, lastName, dateOfBirth, gender, encoded, spawnPoint },
+              VALUES (?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)]],
+      params = { characterId, account.id, firstName, lastName or '', dateOfBirth or '',
+                 gender, encoded, spawnPoint },
     },
     {
       sql = [[INSERT INTO wallets (character_id, cash, bank)
@@ -122,8 +142,6 @@ function Identity.createCharacter(src, payload)
   }, 'identity:createCharacter')
 
   if not ok then return nil, 'could not create character' end
-
-  Db.update([[UPDATE accounts SET status = 'active' WHERE id = ?]], { account.id }, 'identity:activate')
 
   -- ADR-0018: every character starts with a handset and an ID. The handset is
   -- inert until activated, which is the moment a player buys a number.

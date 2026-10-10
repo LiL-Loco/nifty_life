@@ -126,8 +126,31 @@ _G.RegisterNetEvent = function() end
 _G.RegisterCommand = function() end
 _G.DropPlayer = function() end
 _G.GetPlayers = function() return {} end
-_G.GetPlayerIdentifiersByType = function() return {} end
-_G.GetPlayerLicense = function() return 'test' end
+--- Fake connections. `GetPlayerIdentifiersByType` must answer truthfully, because
+--- the whitelist and identity layers read the Discord ID straight off the
+--- connection — that is the point of ADR-0007. A stub returning an empty list
+--- would make every identity test exercise the "no account" path instead.
+local FakePlayers = {}
+_G.FakePlayers = FakePlayers
+
+--- Register a fake connection with a Discord ID. Returns the slot id.
+function FakePlayers.connect(src, discordId)
+  FakePlayers[src] = discordId
+  return src
+end
+
+function FakePlayers.disconnect(src)
+  FakePlayers[src] = nil
+end
+
+_G.GetPlayerIdentifiersByType = function(src, kind)
+  if kind == 'discord' and FakePlayers[src] then
+    return { FakePlayers[src] }
+  end
+  return {}
+end
+
+_G.GetPlayerLicense = function(src) return 'license-' .. tostring(src) end
 
 --- Events the modules try to send. Recorded, not sent, so a test can assert
 --- that something was pushed — and so nothing pretends a player received it.
@@ -240,24 +263,39 @@ local function parseTsv(output)
 
   for i = 2, #lines do
     if lines[i] ~= '' then
+      -- An explicit counter, and a sentinel for NULL.
+      --
+      -- `values[#values + 1] = nil` looks like it records a NULL, but assigning
+      -- nil to a table slot does not create the slot — `#values` stays the same,
+      -- so the NEXT value is written to the same index and every column after a
+      -- NULL shifts one to the left. A character with a NULL last name and a NULL
+      -- date of birth came back with gender under last_name and the appearance
+      -- JSON under date_of_birth. The database was right the whole time; the
+      -- reader was misaligned.
       local values = {}
-      for value in (lines[i] .. '\t'):gmatch('([^\t]*)\t') do
-        local isNull = (value == 'NULL' or value == '\\N')
+      local count = 0
 
-        -- NOT `isNull and nil or value`. That expression is the classic Lua
-        -- trap: `true and nil` is nil, and `nil or value` is value, so a NULL
-        -- silently became the four-character string "NULL" — truthy, and handed
-        -- straight to json.decode. Assign in a branch instead.
-        if isNull then
-          values[#values + 1] = nil
+      for value in (lines[i] .. '\t'):gmatch('([^\t]*)\t') do
+        count = count + 1
+        if value == 'NULL' or value == '\\N' then
+          values[count] = false
         else
-          values[#values + 1] = value
+          values[count] = value
         end
       end
 
       local row = {}
       for index, name in ipairs(columns) do
-        row[name] = values[index]
+        local value = values[index]
+        -- A branch, never `(value == false) and nil or value`: that is the same
+        -- trap as above — `true and nil` is nil, and `nil or value` is value,
+        -- so the NULL string came straight back. (This file had already been
+        -- written up in LEARNINGS.md, and still got it wrong once.)
+        if value == false then
+          row[name] = nil
+        else
+          row[name] = value
+        end
       end
       rows[#rows + 1] = row
     end
@@ -896,6 +934,131 @@ check('the session cap stops further payouts',
 
 check('the cap is the only brake — amount is unconditional',
   toNumber(GetSetting('economy.stuetze.amount', 0)) > 0)
+
+-- ============================================================================
+group('Character creation — one transaction, or nothing at all')
+-- ============================================================================
+
+-- ADR-0008 and ADR-0018 meet here: the character, its wallet and its starting
+-- items are created together. This is the path a brand-new player walks, and it
+-- had never been executed.
+
+sql('TRUNCATE TABLE ledger')
+sql('DELETE FROM stuetze_payouts')
+sql('DELETE FROM character_jobs')
+sql('DELETE FROM property_owners')
+sql('DELETE FROM inventory_items')
+sql('DELETE FROM wallets')
+sql('DELETE FROM sessions')
+sql('DELETE FROM characters')
+sql('DELETE FROM accounts')
+sql('DELETE FROM properties')
+
+FakePlayers.connect(1, '777000001')
+
+-- ADR-0007: an account only exists once a human has approved it. The harness is
+-- standing in for that human, so it inserts the approved row the website could
+-- never have written itself.
+sql([[
+  INSERT INTO accounts (id, discord_id, status) VALUES ('acct-live', '777000001', 'active')
+]])
+
+-- An unapproved account must NOT resolve — this is the whitelist boundary.
+sql([[
+  INSERT INTO accounts (id, discord_id, status) VALUES ('acct-pending', '777000002', 'pending')
+]])
+FakePlayers.connect(3, '777000002')
+
+local account = Identity.resolveAccount(1)
+check('a whitelisted Discord ID resolves to an account', account ~= nil)
+check('a pending application does NOT resolve to a playable account',
+  Identity.resolveAccount(3) == nil, 'a pending account must stay inert')
+check('an unknown Discord ID resolves to nothing', Identity.resolveAccount(99) == nil)
+FakePlayers.disconnect(3)
+
+-- The exact payload a player with no second name and no date of birth sends.
+-- Both fields are optional, and both arrive as nil — the case that broke the
+-- parameter list and made creation impossible for most people.
+local created, createErr = Identity.createCharacter(1, {
+  firstName = 'Ada',
+  lastName = '',
+  dateOfBirth = '',
+  gender = 'female',
+  appearance = {
+    model = 'mp_f_freemode_01',
+    components = { ['0'] = { collection = '', drawable = 12, texture = 0 },
+                   ['4'] = { collection = 'female_heist', drawable = 9, texture = 3 } },
+    props = { ['0'] = { collection = 'mp_f_bikerdlc_01', drawable = 0, texture = 0 } },
+  },
+  spawnPoint = 'losSantos',
+})
+check('a character is created with optional fields left empty', created ~= nil, tostring(createErr))
+
+if created then
+  check('the character has an id', type(created.id) == 'string' and #created.id > 0)
+  check('the first name is stored', created.first_name == 'Ada')
+
+  -- The whole point of the appearance fix last round: components must survive
+  -- the round trip through the database, not just the validation call.
+  local stored = Identity.getCharacter(account.id)
+  local appearance = stored and stored.appearance and json.decode(stored.appearance) or nil
+  check('the appearance was stored, not discarded',
+    appearance ~= nil and appearance.model == 'mp_f_freemode_01',
+    'stored ' .. tostring(stored and stored.appearance))
+  check('components survived the database round trip',
+    appearance ~= nil and appearance.components['0'] ~= nil and appearance.components['4'] ~= nil,
+    'components = ' .. tostring(appearance and appearance.components and appearance.components['0']))
+  check('props survived the database round trip',
+    appearance ~= nil and appearance.props['0'] ~= nil)
+  check('the optional columns are genuinely NULL',
+    stored.last_name == nil and stored.date_of_birth == nil,
+    'last_name=' .. tostring(stored.last_name) .. ' dob=' .. tostring(stored.date_of_birth))
+
+  local newWallet = Db.one('SELECT cash, bank FROM wallets WHERE character_id = ?', { created.id }, 'test')
+  check('the wallet was created in the same transaction', newWallet ~= nil)
+  check('starting cash matches the setting',
+    toNumber(newWallet and newWallet.cash) ==
+      Db.money.toNumber(GetSetting('economy.starting.cash', 0)),
+    'got ' .. tostring(newWallet and newWallet.cash))
+
+  check('a new character carries a handset (ADR-0018)', Inventory.count(created.id, 'phone') == 1)
+  check('a new character carries an ID card', Inventory.count(created.id, 'id_card') == 1)
+
+  -- A second attempt from the same account must be refused by ADR-0008.
+  local again, againErr = Identity.createCharacter(1, {
+    firstName = 'Grace', gender = 'female',
+    appearance = { model = 'mp_f_freemode_01' },
+  })
+  check('a second character for the same account is refused',
+    again == nil and againErr == 'this account already has a character',
+    tostring(againErr))
+end
+
+-- Malformed payloads must be refused before anything is written.
+local badName = Identity.createCharacter(2, { firstName = '<script>', gender = 'male',
+  appearance = { model = 'mp_m_freemode_01' } })
+check('a scripted name is refused', badName == nil)
+
+local badAppearance = Identity.createCharacter(2, { firstName = 'Mallory', gender = 'male',
+  appearance = { model = 'mp_m_freemode_01',
+                 components = { ['0'] = { collection = 'mp_m_secret_relic', drawable = 0, texture = 0 } } } })
+check('a hostile appearance is refused', badAppearance == nil)
+
+local countAfter = Db.one('SELECT COUNT(*) AS c FROM characters', {}, 'test')
+check('no partial character was left behind by the refusals',
+  toNumber(countAfter and countAfter.c) == 1,
+  'got ' .. tostring(countAfter and countAfter.c) .. ' characters')
+
+-- Sessions: the only place a FiveM slot ID is allowed to appear (ADR-0001).
+local sessionId = Identity.beginSession(1, created and created.id)
+check('a session opens with an id', sessionId ~= nil)
+check('the session records the slot id for auditing only',
+  Db.one('SELECT fivem_slot_id FROM sessions WHERE id = ?', { sessionId }, 'test') ~= nil)
+check('the active character is readable by slot', Identity.getActiveCharacter(1) == (created and created.id))
+Identity.endSession(1)
+check('the session closes', Identity.getActiveCharacter(1) == nil)
+
+FakePlayers.disconnect(1)
 
 -- ============================================================================
 group('Ownership — a row, not a field')
