@@ -95,9 +95,23 @@ function Stuetze.pay(src, characterId)
   -- `stuetze_payouts` is the abuse-detection table: one row per instalment, so
   -- "is the Stütze above subsistence?" is answerable with a query rather than an
   -- argument. The money itself is already recorded in `ledger`.
-  Db.insert([[
-    INSERT INTO stuetze_payouts (character_id, session_id, amount) VALUES (?, ?, ?)
-  ]], { characterId, Identity.getActiveSessionId(src), tostring(amount) }, 'stuetze:record')
+  --
+  -- `NULLIF(?, '')` for the same reason as in Economy.apply: the session id is
+  -- nil outside a connection, and a nil in the middle of a Lua table ends the
+  -- table, which would leave this INSERT with fewer values than placeholders.
+  local recorded = Db.insert(
+    [[INSERT INTO stuetze_payouts (character_id, session_id, amount)
+      VALUES (?, NULLIF(?, ''), ?)]],
+    { characterId, Identity.getActiveSessionId(src) or '', tostring(amount) },
+    'stuetze:record')
+
+  if recorded == nil then
+    -- A payout with no record is exactly the situation this table exists to
+    -- detect, so it must not pass silently — and it must not stop the money.
+    -- The payout already happened; the audit row is what is missing.
+    print(('[%s] WARNING: Stütze paid but not recorded (character=%s amount=%s session=%s)'):format(
+      RESOURCE, characterId, tostring(amount), tostring(Identity.getActiveSessionId(src))))
+  end
 
   PaidThisSession[src] = paid + 1
 

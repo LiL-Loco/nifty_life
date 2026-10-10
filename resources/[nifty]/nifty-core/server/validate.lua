@@ -11,7 +11,15 @@ Validate = {}
 --- Characters. Names are stored for display and filtering, so they are kept to
 --- a conservative charset: no angle brackets, no quotes, no control characters.
 --- That keeps them safe in NUI without needing to escape at every render site.
-local NAME_PATTERN = "^[%w'%- ]{2,32}$"
+---
+--- The pattern asserts the CHARACTER SET only. The length is enforced by the
+--- explicit `#value` check below, and deliberately not by a `{2,32}` repetition
+--- in the pattern: pattern repetition quantifiers behaved inconsistently across
+--- the Lua builds this project has been checked against (stock Lua 5.4.6 refused
+--- `a{2}` in the container used by the headless harness). Splitting the two
+--- concerns is clearer anyway, and it removes a dependency on a feature whose
+--- behaviour was never in doubt on the real target but could not be verified.
+local NAME_PATTERN = "^[%w'%- ]+$"
 local DATE_PATTERN = "^(%d%d%d%d)%-(%d%d)%-(%d%d)$"
 
 function Validate.characterName(value)
@@ -72,6 +80,14 @@ function Validate.spawnPoint(value)
 end
 
 --- Validate one appearance slot: { collection = string, drawable = int, texture = int }
+---
+--- Returns `true, cleanedSlot` or `nil, errorMessage`. The two-value shape is
+--- load-bearing: an earlier version returned the cleaned table ALONE, and the
+--- callers read it as `local ok, clean = validateSlot(...)`. `ok` became the
+--- table (truthy, so no error was raised) and `clean` was nil — so every
+--- component and every prop was validated and then stored as nil. Characters
+--- were created with a model and nothing else, and the appearance editor looked
+--- like it was doing nothing. Always return the success flag first.
 local function validateSlot(slot, cfg)
   if type(slot) ~= 'table' then return nil, 'slot must be an object' end
 
@@ -96,7 +112,7 @@ local function validateSlot(slot, cfg)
     return nil, 'texture out of range'
   end
 
-  return { collection = collection, drawable = drawable, texture = texture }
+  return true, { collection = collection, drawable = drawable, texture = texture }
 end
 
 --- Validate a whole appearance object (ADR-0017).

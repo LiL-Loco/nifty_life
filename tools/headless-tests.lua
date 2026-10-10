@@ -80,6 +80,11 @@ end
 _G.GetCurrentResourceName = function() return 'nifty-core' end
 _G.GetResourceState = function() return 'started' end
 _G.GetGameTimer = function() return 0 end
+-- FiveM provides `json` as a Cfx global; the harness has no engine. This one
+-- self-tests on load, so a wrong codec fails immediately rather than quietly
+-- corrupting every appearance assertion that follows.
+_G.json = dofile((RESOURCE_ROOT .. '/tools/json.lua'))
+
 -- FiveM calls GetConvar with a single argument. The stub originally took `(_, key)`
 -- and therefore read nil as the key, which made db.lua believe no connection
 -- string was configured and log a FATAL on every load.
@@ -369,11 +374,13 @@ end
 local RES = RESOURCE_ROOT .. '/resources/[nifty]/nifty-core'
 
 load(RES .. '/shared/constants.lua')
+load(RES .. '/shared/appearance_config.lua')
 load(RES .. '/server/db.lua')
 load(RES .. '/server/settings.lua')
 load(RES .. '/server/validate.lua')
 load(RES .. '/server/identity.lua')
 load(RES .. '/server/economy.lua')
+load(RES .. '/server/stuetze.lua')
 load(RES .. '/server/inventory.lua')
 load(RES .. '/server/ownership.lua')
 load(RES .. '/server/jobs.lua')
@@ -754,6 +761,143 @@ check('the wage actually reached the wallet',
 -- Ownership
 -- ============================================================================
 
+group('Appearance — the server rebuilds, never stores what it was given')
+
+-- ADR-0017. The collection natives are client-only, so the server cannot ask the
+-- engine whether a combination is real. This allowlist is the gate, which makes
+-- it the most client-facing validation in the project — and previously the least
+-- tested, because every existing check stopped at the database.
+
+local function slot(collection, drawable, texture)
+  return { collection = collection, drawable = drawable, texture = texture }
+end
+
+local okApp, errApp = Validate.appearance({
+  model = 'mp_m_freemode_01',
+  components = { ['0'] = slot('', 27, 0), ['4'] = slot('female_heist', 9, 3) },
+  props = { ['0'] = slot('mp_f_bikerdlc_01', 0, 0) },
+})
+check('a well-formed appearance is accepted', okApp ~= nil, tostring(errApp))
+check('the model survives', okApp ~= nil and okApp.model == 'mp_m_freemode_01')
+local function describeApp(value)
+  if type(value) ~= 'table' then return tostring(value) end
+  local parts = {}
+  for id, s in pairs(value.components or {}) do
+    parts[#parts + 1] = ('c%s=%s/%s/%s'):format(id, tostring(s.collection), tostring(s.drawable), tostring(s.texture))
+  end
+  for id, s in pairs(value.props or {}) do
+    parts[#parts + 1] = ('p%s=%s/%s/%s'):format(id, tostring(s.collection), tostring(s.drawable), tostring(s.texture))
+  end
+  return #parts > 0 and table.concat(parts, ' ') or '(components and props both empty)'
+end
+
+check('both components survive',
+  okApp ~= nil and okApp.components['0'] ~= nil and okApp.components['4'] ~= nil,
+  describeApp(okApp))
+check('props survive', okApp ~= nil and okApp.props['0'] ~= nil, describeApp(okApp))
+
+-- The rejection cases, which is the entire point of the allowlist.
+local rejections = {
+  { 'unknown collection', { model = 'mp_m_freemode_01', components = { ['0'] = slot('mp_m_secret_relic', 1, 0) } } },
+  { 'drawable out of range', { model = 'mp_m_freemode_01', components = { ['0'] = slot('', 9999, 0) } } },
+  { 'negative drawable', { model = 'mp_m_freemode_01', components = { ['0'] = slot('', -1, 0) } } },
+  { 'fractional drawable', { model = 'mp_m_freemode_01', components = { ['0'] = slot('', 1.5, 0) } } },
+  { 'texture out of range', { model = 'mp_m_freemode_01', components = { ['0'] = slot('', 0, 9999) } } },
+  { 'unsupported ped model', { model = 's_m_y_man', components = {} } },
+  { 'slot is not an object', { model = 'mp_m_freemode_01', components = { ['0'] = 'not-a-table' } } },
+  { 'missing collection', { model = 'mp_m_freemode_01', components = { ['0'] = { drawable = 0, texture = 0 } } } },
+}
+
+for _, case in ipairs(rejections) do
+  local result = Validate.appearance(case[2])
+  check('rejected: ' .. case[1], result == nil, 'accepted instead of refused')
+end
+
+-- An out-of-range component id is DROPPED rather than refused. That is the
+-- deliberate reading of ADR-0017: the server rebuilds the structure from what it
+-- recognises, so anything it does not recognise simply does not exist. The
+-- important property is that it cannot be stored, not that it is an error.
+local dropped = Validate.appearance({
+  model = 'mp_m_freemode_01',
+  components = { ['99'] = slot('', 0, 0), ['0'] = slot('', 5, 1) },
+})
+check('an out-of-range component id is dropped, not stored',
+  dropped ~= nil and dropped.components['99'] == nil and dropped.components['0'] ~= nil,
+  'stored ' .. describeApp(dropped))
+
+check('appearance must be an object', Validate.appearance('nonsense') == nil)
+check('a missing appearance falls back to defaults',
+  Validate.appearance(nil) ~= nil and Validate.appearance(nil).model == 'mp_m_freemode_01')
+
+-- Extra keys a client sends must not survive. If they did, a client could store
+-- arbitrary JSON in the character row and read it back later.
+local rebuilt = Validate.appearance({
+  model = 'mp_m_freemode_01',
+  components = { ['0'] = slot('', 5, 1) },
+  props = {},
+  evil_key = 'should not persist',
+})
+check('unknown top-level keys are dropped', rebuilt ~= nil and rebuilt.evil_key == nil,
+  'got ' .. tostring(rebuilt and rebuilt.evil_key))
+
+-- Round-trip through JSON, which is how it actually reaches the server: a client
+-- sends a string, the server decodes it. A lenient decoder would be a bypass.
+local hostile = json.decode([[{
+  "model": "mp_m_freemode_01",
+  "components": {"0": {"collection": "mp_m_secret_relic", "drawable": 0, "texture": 0}},
+  "props": {}
+}]])
+check('a hostile collection smuggled through JSON is still rejected',
+  Validate.appearance(hostile) == nil)
+
+local benign = json.decode([[{
+  "model": "mp_m_freemode_01",
+  "components": {"4": {"collection": "female_heist", "drawable": 9, "texture": 3}},
+  "props": {"0": {"collection": "", "drawable": 1, "texture": 0}}
+}]])
+check('a legitimate appearance survives the JSON round trip',
+  Validate.appearance(benign) ~= nil)
+
+-- Identity-level validation, which sits in front of the same data.
+check('a normal name is accepted', Validate.characterName('Ada') == 'Ada',
+  'got ' .. tostring(Validate.characterName('Ada')))
+check('a script-injection attempt in a name is refused', Validate.characterName('<script>x') == nil)
+check('a one-character name is refused', Validate.characterName('A') == nil)
+check('gender is a closed set', Validate.gender('other') == nil)
+check('an unknown spawn point is refused', Validate.spawnPoint('atlantis') == nil)
+check('a default spawn point is allowed', Validate.spawnPoint(nil) == 'default')
+check('someone under 18 is refused', Validate.dateOfBirth('2015-01-01') == nil)
+check('an adult date is accepted', Validate.dateOfBirth('1990-06-15') == '1990-06-15')
+
+-- ============================================================================
+group('Stütze — unconditional, recorded, capped')
+
+resetFixtures()
+
+local cashBeforeStuetze = balance('cash')
+check('the Stütze pays with no job and no check', Stuetze.pay(1, TEST_CHARACTER) == true)
+check('it credits cash', balance('cash') > cashBeforeStuetze,
+  'got ' .. tostring(balance('cash')))
+check('it writes a ledger row', ledgerCount('stuetze') == 1)
+
+local payoutRow = Db.one('SELECT COUNT(*) AS c FROM stuetze_payouts WHERE character_id = ?',
+  { TEST_CHARACTER }, 'test')
+check('it also writes the abuse-detection row',
+  toNumber(payoutRow and payoutRow.c) == 1,
+  'got ' .. tostring(payoutRow and payoutRow.c))
+
+local cap = tonumber(GetSetting('economy.stuetze.max_per_session', 8)) or 8
+for _ = 1, cap + 5 do Stuetze.pay(1, TEST_CHARACTER) end
+-- The cap counts EVERY instalment, including the first one above, so the ceiling
+-- is `cap` in total — not `cap` more on top of it.
+check('the session cap stops further payouts',
+  ledgerCount('stuetze') == cap,
+  'got ' .. tostring(ledgerCount('stuetze')) .. ' instalments for a cap of ' .. tostring(cap))
+
+check('the cap is the only brake — amount is unconditional',
+  toNumber(GetSetting('economy.stuetze.amount', 0)) > 0)
+
+-- ============================================================================
 group('Ownership — a row, not a field')
 
 resetFixtures()
