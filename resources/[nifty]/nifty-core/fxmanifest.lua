@@ -9,11 +9,14 @@ version '0.1.0'
 shared_script 'shared/constants.lua'
 
 server_script '@oxmysql/lib/MySQL.lua'
+server_script 'server/config/appearance.lua'
 server_script 'server/db.lua'
 server_script 'server/settings.lua'
+server_script 'server/validate.lua'
+server_script 'server/identity.lua'
 server_script 'server/sv_main.lua'
 
-client_script 'client/cl_main.lua'
+client_script 'client/cl_identity.lua'
 
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.

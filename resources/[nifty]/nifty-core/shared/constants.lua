@@ -44,5 +44,3 @@ Nifty.ApplicationStatus = {
 --- Profile settings cache. Populated at start from the `settings` table so the
 --- server never hardcodes a tunable number (ADR-0009).
 Nifty.Settings = {}
-
-return Nifty

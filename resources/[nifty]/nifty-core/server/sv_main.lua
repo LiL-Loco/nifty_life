@@ -1,15 +1,26 @@
---- Server main (ADR-0014 step 2, identity gate lands in step 3).
+--- Server main — the connect-to-play spine (ADR-0014 layers 2-3).
 ---
---- Today this proves the vertical slice can start: the whitelist gate reads a
---- Discord ID from the connection and looks it up server-side. No character
---- creation yet — that is layer 3.
+--- Flow:
+---   playerConnecting  -> whitelist check (deferred, so a slow query is a
+---                        loading screen rather than a timeout)
+---   nifty:server:ready-> load or create the single character (ADR-0008)
+---   play              -> save is keyed by character UUID, never by slot (ADR-0001)
+---
+--- Nothing below trusts a value that did not come from the connection itself.
 
 local RESOURCE = GetCurrentResourceName()
 
---- ADR-0014: the vertical slice ends with "reconnect and it is still there".
---- That depends entirely on resolving identity through a stable key rather
---- than the FiveM slot ID (ADR-0001). This function is where that is enforced:
---- slot IDs never appear in a query, only the Discord ID from the connection.
+--- How many times a client may ask for bootstrap before we treat it as hostile.
+local BootstrapAttempts = {}
+local MAX_BOOTSTRAP_ATTEMPTS = 10
+
+local function discordIdOf(src)
+  local ids = GetPlayerIdentifiersByType(src, 'discord') or {}
+  return ids[1]
+end
+
+--- True when the account is active and not currently banned. The Discord ID is
+--- read from the connection, so a client cannot present someone else's.
 local function isWhitelisted(discordId)
   if not discordId or discordId == '' then return false end
 
@@ -30,9 +41,6 @@ local function isWhitelisted(discordId)
   return row ~= nil
 end
 
---- Fires before the player enters. `deferrals.defer()` keeps the player in the
---- connection queue while we hit the database, so a slow query shows as a
---- loading screen rather than a timeout.
 AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
   local src = source
   deferrals.defer()
@@ -40,11 +48,7 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
 
   deferrals.update('Nifty Life 2.0 — checking your application…')
 
-  -- Discord snowflake from the player's connected identifiers. We never accept
-  -- an identifier from the client: FiveM reports it, we read it here.
-  local discordId = GetPlayerIdentifiersByType(src, 'discord') or {}
-  discordId = discordId[1]
-
+  local discordId = discordIdOf(src)
   if not discordId then
     deferrals.done('This server requires a connected Discord account. ' ..
       'Link Discord in your FiveM account settings and reconnect.')
@@ -53,24 +57,107 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
 
   if not isWhitelisted(discordId) then
     deferrals.done('You are not whitelisted on Nifty Life 2.0.\n' ..
-      'Apply at the website — your application has to be approved first.')
+      'Apply on the website — a human has to approve your application first.')
     return
   end
 
   deferrals.done()
 end)
 
-RegisterCommand('niftystatus', function(src)
-  local discordId = GetPlayerIdentifiersByType(src, 'discord') or {}
-  print(('[%s] slot %s discord=%s whitelisted=%s'):format(
-    RESOURCE, src, discordId[1] or 'none', tostring(isWhitelisted(discordId[1]))))
-end, true)
+--- Send the client its character, open a session, and let the world begin.
+local function enterWorld(src, character)
+  Identity.beginSession(src, character.id)
+
+  TriggerClientEvent('nifty:client:enterWorld', src, {
+    character = {
+      id = character.id,
+      firstName = character.first_name,
+      lastName = character.last_name,
+      dateOfBirth = character.date_of_birth,
+      gender = character.gender,
+      appearance = character.appearance and json.decode(character.appearance) or nil,
+      spawnPoint = character.spawn_point,
+    },
+    spawn = SpawnPoints[character.spawn_point or 'default'],
+  })
+end
+
+--- Client signals its resources are up. Used instead of guessing when the
+--- player has finished connecting.
+RegisterNetEvent('nifty:server:ready', function()
+  local src = source
+
+  local attempts = (BootstrapAttempts[src] or 0) + 1
+  BootstrapAttempts[src] = attempts
+  if attempts > MAX_BOOTSTRAP_ATTEMPTS then
+    DropPlayer(src, 'Nifty Life 2.0 — too many connection attempts.')
+    return
+  end
+
+  -- A player who already has a session must not be able to bootstrap twice and
+  -- overwrite it. One connection, one character.
+  if Identity.getActiveCharacter(src) then return end
+
+  local account = Identity.resolveAccount(src)
+  if not account then
+    DropPlayer(src, 'Your account could not be loaded. Please contact staff.')
+    return
+  end
+
+  local character = Identity.getCharacter(account.id)
+  if character then
+    enterWorld(src, character)
+  else
+    TriggerClientEvent('nifty:client:needsCharacter', src)
+  end
+end)
+
+--- Create the one character this account is allowed.
+RegisterNetEvent('nifty:server:createCharacter', function(payload)
+  local src = source
+
+  if Identity.getActiveCharacter(src) then
+    return TriggerClientEvent('nifty:client:creatorError', src, 'You are already playing.')
+  end
+
+  -- Coerce to a table: the event argument is entirely client-supplied and may
+  -- be any type at all, including nil.
+  if type(payload) ~= 'table' then payload = {} end
+
+  local character, err = Identity.createCharacter(src, payload)
+  if not character then
+    print(('[%s] character creation refused for slot %s: %s'):format(RESOURCE, src, tostring(err)))
+    return TriggerClientEvent('nifty:client:creatorError', src, tostring(err))
+  end
+
+  enterWorld(src, character)
+end)
+
+--- Save mutable character state. Keyed by the active session's character UUID.
+RegisterNetEvent('nifty:server:saveCharacter', function(payload)
+  local src = source
+
+  -- An unconnected or session-less player has nothing to save. This is the check
+  -- that stops a client from saving as a character it is not playing.
+  if not Identity.getActiveCharacter(src) then return end
+  if type(payload) ~= 'table' then return end
+
+  Identity.saveCharacter(src, payload)
+end)
 
 AddEventHandler('playerDropped', function()
   local src = source
-  print(('[%s] slot %s disconnected'):format(RESOURCE, src))
-  -- NOTE: no character state is saved by slot id here, and there must never be.
-  -- Layer 3 closes this via the sessions table.
+  BootstrapAttempts[src] = nil
+  Identity.endSession(src)
+  print(('[%s] session ended for slot %s'):format(RESOURCE, src))
 end)
 
+RegisterCommand('niftystatus', function(src)
+  local characterId = Identity.getActiveCharacter(src)
+  print(('[%s] slot=%s discord=%s whitelisted=%s character=%s'):format(
+    RESOURCE, src, tostring(discordIdOf(src)),
+    tostring(isWhitelisted(discordIdOf(src))), tostring(characterId)))
+end, true)
+
 exports('isWhitelisted', isWhitelisted)
+exports('resolveAccount', Identity.resolveAccount)
