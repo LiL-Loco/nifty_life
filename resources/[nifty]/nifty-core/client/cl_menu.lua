@@ -70,8 +70,15 @@ local function push(menu, item)
   return menu
 end
 
-exports('menu', function(spec)
-  return newMenu(type(spec) == 'table' and spec or {})
+exports('menu', function(spec, ...)
+  -- FiveM's exports namespace auto-adds itself to every call, so by the
+  -- time we see the first arg it is `Menu`, the namespace table. The
+  -- actual spec the caller passed is the second arg. We have to ignore
+  -- the first.
+  local realSpec = select(2, ...) or spec
+  print(('[nifty-core] menu export: nargs=%d, realSpec type=%s'):format(
+    select('#', spec, ...) + 1, type(realSpec)))
+  return newMenu(type(realSpec) == 'table' and realSpec or {})
 end)
 
 --- A row that is drawn and does nothing. Used to break a long menu into readable
