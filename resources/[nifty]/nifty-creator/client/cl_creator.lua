@@ -278,6 +278,20 @@ local GameData = GameData
 --- The map builder needs to know what the ped is wearing so it can put it back.
 --- It cannot read that back from the engine portably, so it is told - by the only
 --- code that knows, which is this one.
+--
+-- slotOf is defined further down (it depends on `selection` being initialised
+-- with the structure the gamedata module builds up). To break the
+-- forward-reference cycle without making `selection` global, we declare
+-- a stub here that the real definition later overwrites in place.
+local slotOf
+-- slotOf is a closure-captured reference here. Lua binds the upvalue
+-- at function-definition time; if slotOf is not a local in scope at
+-- that point, the lookup becomes a global, which is always nil. The
+-- real definition is further down (it depends on `selection` which is
+-- initialised after this point), so we forward-declare slotOf as a
+-- local here. Without this line, GameData.savedSlot() would call
+-- nil and the gamedata module's map builder would crash.
+local slotOf
 GameData.savedSlot = function(kind, id)
   return slotOf(kind, id)
 end
@@ -286,6 +300,8 @@ end
 -- `local function` is only visible FROM ITS OWN LINE ONWARD - declaring them after
 -- `buildRootMenu` would capture a global nil instead, and every row would fail the
 -- moment it was pressed. Read top to bottom: a definition must precede its use.
+-- slotOf is also forward-declared above (just before GameData.savedSlot)
+-- so the savedSlot closure's upvalue is bound to a local.
 local buildSlotMenu
 local randomise
 local randomiseAll
@@ -298,7 +314,6 @@ local refresh
 local resolveHairOverlay
 local applyDecorations
 local buildTattooMenu
-local slotOf
 local openRoot
 
 local creatorOpen = false
