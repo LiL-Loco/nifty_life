@@ -334,7 +334,7 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
       }
     end
 
-    exports['nifty-spawn']:openSpawnPicker(list, function(px, py, pz, ph)
+    exports['nifty-core']:openSpawnPicker(list, function(px, py, pz, ph)
       doEnterWorldSpawn(px, py, pz, ph, appearance, firstName, lastName)
     end)
   else

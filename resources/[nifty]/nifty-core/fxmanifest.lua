@@ -24,6 +24,7 @@ version '0.2.0'
 shared_scripts {
   'shared/constants.lua',
   'shared/appearance_config.lua',
+  'shared/spawn.lua',
 }
 
 server_script '@oxmysql/lib/MySQL.lua'
@@ -51,10 +52,13 @@ server_script 'server/jobs.lua'
 -- moment, so loading it earlier would publish a facade containing nil.
 server_script 'server/sv_facade.lua'
 
--- No client_script, no ui_page. `cl_identity.lua` moved to nifty-world with the
--- rest of the play-side: the base decides WHO a player is, the world decides what
--- the client is told about it. A base that also pushed NUI messages would have to
--- know about the HUD, and the HUD is not the base's business.
+-- nifty-spawn (absorbed). Runs on the client only - server does not deal with
+-- the spawn picker. cl_spawn.lua reads Spawn.Locations and Spawn.CAM_* from
+-- shared/spawn.lua (loaded earlier in the shared_scripts block).
+client_script 'client/cl_spawn.lua'
+
+-- nifty-ui's client scripts will be added in the next commit when that resource
+-- is absorbed. nifty-ui is still a separate dependency for now.
 
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.

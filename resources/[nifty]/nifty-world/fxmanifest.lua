@@ -45,7 +45,6 @@ client_script 'client/cl_world.lua'
 
 dependencies {
   'nifty-core',
-  'nifty-spawn',
   'nifty-inventory',
   'nifty-phone',
   'nifty-shop',
