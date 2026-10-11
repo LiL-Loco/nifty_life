@@ -421,12 +421,16 @@ local function startCamera()
     SetCamActiveWithInterp(mid, far, scene.camInterp, true, true)
     creatorCam = mid
 
-    -- Stage 3: close-up, the working menu camera.
+    -- Stage 3: close-up, the working menu camera. After the close-up
+    -- finishes its interpolation, open the menu so the player sees
+    -- the character from the close-up angle as soon as the menu is
+    -- drawn, not from a blank screen.
     SetTimeout(scene.camSettle, function()
       local close = at(2.0, 1.4, 35.0, -5.0, scene.heading - 0.0)
       PointCamAtEntity(close, PlayerPedId(), 0.0, 0.0, 0.0, true)
       SetCamActiveWithInterp(close, mid, 600, true, true)
       creatorCam = close
+      openRoot()
     end)
   end)
 end
