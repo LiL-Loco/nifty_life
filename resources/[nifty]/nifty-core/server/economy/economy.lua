@@ -2,7 +2,7 @@
   Money (ADR-0009).
 
   There is exactly one way money moves in this server: `Economy.apply`. Not a
-  convenience — the enforcement. Any code path that reaches for
+  convenience - the enforcement. Any code path that reaches for
   `UPDATE wallets` directly is a bug, because the ledger is what makes a balance
   explainable after an incident, and a balance without an entry is a balance
   nobody can defend to a player who lost it.
@@ -15,15 +15,14 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- From the base facade, fetched by shared/core.lua at load. These were globals
---- when this file lived inside nifty-core; see the note in shared/core.lua about
---- why a local in fxmanifest would not have survived the chunk boundary.
-local Db = Nifty.Db
-local GetSetting = Nifty.GetSetting
+--- Same-resource state, set up by server/db.lua and server/settings.lua earlier
+--- in the load chain. No bridge fetch needed.
+local Db = Db
+local GetSetting = GetSetting
 
 Economy = {}
 
---- Closed set of reasons. Adding one is a deliberate act, not a typo fix — it is
+--- Closed set of reasons. Adding one is a deliberate act, not a typo fix - it is
 --- the difference between a log a player can be shown and a log that is noise.
 local REASONS = {
   stuetze        = true,
@@ -86,7 +85,7 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Current balances. Returns nil for a character with no wallet row rather than a
---- zero balance — those are different states and only one of them is a bug.
+--- zero balance - those are different states and only one of them is a bug.
 function Economy.get(characterId)
   if not characterId then return nil end
 
@@ -128,7 +127,7 @@ end
 --- the money. Two simultaneous purchases cannot both succeed on the last euro,
 --- which a read-then-write in Lua would happily allow.
 ---
---- Returns `ok, newBalance`. `ok` is false for a refused move — insufficient
+--- Returns `ok, newBalance`. `ok` is false for a refused move - insufficient
 --- funds, an unknown reason, an unknown account, or a database error. It never
 --- throws and never returns a partially-applied state.
 ---
@@ -167,7 +166,7 @@ function Economy.apply(characterId, account, delta, reason, refType, refId)
     return true, nil
   end
 
-  -- The account name is an identifier, so it cannot be a bind parameter — but
+  -- The account name is an identifier, so it cannot be a bind parameter - but
   -- VALID_ACCOUNTS has already reduced it to one of two literals, so this
   -- interpolation cannot carry anything a caller controls. Every *value* below
   -- is still a bind parameter; that rule is what stops a client reshaping SQL.
@@ -184,7 +183,7 @@ function Economy.apply(characterId, account, delta, reason, refType, refId)
 
   -- Record it. `balance_after` is read by the INSERT itself rather than passed
   -- in, so the number written is the balance as the database sees it immediately
-  -- after the UPDATE above — one statement, no value travelling through Lua.
+  -- after the UPDATE above - one statement, no value travelling through Lua.
   --
   -- `reference_type` / `reference_id` are wrapped in NULLIF. They are optional,
   -- and a nil in the middle of a Lua table ends the table: `#{a, b, nil, d}`
@@ -194,7 +193,7 @@ function Economy.apply(characterId, account, delta, reason, refType, refId)
   -- the column stays genuinely NULL.
   --
   -- This was not theoretical. `Economy.transfer` calls `apply` with no reference
-  -- at all, so depositing and withdrawing money could never write a ledger row —
+  -- at all, so depositing and withdrawing money could never write a ledger row -
   -- and a balance that moved without a record is precisely what the ledger
   -- exists to prevent.
   local recorded = Db.insert(
@@ -224,13 +223,13 @@ function Economy.credit(characterId, account, amount, reason, refType, refId)
   return Economy.apply(characterId, account, math.abs(sanitise(amount) or 0), reason, refType, refId)
 end
 
---- Debit. Returns false when the character cannot afford it — callers must treat
+--- Debit. Returns false when the character cannot afford it - callers must treat
 --- that as a normal outcome, not an exception.
 function Economy.debit(characterId, account, amount, reason, refType, refId)
   return Economy.apply(characterId, account, -math.abs(sanitise(amount) or 0), reason, refType, refId)
 end
 
---- Can this character afford it? Advisory only — the real check is the guarded
+--- Can this character afford it? Advisory only - the real check is the guarded
 --- UPDATE inside `apply`, which callers must not skip in favour of this.
 function Economy.canAfford(characterId, account, amount)
   local balance = Economy.getBalance(characterId, account)
@@ -242,7 +241,7 @@ function Economy.canAfford(characterId, account, amount)
   return balance >= want
 end
 
---- Move money between a character's own accounts. Both legs are ledger entries —
+--- Move money between a character's own accounts. Both legs are ledger entries -
 --- this is not a free operation and must never be used as one.
 function Economy.transfer(characterId, from, to, amount)
   if from == to then return false, 'same account' end
@@ -253,7 +252,7 @@ function Economy.transfer(characterId, from, to, amount)
   return Economy.credit(characterId, to, amount, from == 'cash' and 'bank_deposit' or 'bank_withdraw')
 end
 
---- Ledger history for staff tools and player disputes. Paged — a permanent world
+--- Ledger history for staff tools and player disputes. Paged - a permanent world
 --- means this table grows forever and an unpaged read would eventually take the
 --- server down.
 function Economy.history(characterId, limit, offset)

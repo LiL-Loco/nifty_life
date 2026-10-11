@@ -10,7 +10,7 @@
   more profitable than working, and every job, property and business in this
   server becomes decoration nobody is obliged to touch.
 
-  So this module does not enforce that. Nothing can, from the inside — a setting
+  So this module does not enforce that. Nothing can, from the inside - a setting
   can be edited by anyone with database access. What it does instead is leave a
   complete record, so the assumption being wrong is a number in a table rather
   than a mystery discovered months later by players who stopped playing.
@@ -18,14 +18,13 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- From the base facade, fetched by shared/core.lua at load. These were globals
---- when this file lived inside nifty-core; see the note in shared/core.lua about
---- why a local in fxmanifest would not have survived the chunk boundary.
-local Db = Nifty.Db
-local SessionGuard = Nifty.SessionGuard
-local GetSetting = Nifty.GetSetting
-local Identity = Nifty.Identity
-local SessionGuard = Nifty.SessionGuard
+--- Same-resource state, set up by earlier files in the load chain (db.lua,
+--- sv_session_guard.lua, settings.lua, identity.lua). No bridge fetch needed
+--- when living inside the same resource.
+local Db = Db
+local SessionGuard = SessionGuard
+local GetSetting = GetSetting
+local Identity = Identity
 
 Stuetze = {}
 
@@ -38,7 +37,7 @@ local Timers = {}
 local PaidThisSession = {}
 
 --- Start paying a character. Called when they enter the world, not when they
---- connect — a player rejected at the whitelist must not accrue welfare.
+--- connect - a player rejected at the whitelist must not accrue welfare.
 function Stuetze.start(src, characterId)
   Stuetze.stop(src)
 
@@ -53,7 +52,7 @@ function Stuetze.start(src, characterId)
     --
     -- The second is the engine itself. Under OneSync big mode a distant
     -- disconnect produces no playerDropped, so the session is still open and the
-    -- first check passes — the Stütze would keep paying a character nobody is
+    -- first check passes - the Stütze would keep paying a character nobody is
     -- playing. `GetPlayerName` reads the player list directly and is not scoped
     -- by distance. The watchdog in sv_session_guard.lua would catch this within
     -- 30 seconds anyway, but the step that pays out should not depend on a
@@ -92,13 +91,13 @@ function Stuetze.pay(src, characterId)
   end
 
   -- The only brake in the whole system. It exists so that staying logged in for
-  -- six hours is not worth more than a shift of actual work — not to make anyone
+  -- six hours is not worth more than a shift of actual work - not to make anyone
   -- earn it.
   local cap = GetSetting('economy.stuetze.max_per_session', 8)
   local paid = PaidThisSession[src] or 0
 
   if paid >= cap then
-    print(('[%s] Stütze session cap reached for slot %s (%d/%d) — no payout'):format(
+    print(('[%s] Stütze session cap reached for slot %s (%d/%d) - no payout'):format(
       RESOURCE, src, paid, cap))
     return false
   end
@@ -127,7 +126,7 @@ function Stuetze.pay(src, characterId)
 
   if recorded == nil then
     -- A payout with no record is exactly the situation this table exists to
-    -- detect, so it must not pass silently — and it must not stop the money.
+    -- detect, so it must not pass silently - and it must not stop the money.
     -- The payout already happened; the audit row is what is missing.
     print(('[%s] WARNING: Stütze paid but not recorded (character=%s amount=%s session=%s)'):format(
       RESOURCE, characterId, tostring(amount), tostring(Identity.getActiveSessionId(src))))
