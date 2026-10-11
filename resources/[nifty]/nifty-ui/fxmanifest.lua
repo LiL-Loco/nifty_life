@@ -20,7 +20,15 @@ version '0.2.0'
 -- cannot see. That is the whole reason menus are lent out from here rather than
 -- instantiated by each caller.
 
+-- `ui/menu.html` MUST BE IN THIS LIST. It is not optional and FiveM does not add
+-- it for you: the docs say the ui_page file "along with its dependencies has to
+-- be referenced using files". Without it the client never receives the page, and
+-- the symptom is not a blank menu - it is a client that sits on "awaiting scripts"
+-- forever, because the resource that owns the browser never finishes loading.
+-- Every other NUI resource in this project lists its page; this one did not, and
+-- the whole login stopped dead there.
 files {
+  'ui/menu.html',
   'ui/base.css',
   'ui/base.js',
   'ui/menu.css',

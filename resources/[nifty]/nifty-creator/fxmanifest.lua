@@ -30,7 +30,7 @@ shared_scripts {
   '@nifty-core/shared/constants.lua',
 }
 
--- NO ui_page AND NO `files` HERE. ON PURPOSE.
+-- NO ui_page HERE. ON PURPOSE.
 --
 -- The creator's interface is the menu framework (ADR-0023). It borrows the single
 -- menu surface from `nifty-ui` through exports, so this resource draws nothing of
