@@ -7,7 +7,7 @@
  * only an overlay. `data-dock="right"` gives the character creator a column beside
  * the ped instead of a panel across it. */
 
-@import url('https://cfx-nui-nifty-ui/ui/base.css');
+@import url('https://cfx-nui-nifty-core/ui/base.css');
 
 .menu-page { overflow: hidden; }
 

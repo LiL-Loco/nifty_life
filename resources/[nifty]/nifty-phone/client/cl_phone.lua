@@ -50,7 +50,7 @@ end
 --- this project. Calling it directly here would work right up until a second
 --- surface did the same, and then the player would be looking at the phone while
 --- typing into the chat.
-local Focus = exports['nifty-ui']
+local Focus = exports['nifty-core']
 
 --- Focus and cursor move together and are released in the same order. Leaving the
 --- cursor locked with the phone closed is the classic FiveM bug: the player can

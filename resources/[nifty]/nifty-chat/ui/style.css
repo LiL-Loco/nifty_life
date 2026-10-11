@@ -4,7 +4,7 @@
  * what is uniquely the chat's. Anything else here would be parsed by every other
  * surface's page for no benefit. */
 
-@import url('https://cfx-nui-nifty-ui/ui/base.css');
+@import url('https://cfx-nui-nifty-core/ui/base.css');
 
 .chat-log {
   position: fixed;

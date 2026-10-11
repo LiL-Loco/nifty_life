@@ -5,7 +5,7 @@
  * this page used to share with the creator, the HUD and the chat: an overlay that
  * changes shape is not something to redesign while splitting a resource. */
 
-@import url('https://cfx-nui-nifty-ui/ui/base.css');
+@import url('https://cfx-nui-nifty-core/ui/base.css');
 .phone {
   position: absolute;
   inset: 0;

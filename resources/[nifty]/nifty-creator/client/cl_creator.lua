@@ -28,7 +28,7 @@ local RESOURCE = GetCurrentResourceName()
 
 --- The menu framework. Same resource as the focus broker; one call opens a menu
 --- and takes the keyboard with it.
-local Menu = exports['nifty-ui']
+local Menu = exports['nifty-core']
 
 --- Our own German display labels, and the vendored item data.
 ---

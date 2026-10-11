@@ -26,7 +26,7 @@ local Input = { open = false }
 
 --- The shared focus broker. Fetched once: an export call per keystroke would be a
 --- round trip for a decision that does not change between keypresses.
-local Focus = exports['nifty-ui']
+local Focus = exports['nifty-core']
 
 --- Ask the broker whether we may have the keyboard. Returns false if another
 --- surface already holds it, which is a normal outcome and not an error.

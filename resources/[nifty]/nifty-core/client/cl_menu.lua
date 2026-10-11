@@ -27,7 +27,7 @@
 local RESOURCE = GetCurrentResourceName()
 
 --- The broker, the only thing allowed to touch SetNuiFocus. See cl_focus.lua.
-local Focus = exports['nifty-ui']
+local Focus = exports['nifty-core']
 
 --- What is on screen right now: the owner resource, its menu table, and a token.
 --- The token is what makes close events unambiguous — see `closeMenu` below.
@@ -287,7 +287,7 @@ end)
 --- Replace the open menu with another, keeping focus. This is what a submenu is.
 exports('pushMenu', function(owner, menu)
   if type(menu) ~= 'table' or #menu.items == 0 then return false end
-  if Current == nil then return exports['nifty-ui']:openMenu(owner, menu) end
+  if Current == nil then return exports['nifty-core']:openMenu(owner, menu) end
 
   menu.owner = owner
   menu.id = Current.id

@@ -57,14 +57,28 @@ server_script 'server/sv_facade.lua'
 -- shared/spawn.lua (loaded earlier in the shared_scripts block).
 client_script 'client/cl_spawn.lua'
 
--- nifty-ui's client scripts will be added in the next commit when that resource
--- is absorbed. nifty-ui is still a separate dependency for now.
+-- nifty-ui (absorbed). The focus broker (cl_focus) loads first; the menu
+-- framework (cl_menu) loads after because its openMenu pulls focus through
+-- cl_focus. cl_spawn's menu DSL calls go to the same resource and resolve
+-- against cl_menu's exports.
+client_script 'client/cl_focus.lua'
+client_script 'client/cl_menu.lua'
+
+-- The single NUI surface that every surface-level page renders against.
+-- ui/menu.html is also the ui_page.
+files {
+  'ui/menu.html',
+  'ui/menu.css',
+  'ui/menu.js',
+  'ui/base.css',
+  'ui/base.js',
+}
+
+ui_page 'ui/menu.html'
 
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.
--- nifty-ui because the base hands out focus through it like every other surface.
 dependencies {
   '/onesync',
   '/server:4500',
-  'nifty-ui',
 }
