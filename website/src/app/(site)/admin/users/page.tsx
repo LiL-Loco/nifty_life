@@ -65,7 +65,14 @@ export default async function AdminUsers() {
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={row.id}>
-                  <TableCell>{row.email}</TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/admin/users/${row.id}`}
+                      className="text-foreground hover:underline"
+                    >
+                      {row.email}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     {row.email_verified_at ? (
                       <span className="text-success">bestätigt</span>
@@ -98,13 +105,6 @@ export default async function AdminUsers() {
           </Table>
         </Card>
       )}
-
-      <Link
-        href="/admin"
-        className="mt-2 inline-block px-5 text-sm text-muted-foreground hover:text-foreground sm:px-6"
-      >
-        ← zu den Bewerbungen
-      </Link>
     </>
   );
 }
