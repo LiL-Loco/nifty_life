@@ -76,6 +76,38 @@ files {
 
 ui_page 'ui/menu.html'
 
+-- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker
+-- in cl_spawn.lua uses the same five locations from shared/spawn.lua; these
+-- gamemode-level entries are what the Cfx forceRespawn flash shows for a
+-- fresh character, before the picker takes over. The model is mp_m_freemode_01
+-- so the flash is a normal freemode; nifty-world's enterWorld then swaps in the
+-- character's actual model.
+spawnpoint 'Legion Square' {
+  pos = vector3(195.17, -933.77, 30.69),
+  heading = 143.5,
+  model = 'mp_m_freemode_01',
+}
+spawnpoint 'Vespucci Beach' {
+  pos = vector3(-1290.0, -1480.0, 4.34),
+  heading = 125.0,
+  model = 'mp_m_freemode_01',
+}
+spawnpoint 'Paleto Bay' {
+  pos = vector3(-260.0, 6630.0, 7.0),
+  heading = 220.0,
+  model = 'mp_m_freemode_01',
+}
+spawnpoint 'Sandy Shores' {
+  pos = vector3(1950.0, 3720.0, 32.0),
+  heading = 300.0,
+  model = 'mp_m_freemode_01',
+}
+spawnpoint 'Flughafen' {
+  pos = vector3(-1040.0, -2740.0, 20.0),
+  heading = 330.0,
+  model = 'mp_m_freemode_01',
+}
+
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.
 dependencies {
