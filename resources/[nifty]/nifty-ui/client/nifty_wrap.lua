@@ -60,6 +60,17 @@ pool:ControlDisablingEnabled(true)
 -- items added via LastBuiltMenu:AddItem show up in the caller's menu.
 local LastBuiltMenu = nil
 
+-- Side-table: id -> real UIMenu. Each menu gets a unique numeric id
+-- stored on it as `_id`. FiveM's export proxy deep-copies the return
+-- of `menu` before the caller sees it, so the caller's `menu` handle
+-- is a *copy*, not the real table. The copy keeps scalar fields
+-- (like `_id`) by value, which lets read-only helpers like
+-- `itemsCount` find the real menu by id and report the live count.
+-- Without this, `#menu.items` (and similar) always read 0 from the
+-- proxy-copy's empty Items table.
+local _menuById = {}
+local _nextMenuId = 0
+
 -- ----- Helpers -----
 
 -- Map a nifty onSelect handler to NativeUI's OnActivated. The
@@ -90,14 +101,13 @@ exports('menu', function(...)
     0,
     255, 255, 255, 255
   )
-  -- NativeUI's UIMenu stores the rows in 'Items' (capital I). The
-  -- in-house framework used 'items' (lowercase). Caller code in
-  -- nifty-creator/cl_creator.lua:1409 does
-  --   print(... '#menu.items')
-  -- so we need menu.items to work. NativeUI never reassigns self.Items
-  -- after New (it only does table.insert), so aliasing the two field
-  -- names to the same table is safe for the lifetime of the menu.
-  m.items = m.Items
+  -- Give the menu a unique id so read-only helpers (itemsCount) can
+  -- find the real menu after the export proxy deep-copies the return.
+  -- Scalar fields survive the deep copy by value, so the proxy copy
+  -- carries the same `_id` and the shim can look up the real menu.
+  _nextMenuId = _nextMenuId + 1
+  m._id = _nextMenuId
+  _menuById[m._id] = m
   LastBuiltMenu = m
   return m
 end)
@@ -346,6 +356,21 @@ end)
 
 exports('isOpen', function(...)
   return pool:IsAnyMenuOpen()
+end)
+
+-- Read-only helper: returns the number of items currently in the
+-- menu the caller passed in. The handle the caller holds is a
+-- proxy-deep-copy of the real UIMenu (FiveM's export proxy copies
+-- on return), so reading `#handle.Items` would always be 0 - the
+-- copy's Items table is empty. The handle carries the real menu's
+-- `_id` as a scalar, so we use it to look up the live menu and
+-- count its real Items.
+exports('itemsCount', function(...)
+  local handle = ...
+  if type(handle) ~= 'table' then return 0 end
+  local real = _menuById[handle._id]
+  if not real or not real.Items then return 0 end
+  return #real.Items
 end)
 
 exports('holder', function(...)

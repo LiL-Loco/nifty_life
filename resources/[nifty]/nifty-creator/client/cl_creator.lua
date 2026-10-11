@@ -1406,7 +1406,11 @@ buildRootMenu = function()
     onSelect = function() cancel() end,
   })
 
-  print(('[nifty-creator] buildRootMenu: exit, items=%d'):format(#menu.items))
+  -- menu.items in this diagnostic used to read the proxy-deep-copy
+  -- of the menu handle, which has an empty Items table regardless of
+  -- what was added. Use the shim's itemsCount helper, which looks
+  -- the real menu up by id and reports the live count.
+  print(('[nifty-creator] buildRootMenu: exit, items=%d'):format(Menu.itemsCount(menu)))
   return menu
 end
 
