@@ -51,7 +51,8 @@ shared_scripts {
 -- decoding all of it at boot would cost every player who never opens a menu.
 -- `cl_gamedata.lua` reads each file the first time something actually needs it.
 files {
-  'data/*.json'
+  'data/*.json',
+  'data/tattoos/*.json'
 }
 
 client_scripts {

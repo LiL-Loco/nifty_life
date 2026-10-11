@@ -33,6 +33,11 @@ GameData = {}
 --- failed read instead of one per menu open.
 local cache = {}
 
+--- Tattoo lists, keyed by gender and zone. Separate from `cache` because the zone
+--- key already carries the gender, and because clearing one must not clear the
+--- other: the clothing files are still valid when the tattoo lists are dropped.
+local tattooCache = {}
+
 local function load(name)
   if cache[name] ~= nil then return cache[name] end
 
@@ -96,6 +101,7 @@ function GameData.setGender(gender)
   -- local drawable mean different things on a male and a female ped, so the whole
   -- cache has to go - keeping it would name a leather jacket "Long Bob".
   cache = {}
+  tattooCache = {}
   GameData.globalMaps = {}
 end
 
@@ -259,4 +265,78 @@ function GameData.localForGlobal(kind, id, global, collection, count)
     if value == global then return drawable end
   end
   return nil
+end
+
+-- ---------------------------------------------------------------- tattoos
+
+--- The collection files, in a stable order.
+---
+--- `LoadResourceFile` has no directory listing, so the names come from the
+--- allowlist the server also uses. That is deliberate: one list, two consumers,
+--- and a collection the server would reject can never reach the menu either.
+local tattooCollections = (function()
+  local names = {}
+  for name in pairs(AppearanceConfig.ALLOWED_TATTOO_COLLECTIONS) do
+    names[#names + 1] = name
+  end
+  table.sort(names)
+  return names
+end)()
+
+--- Tattoos for one body zone, as a list of
+--- `{ collection, preset, name, zone, zoneId }`.
+---
+--- `preset` is the joaat of the per-gender hash name; `collection` is the file
+--- name, which is also the joaat the native wants. Both are computed HERE rather
+--- than stored, because a hash is a hash and storing one would only add a way for
+--- it to disagree with its own input.
+---
+--- `name` is the game's own English label. It is NOT translated - a tattoo called
+--- "Hibiscus Flower Duo" has no honest German form, and inventing one would be
+--- worse than leaving it readable. The menu around it is German; the proper nouns
+--- are not.
+function GameData.tattoosByZone(zoneId)
+  local key = ('zone:%s:%s'):format(GameData.gender, tostring(zoneId))
+  local cached = tattooCache[key]
+  if cached then return cached end
+
+  local wanted = (GameData.gender == 'female') and 'HashNameFemale' or 'HashNameMale'
+  local out = {}
+
+  for _, collection in ipairs(tattooCollections) do
+    local file = load('tattoos/' .. collection)
+    if type(file) == 'table' then
+      for _, entry in ipairs(file) do
+        if entry.ZoneID == zoneId and entry[wanted] and entry[wanted] ~= '' then
+          out[#out + 1] = {
+            collection = collection,
+            hashName   = entry[wanted],
+            preset     = joaat(entry[wanted]),
+            name       = entry.LocalizedName or entry.Name or 'Tattoo',
+            zone       = entry.Zone,
+          }
+        end
+      end
+    end
+  end
+
+  -- Sorted so the menu rows do not move between sessions. `pairs` over the JSON
+  -- object keys would reorder everything on the next start, and "the tattoo one
+  -- below Tribal Star" is not a thing a player can rely on.
+  table.sort(out, function(a, b)
+    if a.collection ~= b.collection then return a.collection < b.collection end
+    return a.hashName < b.hashName
+  end)
+
+  tattooCache[key] = out
+  return out
+end
+
+--- Every zone that has at least one tattoo for this ped.
+function GameData.tattooZones()
+  local out = {}
+  for id = 0, 5 do
+    if #GameData.tattoosByZone(id) > 0 then out[#out + 1] = id end
+  end
+  return out
 end

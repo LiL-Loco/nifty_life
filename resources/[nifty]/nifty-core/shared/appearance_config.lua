@@ -116,6 +116,53 @@ AppearanceConfig = {
   --- the point of a third face: it can be whoever, including a preset the
   --- "mother" list also happens to contain.
   MAX_HEADBLEND_PRESET = 45,
+
+  --- Tattoo collections: the DLC overlay collections a facial decoration can come
+  --- from. Same idea as ALLOWED_COLLECTIONS above, same reason it exists - the
+  --- server cannot ask the engine which collections are installed, so this list is
+  --- the whole of what it will accept.
+  ---
+  --- It is generated from the file names in nifty-creator/data/tattoos, which are
+  --- one file per collection. If a content update adds one, this list is where it
+  --- gets added, and the check that keeps them in step is that a tattoo the server
+  --- accepts but no data file describes simply never appears in the menu.
+  ALLOWED_TATTOO_COLLECTIONS = {
+    ['mp2023_02_overlays'] = true,
+    ['mpairraces_overlays'] = true,
+    ['mpbeach_overlays'] = true,
+    ['mpbiker_overlays'] = true,
+    ['mpbusiness_overlays'] = true,
+    ['mpchristmas2_overlays'] = true,
+    ['mpchristmas2017_overlays'] = true,
+    ['mpchristmas2018_overlays'] = true,
+    ['mpchristmas3_overlays'] = true,
+    ['mpgunrunning_overlays'] = true,
+    ['mpheist3_overlays'] = true,
+    ['mpheist4_overlays'] = true,
+    ['mphipster_overlays'] = true,
+    ['mpimportexport_overlays'] = true,
+    ['mplowrider_overlays'] = true,
+    ['mplowrider2_overlays'] = true,
+    ['mpluxe_overlays'] = true,
+    ['mpluxe2_overlays'] = true,
+    ['mpsecurity_overlays'] = true,
+    ['mpsmuggler_overlays'] = true,
+    ['mpstunt_overlays'] = true,
+    ['mpsum2_overlays'] = true,
+    ['mpvinewood_overlays'] = true,
+    ['multiplayer_overlays'] = true,
+  },
+
+  --- How many tattoos one character may wear at once: one per body zone.
+  ---
+  --- This is NOT a storage limit and not a question of taste. Two tattoos on the
+  --- same skin compete, and the game stops drawing the second - so a ped saved
+  --- with two on the left arm comes back wearing one of them, with no error
+  --- anywhere. The creator enforces one per zone, and the bound here is the SAME
+  --- number, because the guarantee we want is that a stored appearance renders
+  --- exactly as it was chosen. A looser bound would accept appearances the engine
+  --- cannot show.
+  MAX_TATTOOS = 6,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.

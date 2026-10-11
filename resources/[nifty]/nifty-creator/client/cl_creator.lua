@@ -55,7 +55,9 @@ local cancel
 local buildRootMenu
 local closeCreator
 local refresh
-local applyHairOverlay
+local resolveHairOverlay
+local applyDecorations
+local buildTattooMenu
 local slotOf
 
 local creatorOpen = false
@@ -315,10 +317,11 @@ local function setSlot(kind, id, slot)
   refresh()
 
   -- A hair overlay rides ON TOP of a hairstyle, so changing the hair moves the
-  -- surface it was painted on. Re-applying it here means the overlay follows the
+  -- surface it was painted on. Re-resolving it here means the overlay follows the
   -- hair automatically instead of the player finding that it vanished.
   if kind == 'components' and tonumber(id) == 2 then
-    applyHairOverlay()
+    resolveHairOverlay()
+    applyDecorations()
   end
 end
 
@@ -435,6 +438,7 @@ local face = {
   overlays = {},
   hairColour = { primary = 0, highlight = 0 },
   hairOverlay = nil,
+  tattoos = {},
   eyeColour = 0,
   headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 },
 }
@@ -449,6 +453,7 @@ local function appearanceNow()
     overlays     = face.overlays,
     hairColour   = face.hairColour,
     hairOverlay  = face.hairOverlay,
+    tattoos      = face.tattoos,
     eyeColour    = face.eyeColour,
     headBlend    = face.headBlend,
   }
@@ -598,37 +603,41 @@ local function presetForCurrentHair(ped)
   return nil
 end
 
---- Clear first: the game keeps facial decorations, so a second overlay would
---- stack on the first instead of replacing it.
---- Assigned rather than `local function` - `setSlot` calls this, and it is
---- declared below that caller.
-applyHairOverlay = function()
-  local n = natives()
-  local ped = PlayerPedId()
-
-  if n.clearPedDecorations then n.clearPedDecorations(ped) end
-
-  local chosen = face.hairOverlay
-  if not chosen then return end
-
-  local map = hairOverlayMap or {}
-  local preset = chosen.preset or presetForCurrentHair(ped)
-
-  if not preset or not map[preset] then
-    print(('[%s] hair overlay preset %s has no collection in the shop map - not applying'):format(
-      RESOURCE, tostring(preset)))
+--- The hair overlay, resolved to hashes and stored.
+---
+--- IT IS NOT A MENU ROW, and that is a correction of the earlier design. The game
+--- ties one specific decal to each hairstyle - that is what the forced-component
+--- table below is walking - so offering a list of eighty overlays to pick from
+--- would be offering the player a choice the game itself does not have, and the
+--- wrong pair simply draws nothing. Picking a hairstyle picks its overlay.
+---
+--- The stored value is `{ collection, preset }`, both hashes, NOT the hairstyle.
+--- That matters on login: nifty-world re-applies a stored appearance without
+--- knowing which ped model was picked, and asking the engine again there would
+--- mean duplicating a probe whose out-pointer parameters are the least documented
+--- corner of the runtime. Resolve once, here, where the uncertainty already lives.
+resolveHairOverlay = function()
+  if probeHairOverlays() ~= 'available' then
+    face.hairOverlay = nil
     return
   end
 
-  if not n.setFacialDecoration then
-    print(('[%s] _SetPedFacialDecoration is missing - no overlay applied'):format(RESOURCE))
-    return
-  end
+  local preset = presetForCurrentHair(PlayerPedId())
+  local collection = preset and hairOverlayMap and hairOverlayMap[preset] or nil
 
-  -- Clear first: the game keeps facial decorations, so a second overlay would
-  -- stack on the first instead of replacing it.
-  if n.clearFacialDecorations then n.clearFacialDecorations(ped) end
-  n.setFacialDecoration(ped, map[preset], preset)
+  face.hairOverlay = (preset and collection)
+    and { collection = collection, preset = preset }
+    or  nil
+end
+
+--- Re-apply everything that shares the facial-decoration channel.
+---
+--- The clearing and the native calls live in nifty-world, because the engine has
+--- ONE channel for the hair overlay and the tattoos, and applying a tattoo on its
+--- own would wipe the overlay the player has been wearing since they picked a
+--- hairstyle. This only decides WHAT the set is.
+applyDecorations = function()
+  refresh()
 end
 
 -- ------------------------------------------------------------------ menus
@@ -974,34 +983,70 @@ local function buildHairColourMenu()
   return menu
 end
 
---- The hair overlay, behind the probe.
+--- One zone's tattoos.
 ---
---- The row is only added when `probeHairOverlays` found presets. A player should
---- never see a menu entry that silently does nothing - and if the map could not be
---- built, the log says exactly why.
-local function buildHairOverlayMenu()
+--- Grouped by body part because that is how a player thinks about where a tattoo
+--- goes, and because the data says so: every entry carries a zone. The alternative
+--- is one list of 775 rows per gender, which is not a menu.
+local ZONE_LABELS = {
+  [0] = 'Torso',
+  [1] = 'Kopf und Hals',
+  [2] = 'Linker Arm',
+  [3] = 'Rechter Arm',
+  [4] = 'Linkes Bein',
+  [5] = 'Rechtes Bein',
+}
+
+buildTattooMenu = function(zoneId)
+  local tattoos = GameData.tattoosByZone(zoneId)
+  if #tattoos == 0 then return nil end
+
   local menu = Menu:menu({
-    title = 'Hair Overlay',
-    subtitle = 'Legt eine Gesichtstatoo-Schicht ueber die Frisur.',
+    title = ZONE_LABELS[zoneId] or ('Zone ' .. zoneId),
+    subtitle = ('%d Tattoo(s)'):format(#tattoos),
     dock = 'right',
   })
 
   Menu:button(menu, 'Keins', {
-    description = 'Overlay entfernen.',
+    description = 'Alle Tattoos dieser Zone entfernen.',
     onSelect = function()
-      face.hairOverlay = nil
-      applyHairOverlay()
+      local kept = {}
+      for _, tattoo in ipairs(face.tattoos) do
+        if tattoo.zoneId ~= zoneId then kept[#kept + 1] = tattoo end
+      end
+      face.tattoos = kept
+      applyDecorations()
       Menu:pushMenu(RESOURCE, buildRootMenu())
     end,
   })
 
-  for i, preset in ipairs(hairOverlayPresets) do
-    local chosen = preset
-    Menu:button(menu, ('Overlay %d'):format(i), {
-      description = ('Collection %s'):format(tostring(hairOverlayMap[chosen])),
+  Menu:separator(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId))
+
+  for _, tattoo in ipairs(tattoos) do
+    local entry = tattoo
+    Menu:button(menu, entry.name, {
+      description = entry.collection,
       onSelect = function()
-        face.hairOverlay = { preset = chosen }
-        applyHairOverlay()
+        -- ONE PER ZONE, not one per collection. Two tattoos on the same arm
+        -- compete for the same skin and the second is invisible, so letting the
+        -- player pick another one in the same place would look like a menu that
+        -- does not work. The stored entry keeps its zone precisely so this
+        -- decision can be made on the client, where the data is.
+        local kept = {}
+        for _, other in ipairs(face.tattoos) do
+          if other.zoneId ~= zoneId then kept[#kept + 1] = other end
+        end
+
+        if #kept < AppearanceConfig.MAX_TATTOOS then
+          kept[#kept + 1] = {
+            collection = entry.collection,
+            preset = entry.preset,
+            zoneId = zoneId,
+          }
+          face.tattoos = kept
+          applyDecorations()
+        end
+
         Menu:pushMenu(RESOURCE, buildRootMenu())
       end,
     })
@@ -1165,7 +1210,8 @@ buildRootMenu = function()
           GameData.setGender(characterGender)
           respawnModel()
           discoverSlots()
-          Menu:pushMenu(RESOURCE, buildRootMenu())
+          resolveHairOverlay()
+          applyDecorations()          Menu:pushMenu(RESOURCE, buildRootMenu())
         end,
       })
     end
@@ -1223,13 +1269,19 @@ buildRootMenu = function()
     build = buildFaceMenu,
   })
 
-  -- Added only when the probe found something. The player never sees a row that
-  -- cannot work, and the reason it is missing is in the log rather than nowhere.
-  if probeHairOverlays() == 'available' then
-    Menu:submenu(menu, 'Hair Overlay', {
-      description = 'Overlay ueber der Frisur.',
-      build = buildHairOverlayMenu,
-    })
+  -- Tattoos, grouped by the body part they go on. The hair overlay is NOT here:
+  -- the game ties exactly one decal to each hairstyle, so picking the hair picks
+  -- the overlay. A list to choose from would offer a combination the game has no
+  -- way to draw.
+  local tattooZones = GameData.tattooZones()
+  if #tattooZones > 0 then
+    Menu:separator(menu, 'Tattoos')
+    for _, zoneId in ipairs(tattooZones) do
+      Menu:submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
+        description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
+        build = function() return buildTattooMenu(zoneId) end,
+      })
+    end
   end
 
   Menu:separator(menu, 'Aktionen')
@@ -1304,6 +1356,7 @@ reset = function()
   face.overlays = {}
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
+  face.tattoos = {}
   face.eyeColour = 0
   face.headBlend = { father = 0, mother = 21, third = 21, motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0, skinTone = 0.5 }
 
@@ -1312,6 +1365,11 @@ reset = function()
 
   respawnModel()
   discoverSlots()
+
+  -- The model changed under the hair overlay. Resolve it again rather than
+  -- leaving a preset that belonged to the previous ped on the new one.
+  resolveHairOverlay()
+  applyDecorations()
 
   if Menu:isOpen() then Menu:pushMenu(RESOURCE, buildRootMenu()) end
 end
@@ -1363,6 +1421,7 @@ exports('openCreator', function(data)
   face.overlays = {}
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
+  face.tattoos = {}
   face.eyeColour = 0
   face.headBlend = { father = 0, mother = 21, third = 21, motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0, skinTone = 0.5 }
 

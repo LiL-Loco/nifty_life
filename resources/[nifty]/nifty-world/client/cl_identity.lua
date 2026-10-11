@@ -69,6 +69,46 @@ end)
 --- the player is still choosing, and calling the full `applyAppearance` for that
 --- would run `SetPlayerModel` on every slider nudge - which resets the ped and would
 --- throw away the clothing the player just picked, roughly forty times a second.
+--- Facial decorations: the hair overlay and the tattoos.
+---
+--- THEY SHARE ONE CHANNEL, and that is the whole reason this is one function
+--- rather than two. `ClearPedDecorations` removes ALL decorations - hair overlay,
+--- tattoos, everything - and `SetPedFacialDecoration` adds one without touching
+--- the others. So applying a second tattoo without clearing would stack it on top
+--- of the first, and clearing on every change would erase the hair overlay the
+--- player has been wearing since they picked a hairstyle.
+---
+--- Therefore: clear ONCE, then add everything, every time. There is no partial
+--- update and there cannot be one.
+---
+--- The hair overlay arrives already resolved - collection and preset, both hashes -
+--- because resolving it needs natives the world resource has no reason to know
+--- about. The creator does that once, when the hairstyle changes.
+local function applyDecorations(ped, appearance)
+  local n = Natives
+
+  if n.clearPedDecorations then
+    n.clearPedDecorations(ped)
+  end
+
+  if not n.setFacialDecoration then return end
+
+  if type(appearance.hairOverlay) == 'table'
+    and appearance.hairOverlay.collection
+    and appearance.hairOverlay.preset
+  then
+    n.setFacialDecoration(ped, appearance.hairOverlay.collection, appearance.hairOverlay.preset)
+  end
+
+  if type(appearance.tattoos) == 'table' then
+    for _, tattoo in ipairs(appearance.tattoos) do
+      if tattoo.collection and tattoo.preset then
+        n.setFacialDecoration(ped, tattoo.collection, tattoo.preset)
+      end
+    end
+  end
+end
+
 local function applyFace(ped, appearance)
   -- HEAD BLEND FIRST. It rebuilds the face the overlays are painted onto, so
   -- applying overlays first and the blend afterwards throws them away.
@@ -152,6 +192,10 @@ local function applyFace(ped, appearance)
   if appearance.hairColour and Natives.setHairColor then
     Natives.setHairColor(ped, appearance.hairColour.primary or 0, appearance.hairColour.highlight or 0)
   end
+
+  -- Last. The hair overlay sits on the hairstyle and the tattoos on the skin, so
+  -- both want the final word about what the ped looks like.
+  applyDecorations(ped, appearance)
 end
 
 --- Apply everything EXCEPT the model.

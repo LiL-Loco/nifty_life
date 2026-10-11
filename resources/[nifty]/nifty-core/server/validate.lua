@@ -233,6 +233,38 @@ function Validate.hairOverlay(value)
   return nil
 end
 
+--- Tattoos, as a LIST rather than a map by slot.
+---
+--- A ped can wear several at once - they are facial decorations, and each call to
+--- the native adds one without clearing the others. A map keyed by body zone would
+--- be tidier and wrong: the game allows more than one per zone, and a map would
+--- silently drop one of them.
+---
+--- The collection is checked against the allowlist, which makes this stronger than
+--- the head overlays above: a client cannot name a collection the server has never
+--- heard of. The preset is still only range-checked - it is a joaat hash and the
+--- server has no table to look it up in.
+function Validate.tattoos(value)
+  if type(value) ~= 'table' then return {} end
+
+  local out = {}
+  for _, entry in ipairs(value) do
+    if #out >= AppearanceConfig.MAX_TATTOOS then break end
+
+    if type(entry) == 'table'
+      and type(entry.collection) == 'string'
+      and AppearanceConfig.ALLOWED_TATTOO_COLLECTIONS[entry.collection]
+    then
+      local preset = boundedInt(entry.preset, 0, 0xFFFFFFFF)
+      if preset then
+        out[#out + 1] = { collection = entry.collection, preset = preset }
+      end
+    end
+  end
+
+  return out
+end
+
 --- Eye colour index.
 function Validate.eyeColour(value)
   local colour = boundedInt(value, 0, AppearanceConfig.MAX_EYE_COLOUR)
@@ -333,6 +365,7 @@ function Validate.appearance(value)
   result.hairOverlay = Validate.hairOverlay(value.hairOverlay)
   result.eyeColour = Validate.eyeColour(value.eyeColour)
   result.headBlend = Validate.headBlend(value.headBlend)
+  result.tattoos = Validate.tattoos(value.tattoos)
 
   return result
 end
