@@ -256,3 +256,83 @@
   color: var(--text-dim, #9a9aa4);
   font-size: 11px;
 }
+
+/* ---------------------------------------------------- target picker
+   Modal-style overlay listing nearby players the giver can pick.
+   Shows the giver who they are giving what to, plus a Cancel button.
+   --target-success notes a successful transfer briefly. */
+.inv__target-picker {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px 22px 22px;
+  background: rgba(0, 0, 0, 0.66);
+  font-size: 13px;
+  color: var(--text, #f2f2f4);
+}
+.inv__target-picker__title {
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 12px 18px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--accent, #d6b469);
+  letter-spacing: 0.04em;
+}
+.inv__target-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(420px, 100%);
+}
+.inv__target-row {
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+  text-align: left;
+}
+.inv__target-row:hover {
+  border-color: var(--accent, #d6b469);
+  background: rgba(214, 180, 105, 0.10);
+}
+.inv__target-row__name { font-size: 14px; }
+.inv__target-row__dist { font-size: 11px; color: var(--text-dim, #9a9aa4); }
+.inv__target-empty,
+.inv__target-success {
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 14px 18px;
+  text-align: center;
+  width: min(420px, 100%);
+}
+.inv__target-success {
+  border-color: rgba(214, 180, 105, 0.42);
+  color: var(--accent, #d6b469);
+}
+.inv__target-cancel {
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 8px 18px;
+  color: var(--text-dim, #9a9aa4);
+  cursor: pointer;
+  font: inherit;
+}
+.inv__target-cancel:hover {
+  color: var(--text, #f2f2f4);
+  border-color: var(--accent, #d6b469);
+}

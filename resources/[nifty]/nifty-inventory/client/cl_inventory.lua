@@ -143,4 +143,102 @@ RegisterNUICallback('discardItem', function(data, cb)
   cb({ ok = true })
 end)
 
+-- Discard on the ground: server removes the inventory row AND spawns
+-- a placeholder world prop at the player's current position. The
+-- client passes its own coords so a hostile client cannot make items
+-- rain from the sky at coordinates of its choosing.
+RegisterNUICallback('discardItemOnGround', function(data, cb)
+  local ped = PlayerPedId()
+  if not ped or ped == 0 then return cb({ ok = false, reason = 'no ped' }) end
+  local c = GetEntityCoords(ped)
+  if not c or not c.x then return cb({ ok = false, reason = 'no coords' }) end
+  TriggerServerEvent('nifty:server:discardItemOnGround', {
+    code     = data and data.code,
+    quantity = (data and tonumber(data.quantity)) or 1,
+    itemId   = data and data.itemId,
+    x        = c.x, y = c.y, z = c.z,
+  })
+  cb({ ok = true })
+end)
+
+-- Give flow: arm an item for giving, list nearby players, dispatch.
+-- giveMode carries the inventory row until a target is picked or the
+-- player dismisses.
+local giveMode = nil  -- { row = { code, itemId, quantity }, targets = { ... } }
+
+RegisterNUICallback('enterGiveMode', function(data, cb)
+  if type(data) ~= 'table' then return cb({ ok = false }) end
+  giveMode = {
+    code     = data.code,
+    itemId   = data.itemId,
+    quantity = (tonumber(data.quantity)) or 1,
+  }
+  -- Refresh the target picker with current nearby players.
+  local list = nearbyPlayers()
+  cb({ ok = true, targets = list })
+end)
+
+RegisterNUICallback('exitGiveMode', function(_, cb)
+  giveMode = nil
+  cb({ ok = true })
+end)
+
+RegisterNUICallback('refreshTargets', function(_, cb)
+  cb({ ok = true, targets = nearbyPlayers() })
+end)
+
+-- The selected target fires inventoryGive on the server. The actual
+-- transfer / metadata stamp is server-side.
+RegisterNUICallback('confirmGive', function(data, cb)
+  if not giveMode then return cb({ ok = false, reason = 'no give mode' }) end
+  if type(data) ~= 'table' or type(data.targetSrc) ~= 'number' then
+    return cb({ ok = false, reason = 'no target' })
+  end
+  TriggerServerEvent('nifty:server:inventoryGive', {
+    targetSrc = data.targetSrc,
+    code      = giveMode.code,
+    itemId    = giveMode.itemId,
+    quantity  = giveMode.quantity,
+  })
+  giveMode = nil
+  cb({ ok = true })
+end)
+
+-- -----------------------------------------------------------------------
+-- Nearby players
+--
+-- Returns a list of { src, name, distance, position } for players
+-- within NEARBY_RADIUS of the local player. Used by the target picker
+-- overlay so the player can click a recipient.
+local NEARBY_RADIUS = 5.0
+local function nearbyPlayers()
+  local list = {}
+  local me = PlayerPedId()
+  if not me or me == 0 then return list end
+  local myPos = GetEntityCoords(me)
+  if not myPos then return list end
+
+  for _, srcStr in ipairs(GetPlayers()) do
+    local candidate = tonumber(srcStr)
+    if candidate and candidate ~= 0 then
+      local ped = GetPlayerPed(candidate)
+      if ped and ped ~= 0 then
+        local p = GetEntityCoords(ped)
+        if p then
+          local dx, dy, dz = p.x - myPos.x, p.y - myPos.y, p.z - myPos.z
+          local d = math.sqrt(dx * dx + dy * dy + dz * dz)
+          if d <= NEARBY_RADIUS then
+            list[#list + 1] = {
+              src      = candidate,
+              name     = GetPlayerName(candidate) or ('Spieler ' .. candidate),
+              distance = d,
+            }
+          end
+        end
+      end
+    end
+  end
+  return list
+end
+
 print(('[%s] inventory panel ready'):format(RESOURCE))

@@ -157,10 +157,22 @@
     });
     menu.appendChild(useBtn);
 
+    const giveBtn = el('button', 'inv__menu-item', 'Geben');
+    giveBtn.addEventListener('click', () => {
+      dismissMenu();
+      // Server arms give mode and returns the candidate list.
+      fetchNui('enterGiveMode', {
+        code: item.code, quantity: 1, itemId: item.id,
+      }).then(({ ok, targets }) => {
+        if (ok) showTargetPicker(item, targets || []);
+      });
+    });
+    menu.appendChild(giveBtn);
+
     const dropBtn = el('button', 'inv__menu-item', 'Wegwerfen');
     dropBtn.addEventListener('click', () => {
       dismissMenu();
-      fetchNui('discardItem', {
+      fetchNui('discardItemOnGround', {
         code: item.code, quantity: 1, itemId: item.id,
       });
     });
@@ -180,15 +192,88 @@
     }, 0);
   }
 
+  // -------------------------------------------------------------- target picker
+  // Modal overlay listing nearby players the giver can pick. Click on
+  // a row -> confirmGive to the server. The overlay dismisses either
+  // on a successful transfer or on the Abbrechen button.
+  let targetPickerState = null;
+
+  function dismissTargetPicker() {
+    if (targetPickerState && targetPickerState.overlay) {
+      targetPickerState.overlay.remove();
+      targetPickerState = null;
+    }
+  }
+
+  function showTargetPicker(item, targets) {
+    dismissTargetPicker();
+
+    const overlay = el('div', 'inv__target-picker');
+    const title = el('div', 'inv__target-picker__title',
+      `An wen: ${item.name || item.code}`);
+    overlay.appendChild(title);
+
+    const list = el('div', 'inv__target-picker__list');
+
+    if (!targets.length) {
+      list.appendChild(el('div', 'inv__target-empty',
+        'Keine Spieler in Reichweite.'));
+    } else {
+      for (const t of targets) {
+        const row = el('button', 'inv__target-row');
+        row.appendChild(el('span', 'inv__target-row__name', t.name));
+        row.appendChild(el('span', 'inv__target-row__dist',
+          t.distance.toFixed(1) + ' m'));
+        row.addEventListener('click', () => {
+          fetchNui('confirmGive', { targetSrc: t.src }).then(({ ok }) => {
+            dismissTargetPicker();
+            if (ok) {
+              const note = el('div', 'inv__target-success',
+                `An ${t.name} gegeben.`);
+              overlay.innerHTML = '';
+              overlay.appendChild(note);
+              setTimeout(dismissTargetPicker, 1500);
+            }
+          });
+        });
+        list.appendChild(row);
+      }
+    }
+
+    const cancel = el('button', 'inv__target-cancel', 'Abbrechen');
+    cancel.addEventListener('click', () => {
+      dismissTargetPicker();
+      fetchNui('exitGiveMode');
+    });
+    overlay.appendChild(list);
+    overlay.appendChild(cancel);
+
+    document.body.appendChild(overlay);
+    targetPickerState = { overlay };
+
+    // Background click on the overlay (not on the modal contents)
+    // dismisses. The list covers most of the surface so this is
+    // mostly the user clicking outside the cancel button.
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        dismissTargetPicker();
+        fetchNui('exitGiveMode');
+      }
+    });
+  }
+
   // -------------------------------------------------------------- NUI bridge
   async function fetchNui(name, body) {
     try {
-      await fetch(`https://${GetParentResourceName()}/${name}`, {
+      const res = await fetch(`https://${GetParentResourceName()}/${name}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=UTF-8' },
         body: JSON.stringify(body || {}),
       });
+      if (!res.ok) return null;
+      return await res.json();
     } catch (_) { /* ignore */ }
+    return null;
   }
 
   // The NUI's only entry: render the panel. Refresh replace-wholesale.

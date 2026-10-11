@@ -614,6 +614,44 @@ function Inventory.transferBetween(srcCid, targetCid, code, quantity, itemId)
   }
 end
 
+--- Stamp or refresh the metadata of an existing inventory row.
+---
+--- Used by the give path: after Inventory.transferBetween moves a row
+--- from giver to recipient, the server rewrites the destination's
+--- metadata to add `giver_name` (the immediate giver's display
+--- string). Callers may pass any other keys they want stamped; the row
+--- preserves whatever keys were already there.
+function Inventory.stampMetadata(characterId, itemId, patch)
+  if type(characterId) ~= 'string' or characterId == '' then return false, 'no character' end
+  if type(itemId) ~= 'string' or itemId == '' then return false, 'no item' end
+  if type(patch) ~= 'table' then return false, 'bad patch' end
+
+  local row = Db.one([[
+    SELECT metadata FROM inventory_items
+     WHERE character_id = ? AND id = ?
+     LIMIT 1
+  ]], { characterId, itemId }, 'inventory:stamp:read')
+
+  if not row then return false, 'no row' end
+
+  local existing = row.metadata
+  if existing == nil or existing == '' then existing = '{}' end
+
+  local ok, merged = pcall(function()
+    local t = json.decode(existing) or {}
+    for k, v in pairs(patch) do t[k] = v end
+    return json.encode(t)
+  end)
+
+  if not ok then return false, 'merge failed' end
+
+  Db.update([[
+    UPDATE inventory_items SET metadata = ? WHERE id = ? AND character_id = ?
+  ]], { merged, itemId, characterId }, 'inventory:stamp:write')
+
+  return true, nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Life cycle
 -- ---------------------------------------------------------------------------
@@ -652,6 +690,7 @@ exports('push', Inventory.push)
 exports('registerUseHandler', Inventory.registerUseHandler)
 exports('unregisterUseHandler', Inventory.unregisterUseHandler)
 exports('transferBetween', Inventory.transferBetween)
+exports('stampMetadata', Inventory.stampMetadata)
 
 -- ---------------------------------------------------------------------------
 -- NUI-driven actions
@@ -677,4 +716,59 @@ RegisterNetEvent('nifty:server:discardItem', function(payload)
   local cid = Identity.getActiveCharacter(src)
   if not cid then return end
   Inventory.remove(cid, payload.code, payload.quantity, payload.itemId)
+end)
+
+-- Drop-to-world: removes the inventory row and spawns a placeholder
+-- world prop at the player-supplied coordinates. The server validates
+-- proximity to the local player so a hostile client cannot teleport
+-- items anywhere on the map.
+RegisterNetEvent('nifty:server:discardItemOnGround', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local cid = Identity.getActiveCharacter(src)
+  if not cid then return end
+
+  local ped = GetPlayerPed(src)
+  if not ped or ped == 0 then return end
+  local me = GetEntityCoords(ped)
+  if not me then return end
+
+  -- Coords must be within 8 metres of the player's actual position -
+  -- defend against trivial coord-tampering exploits. The check is
+  -- simple (Chebyshev on the in-plane distance) because altitude
+  -- is much less interesting for inventory drops.
+  local x, y, z = tonumber(payload.x), tonumber(payload.y), tonumber(payload.z)
+  if not x or not y or not z then return end
+  if math.abs(x - me.x) > 8 or math.abs(y - me.y) > 8 then return end
+
+  -- Remove first. If the row was already gone or the code didn't match,
+  -- we do not spawn a phantom prop.
+  local row = Inventory.view(cid) or { items = {} }
+  local matched
+  for _, it in ipairs(row.items or {}) do
+    if it.id == payload.itemId and it.code == payload.code then
+      matched = it
+      break
+    end
+  end
+  if not matched then return end
+
+  Inventory.remove(cid, payload.code, payload.quantity or 1, payload.itemId)
+
+  -- Spawn a placeholder world prop. V1: a single model for every drop.
+  -- Future iterations map (item code) -> representative GTA prop.
+  local PROP_HASH = `hei_prop_carrier_bag_02a`
+  local entity = CreateObject(PROP_HASH, x, y, z, true, true, false)
+  if entity and entity ~= 0 then
+    SetEntityAsMissionEntity(entity, true, true)
+    PlaceObjectOnGroundProperly(entity)
+    -- Despawn timer: 5 minutes is long enough that a player walking
+    -- back to where they dropped finds the prop, short enough that the
+    -- map does not accumulate litter after a busy session.
+    SetTimeout(function()
+      if DoesEntityExist(entity) then DeleteEntity(entity) end
+    end, 5 * 60 * 1000, 'inventory:drop:cleanup')
+  end
+
+  TriggerClientEvent('nifty:client:discardItemOnGround', src, { ok = true })
 end)

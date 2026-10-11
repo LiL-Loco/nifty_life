@@ -978,14 +978,32 @@ RegisterNetEvent('nifty:server:inventoryGive', function(payload)
   -- row's identity (the (kind, slot, drawable, texture) tuple for
   -- accessories, the outfit_id for outfits). The receiver's
   -- clothingSaveInventoryItem reads metadata.giver_name when present to
-  -- compose the wardrobe suffix; we leave that stamping to the client UI
-  -- that armed the give, because the name is a player-visible string.
+  -- compose the wardrobe suffix; we stamp it here so the wardrobe render
+  -- path does not need any separate plumbing. GetPlayerName returns the
+  -- display string FiveM already shows in the player list (first + last).
   local ok, err = Inventory.transferBetween(srcCid, targetCid, code,
                                             quantity, itemId)
   if not ok then
     TriggerClientEvent('nifty:client:inventoryGive', src,
                        { ok = false, reason = err })
     return
+  end
+
+  -- Find the destination row that was just inserted and stamp
+  -- giver_name. The row carries the same code and the same metadata
+  -- shape as the source, so the lookup-by-code is unique within the
+  -- recipient's bag.
+  local giverName = GetPlayerName(src) or ('Spieler ' .. tostring(src))
+  local targetView = Inventory.view(targetCid) or { items = {} }
+  local matchedId
+  for _, it in ipairs(targetView.items or {}) do
+    if it.code == code then
+      matchedId = it.id
+      break
+    end
+  end
+  if matchedId then
+    Inventory.stampMetadata(targetCid, matchedId, { giver_name = giverName })
   end
 
   TriggerClientEvent('nifty:client:inventoryGive', src, {
