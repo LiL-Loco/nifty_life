@@ -173,16 +173,25 @@ exports('select', function(...)
 end)
 
 exports('separator', function(...)
-  local label = ...
-  -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
-  -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
-  -- New() function has a bug in the upstream library (Text and
-  -- Description are not function parameters but undef globals, so the
-  -- initial label is hardcoded "N/A"). We work around that by
-  -- setting the label after construction via UIMenuItem:Text().
-  local item = UIMenuSeparatorItem.New()
-  item:Text(label or '')
-  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
+  print(('[nifty-ui] separator called, n_args=%d, LastBuiltMenu=%s'):format(select('#', ...), tostring(LastBuiltMenu)))
+  local ok, result = pcall(function()
+    local label = ...
+    print(('[nifty-ui]   label=%s'):format(tostring(label)))
+    local item = UIMenuSeparatorItem.New()
+    print(('[nifty-ui]   item created, type=%s'):format(type(item)))
+    item:Text(label or '')
+    print('[nifty-ui]   text set')
+    if LastBuiltMenu then
+      print(('[nifty-ui]   adding to LastBuiltMenu, type=%s'):format(type(LastBuiltMenu)))
+      LastBuiltMenu:AddItem(item)
+      print('[nifty-ui]   added')
+    else
+      print('[nifty-ui]   LastBuiltMenu is nil, skipping AddItem')
+    end
+  end)
+  if not ok then
+    print(('[nifty-ui] separator error: %s'):format(tostring(result)))
+  end
 end)
 
 -- Text input. NativeUI has no text input widget, so we use FiveM's
