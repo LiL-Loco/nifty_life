@@ -21,7 +21,7 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-local Menu = require('_menu')
+local Menu = require('client._menu')
 
 -- Mirrors nifty-creator/client/cl_creator.lua COMPONENT_LABELS / PROP_LABELS.
 local COMPONENT_LABELS = {

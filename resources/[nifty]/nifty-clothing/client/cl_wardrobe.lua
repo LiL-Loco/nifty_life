@@ -20,7 +20,7 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-local Menu = require('_menu')
+local Menu = require('client._menu')
 
 -- Slot labels - same table as in cl_store.lua. Keeping a copy here so the
 -- wardrobe can be built without depending on the store loading first.
