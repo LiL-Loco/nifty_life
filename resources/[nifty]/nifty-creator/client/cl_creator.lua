@@ -74,6 +74,11 @@ function Menu.menu(spec)
   if type(spec.onClose) == 'function' then
     m.OnMenuClose = function(_) pcall(spec.onClose) end
   end
+  -- Mouse at the screen edge rotates the gameplay camera by default in
+  -- NativeUI; we want the camera to stay where the Q/E turn and the
+  -- face/body switch put it. Disabling this also lets the mouse
+  -- stay outside the menu without dragging the world around.
+  m.Settings.MouseEdgeEnabled = false
   return m
 end
 
