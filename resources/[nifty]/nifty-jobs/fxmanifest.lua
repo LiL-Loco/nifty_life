@@ -19,3 +19,4 @@ dependencies {
   'nifty-economy',
   'nifty-inventory',
 }
+lua54 'yes'

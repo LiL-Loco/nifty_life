@@ -28,3 +28,4 @@ dependencies {
   'nifty-world',
   'nifty-chat',
 }
+lua54 'yes'

@@ -51,3 +51,4 @@ client_script 'client/cl_menu.lua'
 dependencies {
   '/onesync',
 }
+lua54 'yes'

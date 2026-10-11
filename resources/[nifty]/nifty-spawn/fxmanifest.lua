@@ -18,3 +18,4 @@ shared_scripts {
 client_script 'client/cl_spawn.lua'
 
 dependencies { 'nifty-core', 'nifty-ui' }
+lua54 'yes'

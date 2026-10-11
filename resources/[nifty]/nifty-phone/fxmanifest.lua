@@ -28,3 +28,4 @@ dependencies {
   'nifty-inventory',
   'nifty-ui',
 }
+lua54 'yes'

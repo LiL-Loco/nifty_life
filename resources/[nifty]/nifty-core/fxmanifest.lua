@@ -54,3 +54,4 @@ dependencies {
   '/server:4500',
   'nifty-ui',
 }
+lua54 'yes'

@@ -15,3 +15,4 @@ resource_type 'map' { gameTypes = { ['basic-gamemode'] = true } }
 map 'map.lua'
 
 games { 'gta5' }
+lua54 'yes'

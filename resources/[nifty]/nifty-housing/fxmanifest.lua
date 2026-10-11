@@ -22,3 +22,4 @@ dependencies {
   'nifty-economy',
   'nifty-ui',
 }
+lua54 'yes'

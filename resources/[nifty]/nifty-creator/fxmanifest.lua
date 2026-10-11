@@ -70,3 +70,4 @@ dependencies {
   'nifty-core',
   'nifty-ui',
 }
+lua54 'yes'

@@ -18,3 +18,4 @@ dependencies {
   'nifty-core',
   'nifty-economy',
 }
+lua54 'yes'

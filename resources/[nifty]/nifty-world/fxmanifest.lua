@@ -55,3 +55,4 @@ dependencies {
   'nifty-clothing',
   'nifty-ui',
 }
+lua54 'yes'
