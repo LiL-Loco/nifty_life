@@ -58,26 +58,50 @@ server_script 'server/sv_facade.lua'
 
 -- nifty-spawn (absorbed). Runs on the client only - server does not deal with
 -- the spawn picker. cl_spawn.lua reads Spawn.Locations and Spawn.CAM_* from
--- shared/spawn.lua (loaded earlier in the shared_scripts block).
+-- shared/spawn.lua (loaded earlier in the shared_scripts block). It also
+-- loads the NativeUI library directly (the lbg-char pattern) so the
+-- spawn picker has its own menu pool, independent of every other
+-- resource's menu.
+client_script '@nifty-ui/Wrapper/Utility.lua'
+client_script '@nifty-ui/UIElements/UIVisual.lua'
+client_script '@nifty-ui/UIElements/UIResRectangle.lua'
+client_script '@nifty-ui/UIElements/UIResText.lua'
+client_script '@nifty-ui/UIElements/Sprite.lua'
+client_script '@nifty-ui/UIMenu/elements/Badge.lua'
+client_script '@nifty-ui/UIMenu/elements/Colours.lua'
+client_script '@nifty-ui/UIMenu/elements/ColoursPanel.lua'
+client_script '@nifty-ui/UIMenu/elements/StringMeasurer.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuCheckboxItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuListItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderHeritageItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuColouredItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuProgressItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderProgressItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSeparatorItem.lua'
+client_script '@nifty-ui/UIMenu/UIMenu.lua'
+client_script '@nifty-ui/UIMenu/MenuPool.lua'
+client_script '@nifty-ui/NativeUI.lua'
 client_script 'client/cl_spawn.lua'
 
--- nifty-ui (sibling resource). The focus broker (cl_focus) stays here
--- so chat and phone can keep using it. The menu moved to nifty-ui,
--- which is a real Lua menu library (NativeUI-Lua-Reloaded) that draws
--- directly to the screen with GTA natives - no NUI, no CEF, no focus
--- to arbitrate against chat/phone. cl_spawn and the four other caller
--- files (creator, wardrobe, store, spawn) now import
--- exports['nifty-ui'] instead of exports['nifty-core'].
+-- The focus broker (cl_focus) stays here so chat and phone can keep using
+-- it. The menu moved to nifty-ui (now vendored directly by every
+-- resource that needs it).
 client_script 'client/cl_focus.lua'
 client_script 'client/cl_welcome.lua'
 
--- ui/menu.html, ui/menu.css, ui/menu.js moved to nifty-ui (the native
--- menu has no NUI page). ui/base.css and ui/base.js stay: chat and
--- phone still load base.js for the Nifty.nui fetch helper, and base.css
--- is the shared colour-token file.
+-- ui/base.css and ui/base.js stay: chat and phone still load base.js
+-- for the Nifty.nui fetch helper, and base.css is the shared colour-token
+-- file. The native menu does not need its own NUI page.
+--
+-- @nifty-ui/stream/*.ytd provides the texture atlases the menu library
+-- uses (commonmenu, shop_arrows_upanddown, etc.). They must be in this
+-- resource's `files` block so the GTA streaming system registers them.
 files {
   'ui/base.css',
   'ui/base.js',
+  '@nifty-ui/stream/*.ytd',
 }
 
 -- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker
@@ -117,5 +141,4 @@ spawnpoint 'Flughafen' {
 dependencies {
   '/onesync',
   '/server:4500',
-  'nifty-ui',
 }

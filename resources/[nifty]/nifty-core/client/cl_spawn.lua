@@ -1,5 +1,7 @@
 --[[
-  Spawn-location picker, powered by the nifty-ui Lemon menu.
+  Spawn-location picker, menu drawn directly with NativeUI (lbg-char
+  pattern). The menu library is loaded via @nifty-ui/... paths in the
+  manifest - no cross-resource shim, no proxy.
 
   Logik/Idee angelehnt an qb-spawn (qbcore-fivem/qb-spawn, GPL-3.0). Kein
   Code übernommen - das Picker-Konzept ist allgemein, und das nifty-ui-
@@ -23,8 +25,68 @@
 ]]
 
 local RESOURCE = GetCurrentResourceName()
---- Menu DSL lives in the same resource now (was nifty-ui, absorbed into nifty-core).
-local Menu = exports['nifty-ui']
+
+-- Local menu surface. Same lbg-char pattern as nifty-creator: the
+-- NativeUI library is loaded locally via @nifty-ui/... paths in the
+-- manifest, and we wrap the NativeUI factory calls in a small file-
+-- local Menu table so the call sites below stay readable.
+local _pool = NativeUI.CreatePool()
+_pool:MouseControlsEnabled(true)
+_pool:ControlDisablingEnabled(true)
+
+local Menu = {}
+
+function Menu.menu(spec)
+  spec = spec or {}
+  local x = (spec.dock == 'right') and 1300 or 0
+  local m = NativeUI.CreateMenu(
+    spec.title or '',
+    spec.subtitle or '',
+    x, 0,
+    'commonmenu', 'interaction_bgd',
+    0,
+    255, 255, 255, 255
+  )
+  if type(spec.onClose) == 'function' then
+    m.OnMenuClose = function(_) pcall(spec.onClose) end
+  end
+  return m
+end
+
+function Menu.button(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _) pcall(spec.onSelect) end
+  menu:AddItem(item)
+end
+
+function Menu.closeMenu(_RESOURCE, _reason)
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then other.Visible(false) end
+  end
+end
+
+function Menu.openMenu(_RESOURCE, menu)
+  _pool:Add(menu)
+  menu:Visible(true)
+  return true
+end
+
+function Menu.isOpen()
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then return true end
+  end
+  return false
+end
+
+-- Single render thread drives the pool. lbg-char style.
+Citizen.CreateThread(function()
+  while true do
+    _pool:ProcessMenus()
+    Citizen.Wait(0)
+  end
+end)
 
 --- Module state. Set when openSpawnPicker is called, cleared on close.
 local locations   = nil

@@ -28,9 +28,42 @@ server_script 'server/sv_clothing.lua'
 server_script 'server/sv_owned.lua'
 server_script 'server/sv_drops.lua'
 
+-- @nifty-ui/stream/*.ytd: texture atlases the menu library uses
+-- (commonmenu, shop_arrows_upanddown, etc.). Must be in the files
+-- block so the GTA streaming system registers them.
+files {
+  '@nifty-ui/stream/*.ytd',
+}
+
+-- The two menu-driven files (cl_wardrobe, cl_store) load the NativeUI
+-- library directly via @nifty-ui/... paths, the lbg-char pattern. They
+-- have their own local Menu table and MenuPool, independent of every
+-- other resource's menu.
 client_script 'client/cl_hood.lua'
 client_script 'client/cl_targets.lua'
 client_script 'client/cl_drops.lua'
+client_script 'client/_menu.lua'
+client_script '@nifty-ui/Wrapper/Utility.lua'
+client_script '@nifty-ui/UIElements/UIVisual.lua'
+client_script '@nifty-ui/UIElements/UIResRectangle.lua'
+client_script '@nifty-ui/UIElements/UIResText.lua'
+client_script '@nifty-ui/UIElements/Sprite.lua'
+client_script '@nifty-ui/UIMenu/elements/Badge.lua'
+client_script '@nifty-ui/UIMenu/elements/Colours.lua'
+client_script '@nifty-ui/UIMenu/elements/ColoursPanel.lua'
+client_script '@nifty-ui/UIMenu/elements/StringMeasurer.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuCheckboxItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuListItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderHeritageItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuColouredItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuProgressItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSliderProgressItem.lua'
+client_script '@nifty-ui/UIMenu/items/UIMenuSeparatorItem.lua'
+client_script '@nifty-ui/UIMenu/UIMenu.lua'
+client_script '@nifty-ui/UIMenu/MenuPool.lua'
+client_script '@nifty-ui/NativeUI.lua'
 client_script 'client/cl_wardrobe.lua'
 client_script 'client/cl_store.lua'
 
