@@ -29,6 +29,7 @@ version '0.1.0'
 shared_scripts {
   'shared/core.lua',
   '@nifty-core/shared/constants.lua',
+  '@nifty-core/shared/appearance_config.lua',
 }
 
 -- NO ui_page HERE. ON PURPOSE.
