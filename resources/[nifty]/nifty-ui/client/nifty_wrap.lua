@@ -349,14 +349,17 @@ exports('holder', function(...)
 end)
 
 -- ----- Render thread -----
--- NativeUI menus need ProcessMenus / ProcessControl / ProcessMouse /
--- Draw every frame. One thread, single pool.
+-- NativeUI menus need ProcessControl / ProcessMouse / Draw every
+-- frame. MenuPool:ProcessMenus() runs all three in the documented
+-- order (Control -> Mouse -> Draw). The earlier version called each
+-- one explicitly after ProcessMenus, which doubled CPU and GPU work
+-- for no benefit - the library's self.UpPressed / self.DownPressed
+-- flags already make ProcessControl safe to re-enter, and Draw /
+-- ProcessMouse are idempotent within a frame, so the duplicates
+-- were dead work. lbg-char's reference does it this way too.
 Citizen.CreateThread(function()
   while true do
     pool:ProcessMenus()
-    pool:ProcessControl()
-    pool:ProcessMouse()
-    pool:Draw()
     Citizen.Wait(0)
   end
 end)
