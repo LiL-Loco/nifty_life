@@ -130,9 +130,12 @@ local function enterWorld(src, character, hasSession)
   Inventory:push(src, character.id)
   Stuetze:start(src, character.id)
 
-  -- Resume at the player's last known position if the column has one. A null
-  -- `position` means "first time after the creator finished" and the picker
-  -- opens. A malformed value falls back to the default spawn, same as null.
+  -- Resume at the player's last known position if the column has one. A
+  -- null `position` means "first time after the creator finished" - use
+  -- the character's `spawn_point` from appearance_config.lua as the
+  -- default landing site, NOT the picker. The picker is only opened by
+  -- an explicit user action (not yet wired), never automatically on
+  -- connect. A malformed value falls back to the default spawn, same as null.
   local lastPosition = nil
   if character.position and character.position ~= '' then
     local ok, decoded = pcall(json.decode, character.position)
