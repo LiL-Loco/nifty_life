@@ -241,8 +241,17 @@ end
 ---
 --- Changing the model invalidates the old ped handle, so every later
 --- `PlayerPedId()` in this file must be re-fetched rather than taken from a cache.
+---
+--- `joaat(name)` returns nil when the name is not registered in the running game
+--- build. Passing nil to SetPlayerModel is a hard client crash, so we refuse
+--- the call and log instead. The creator UI stays usable; only the model
+--- preview is wrong, which is the lesser of two failures.
 local function respawnModel()
   local hash = joaat(currentModel)
+  if not hash or hash == 0 then
+    print(('[%s] respawnModel: model "%s" not registered in this build, skipping SetPlayerModel'):format(RESOURCE, tostring(currentModel)))
+    return PlayerPedId()
+  end
   SetPlayerModel(PlayerId(), hash)
   SetModelAsNoLongerNeeded(hash)
   return PlayerPedId()
