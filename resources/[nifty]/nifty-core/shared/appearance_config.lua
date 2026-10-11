@@ -15,8 +15,20 @@
 --- event. The allowlist below is what the server validates against instead.
 
 AppearanceConfig = {
-  --- Hard bounds. Real drawable and texture counts sit comfortably inside these;
-  --- anything beyond is malformed rather than exotic.
+  --- Hard bounds. A drawable index above these is malformed rather than exotic,
+  --- and the server has no way to ask the engine what actually exists (see the note
+  --- at the top of this file) - so this number is the ONLY thing standing between a
+  --- client and an arbitrary integer in the database.
+  ---
+  --- THEY ARE ESTIMATES, NOT MEASUREMENTS. The client knows the real counts - it
+  --- asks the engine - and the creator logs them, so the first boot produces the
+  --- numbers these bounds should actually be. Until then they are wide enough that
+  --- no real garment is refused and narrow enough that 10^9 is not.
+  ---
+  --- The failure mode if they are too tight is worth naming, because it is not
+  --- obvious: the player picks a hat, the server refuses the save with "drawable out
+  --- of range", and the creator says "Das Aussehen konnte nicht gespeichert werden"
+  --- for a hat that demonstrably exists on screen.
   MAX_DRAWABLE = 300,
   MAX_TEXTURE  = 80,
 
@@ -56,6 +68,16 @@ AppearanceConfig = {
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.
+---
+--- ONE, ON PURPOSE. Not a truncation. A spawn point is a place a character can
+--- begin, and a server with one weekend block and one map has exactly one answer to
+--- "where does a new character wake up" - the airport, because it is where the
+--- game itself puts a fresh ped and nobody has to be told about it.
+---
+--- The structure is a TABLE anyway, because `characters.spawn_point` is a string
+--- column and `Validate.spawnPoint` resolves it against this list. Adding a second
+--- entry later is a one-line change and needs no migration; there is simply no
+--- second entry now, and `default` is what the migration 021 procedure writes.
 SpawnPoints = {
   default = {
     label  = 'Los Santos International',

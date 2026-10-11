@@ -145,8 +145,16 @@ end
 
 --- Measure the whole ped. Once per model, not once per menu: a few hundred native
 --- calls, and the answer cannot change while the process lives.
+---
+--- The maxima are reported because `AppearanceConfig.MAX_DRAWABLE` /
+--- `MAX_TEXTURE` are the server's only defence against a nonsense index, and they
+--- were written as estimates. This is where the real numbers come from - and the
+--- warning below exists so that a bound which is too tight says so at BOOT instead
+--- of surfacing hours later as a player who cannot save a hat that is visibly on
+--- their head.
 local function discoverSlots()
   local ped = PlayerPedId()
+  local maxDrawables, maxTextures = 0, 0
 
   for _, kind in ipairs({ 'components', 'props' }) do
     local isProp = (kind == 'props')
@@ -157,6 +165,11 @@ local function discoverSlots()
       if #options > 0 then
         slots[kind][id] = options
       end
+
+      for _, option in ipairs(options) do
+        if option.drawables > maxDrawables then maxDrawables = option.drawables end
+        if option.textures > maxTextures then maxTextures = option.textures end
+      end
     end
   end
 
@@ -164,8 +177,16 @@ local function discoverSlots()
   for _ in pairs(slots.components) do components = components + 1 end
   for _ in pairs(slots.props) do props = props + 1 end
 
-  print(('[%s] %s: %d component slots, %d prop slots (measured, not assumed)'):format(
-    RESOURCE, currentModel, components, props))
+  print(('[%s] %s: %d component slots, %d prop slots; highest drawable %d, highest texture %d'):format(
+    RESOURCE, currentModel, components, props, maxDrawables, maxTextures))
+
+  if maxDrawables > AppearanceConfig.MAX_DRAWABLE or maxTextures > AppearanceConfig.MAX_TEXTURE then
+    print(('[%s] WARNING AppearanceConfig is too tight - the server will refuse saves. ' ..
+      'Drawables reach %d (bound %d), textures reach %d (bound %d). Raise MAX_DRAWABLE / ' ..
+      'MAX_TEXTURE to at least those values, or the creator will reject legitimate clothing.'):format(
+      RESOURCE, maxDrawables, AppearanceConfig.MAX_DRAWABLE,
+      maxTextures, AppearanceConfig.MAX_TEXTURE))
+  end
 end
 
 --- Prop ids sorted, so the accessory rows do not move between sessions.
