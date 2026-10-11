@@ -207,6 +207,41 @@ function Menu.input(menu, label, spec)
   menu:AddItem(item)
 end
 
+-- Visual colour picker. The row looks like a normal item; activating it
+-- expands a `UIMenuColourPanel` underneath that shows the palette as
+-- a strip of swatches with a cursor, plus left/right arrows. Clicking
+-- a swatch or pressing left/right changes the selection and fires
+-- onChange with the new 1-based index.
+--
+-- spec: {palette=table of {R,G,B,A}, value=initial 1-based index,
+--        panelTitle=optional label inside the panel,
+--        onChange=function(colour_1based), description=, disabled=}
+function Menu.colourPicker(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  if type(spec.palette) == 'table' and #spec.palette > 0 then
+    local panel = NativeUI.CreateColourPanel(spec.panelTitle or label or 'Farbe', spec.palette)
+    -- Set the initial selection WITHOUT firing onChange. The library's
+    -- CurrentSelection(value, PreventUpdate) skips UpdateParent when
+    -- PreventUpdate is truthy - that is what would otherwise fire the
+    -- parent's ActivatedPanel and run the caller's onChange during
+    -- construction.
+    local initial = tonumber(spec.value) or 1
+    if initial < 1 then initial = 1 end
+    if initial > #spec.palette then initial = #spec.palette end
+    panel:CurrentSelection(initial, true)
+    item:AddPanel(panel)
+    -- ActivatedPanel is the per-item callback the colour panel calls
+    -- on every change. The library passes (menu, item, panel, colour)
+    -- (UIMenuColourPanel.lua:167). We only need the colour.
+    item.ActivatedPanel = function(_, _, _, colour)
+      pcall(spec.onChange, colour)
+    end
+  end
+  menu:AddItem(item)
+end
+
 function Menu.openMenu(_RESOURCE, menu)
   _pool:Add(menu)
   menu:Visible(true)
@@ -249,6 +284,77 @@ function Menu.itemsCount(menu)
   if type(menu) ~= 'table' or not menu.Items then return 0 end
   return #menu.Items
 end
+
+--- Colour palettes for the UIMenuColourPanel picker.
+---
+--- The game's head-overlay colours are looked up by index in two palettes:
+--- the hair palette (`_GetNumHairColors` returns its length) and the
+--- makeup palette (`_GetNumMakeupColors`). We hardcode a curated set
+--- of the most useful swatches - enough to cover the common range
+--- without forcing the player to scroll through every game colour.
+--- Extend by appending {R, G, B, A} tables; the panel paginates 8 at
+--- a time, so 27 entries is four quick swipes.
+local HAIR_PALETTE = {
+  { 28,  31,  33,  255 },  --  1 schwarz
+  { 39,  42,  44,  255 },  --  2 fast schwarz
+  { 49,  46,  44,  255 },  --  3 dunkelbraun
+  { 53,  38,  28,  255 },  --  4 espresso
+  { 75,  50,  31,  255 },  --  5 dunkles nussbraun
+  { 92,  59,  36,  255 },  --  6 kastanie
+  { 109, 76,  53,  255 },  --  7 mittelbraun
+  { 107, 80,  59,  255 },  --  8 caramel
+  { 118, 92,  69,  255 },  --  9 tabak
+  { 127, 104, 78,  255 },  -- 10 hellbraun
+  { 153, 129, 93,  255 },  -- 11 dunkelblond
+  { 167, 147, 105, 255 },  -- 12 aschblond
+  { 175, 156, 112, 255 },  -- 13 warmes blond
+  { 187, 160, 99,  255 },  -- 14 goldblond
+  { 214, 185, 123, 255 },  -- 15 hellblond
+  { 218, 195, 142, 255 },  -- 16 platinblond
+  { 159, 127, 89,  255 },  -- 17 mausbraun
+  { 132, 80,  57,  255 },  -- 18 mahagoni
+  { 104, 43,  31,  255 },  -- 19 weinrot
+  { 97,  18,  12,  255 },  -- 20 bordeaux
+  { 100, 15,  10,  255 },  -- 21 dunkelrot
+  { 124, 20,  15,  255 },  -- 22 ziegelrot
+  { 160, 46,  25,  255 },  -- 23 rot
+  { 182, 75,  40,  255 },  -- 24 kupfer
+  { 162, 80,  47,  255 },  -- 25 rotbraun
+  { 170, 78,  43,  255 },  -- 26 rostrotdunkel
+  { 98,  98,  98,  255 },  -- 27 silbergrau
+}
+
+-- The makeup palette uses lighter, more saturated colours than the
+-- hair palette. Same indexing shape: append entries to extend.
+local MAKEUP_PALETTE = {
+  { 240, 200, 195, 255 },  --  1 haut-hell
+  { 220, 170, 165, 255 },  --  2 haut-rose
+  { 200, 140, 130, 255 },  --  3 haut-pfirsich
+  { 180, 110, 100, 255 },  --  4 haut-bronze
+  { 255, 220, 210, 255 },  --  5 pfirsich-creme
+  { 255, 180, 175, 255 },  --  6 rose
+  { 250, 150, 145, 255 },  --  7 altrosa
+  { 240, 120, 115, 255 },  --  8 lachs
+  { 230, 100, 95,  255 },  --  9 koralle
+  { 220, 80,  75,  255 },  -- 10 rot-hell
+  { 200, 60,  55,  255 },  -- 11 rot-mittel
+  { 180, 40,  35,  255 },  -- 12 rot-dunkel
+  { 255, 200, 50,  255 },  -- 13 sonnengelb
+  { 240, 170, 30,  255 },  -- 14 gold
+  { 220, 140, 20,  255 },  -- 15 bernstein
+  { 190, 110, 15,  255 },  -- 16 bronze
+  { 150, 80,  10,  255 },  -- 17 kupfer-dunkel
+  { 100, 200, 100, 255 },  -- 18 hellgruen
+  { 60,  160, 60,  255 },  -- 19 gruen
+  { 30,  120, 30,  255 },  -- 20 dunkelgruen
+  { 100, 180, 220, 255 },  -- 21 himmelblau
+  { 60,  140, 200, 255 },  -- 22 meerblau
+  { 30,  100, 180, 255 },  -- 23 koenigsblau
+  { 150, 100, 200, 255 },  -- 24 flieder
+  { 120, 60,  170, 255 },  -- 25 lila
+  { 80,  20,  140, 255 },  -- 26 dunkellila
+  { 240, 240, 240, 255 },  -- 27 weiss-zart
+}
 
 --- Our own German display labels, and the vendored item data.
 ---
@@ -962,20 +1068,6 @@ local function overlayStyleCount(id)
   return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
 end
 
---- How many colours a palette holds, bounded. 1 = hair palette, 2 = makeup.
-local function colourCount(colourType)
-  local n = natives()
-  local fn = (colourType == 2) and n.numMakeupColors or n.numHairColors
-  if type(fn) ~= 'function' then return AppearanceConfig.MAX_OVERLAY_COLOUR + 1 end
-
-  local ok, count = pcall(fn)
-  if not ok or type(count) ~= 'number' or count <= 0 then
-    return AppearanceConfig.MAX_OVERLAY_COLOUR + 1
-  end
-
-  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_COLOUR)
-end
-
 --- One overlay: style, opacity, and its two colours.
 local function buildOverlayMenu(id)
   local label = OVERLAY_LABELS[id] or ('Overlay ' .. id)
@@ -1045,21 +1137,31 @@ local function buildOverlayMenu(id)
   Menu.separator(menu, 'Farbe')
 
   -- Palette 0 is a fixed grey and has no indices to choose; only 1 and 2 do.
-  for _, entry in ipairs({ { 1, 'Haarfarben' }, { 2, 'Make-up-Farben' } }) do
-    local colourType = entry[1]
-    local max = colourCount(colourType)
-    local value = (current.colourType == colourType) and current.colour or 0
+  -- Each row is a UIMenuItem with a UIMenuColourPanel - the player sees a
+  -- strip of swatches and clicks one instead of dragging a slider to "27".
+  -- The value is the 1-based swatch index the panel reports on every
+  -- change, which we store as the 0-based overlay colour.
+  for _, entry in ipairs({
+    { colourType = 1, label = 'Haarfarben',  palette = HAIR_PALETTE },
+    { colourType = 2, label = 'Make-up-Farben', palette = MAKEUP_PALETTE },
+  }) do
+    local colourType = entry.colourType
+    local palette = entry.palette
+    local value = (current.colourType == colourType) and (current.colour + 1) or 1
+    if value < 1 then value = 1 end
+    if value > #palette then value = #palette end
 
-    Menu.slider(menu, entry[2], {
-      min = 0, max = max, step = 1, value = math.min(value, max),
-      format = function(v) return ('%d / %d'):format(v, max) end,
-      onChange = function(v)
+    Menu.colourPicker(menu, entry.label, {
+      palette = palette,
+      panelTitle = entry.label,
+      value = value,
+      onChange = function(colour)
         local live = face.overlays[tostring(id)] or {}
         face.overlays[tostring(id)] = {
           style = live.style or 0,
           opacity = live.opacity or 1.0,
           colourType = colourType,
-          colour = v,
+          colour = colour - 1,
           secondColour = live.secondColour or 0,
         }
         refresh()
@@ -1111,6 +1213,13 @@ local function buildParentsMenu()
     dock = 'right',
   })
 
+  -- The heritage window draws the two parent face portraits and a small
+  -- resemblance / skin-tone bar in the panel header. It's a `UIMenuWindow`
+  -- subclass; the library draws it between the title and the first row
+  -- every frame. Updating it is just `heritage:Index(mom, dad)`.
+  local heritage = NativeUI.CreateHeritageWindow(face.headBlend.mother, face.headBlend.father)
+  menu:AddWindow(heritage)
+
   Menu.separator(menu, 'Praesets')
 
   Menu.slider(menu, 'Mutter', {
@@ -1118,6 +1227,9 @@ local function buildParentsMenu()
     format = function(value) return Labels.MOTHER(value) end,
     onChange = function(value)
       face.headBlend.mother = value
+      -- The window shows only mom and dad (third person has no portrait),
+      -- so re-index with both values when either changes.
+      heritage:Index(face.headBlend.mother, face.headBlend.father)
       refresh()
       Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
@@ -1128,6 +1240,7 @@ local function buildParentsMenu()
     format = function(value) return Labels.FATHER(value) end,
     onChange = function(value)
       face.headBlend.father = value
+      heritage:Index(face.headBlend.mother, face.headBlend.father)
       refresh()
       Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
@@ -1262,24 +1375,28 @@ local function buildFaceMenu()
 end
 
 --- Hair colour: primary and highlight, both from the hair palette.
+--- Visual swatch picker instead of an opaque index slider.
 local function buildHairColourMenu()
   local menu = Menu.menu({ title = 'Haarfarbe', dock = 'right' })
-  local max = colourCount(1)
 
-  Menu.slider(menu, 'Hauptfarbe', {
-    min = 0, max = max, step = 1, value = math.min(face.hairColour.primary, max),
-    format = function(v) return ('%d / %d'):format(v, max) end,
-    onChange = function(v)
-      face.hairColour.primary = v
+  local function clamp(v) if v < 1 then return 1 end if v > #HAIR_PALETTE then return #HAIR_PALETTE end return v end
+
+  Menu.colourPicker(menu, 'Hauptfarbe', {
+    palette = HAIR_PALETTE,
+    panelTitle = 'Hauptfarbe',
+    value = clamp((face.hairColour.primary or 0) + 1),
+    onChange = function(colour)
+      face.hairColour.primary = colour - 1
       refresh()
     end,
   })
 
-  Menu.slider(menu, 'Strähnen', {
-    min = 0, max = max, step = 1, value = math.min(face.hairColour.highlight, max),
-    format = function(v) return ('%d / %d'):format(v, max) end,
-    onChange = function(v)
-      face.hairColour.highlight = v
+  Menu.colourPicker(menu, 'Strähnen', {
+    palette = HAIR_PALETTE,
+    panelTitle = 'Strähnen',
+    value = clamp((face.hairColour.highlight or 0) + 1),
+    onChange = function(colour)
+      face.hairColour.highlight = colour - 1
       refresh()
     end,
   })
