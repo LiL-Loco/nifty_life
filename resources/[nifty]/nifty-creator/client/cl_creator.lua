@@ -1067,105 +1067,110 @@ end
 
 --- One overlay: style, opacity, and its two colours.
 local function buildOverlayMenu(id)
+  -- lbg-char pattern: one CreateListItem per overlay, with style names
+  -- as entries. Index 1 is "Keins" (disable: opacity 0). Index 2+ maps to
+  -- the engine's style index 0..N. A NativeUI.CreateColourPanel is
+  -- attached when the overlay accepts a colour, and a percentage panel
+  -- for opacity. The list item's OnListChanged reads both panel values
+  -- and the style index, and applies them via SetPedHeadOverlay /
+  -- SetPedHeadOverlayColor.
   local label = OVERLAY_LABELS[id] or ('Overlay ' .. id)
   local current = face.overlays[tostring(id)] or {
     style = 0, opacity = 1.0, colourType = 1, colour = 0, secondColour = 0,
   }
-
   local maxStyle = overlayStyleCount(id)
-  local menu = Menu.menu({ title = label, dock = 'right' })
 
-  -- "Kein" as a button rather than as slider position 0.
-  --
-  -- The game switches an overlay off with style 255, and 255 is deliberately
-  -- outside the stored range here - a saved 255 would be state the player cannot
-  -- see or undo. Style 0 at zero opacity is the same result and is a real value
-  -- the sliders can express. This is why the label list below is read one entry
-  -- LATER than the native style: its first entry is that off-state, not style 0.
-  Menu.button(menu, 'Kein', {
-    description = 'Dieses Merkmal ausschalten.',
-    onSelect = function()
+  local menu = NativeUI.CreateMenu(
+    label, 'Stil, Deckkraft und Farbe.', 1300, 0,
+    'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
+  )
+
+  -- The list: index 1 is the off-state, 2..N+1 are the real styles.
+  -- OnListChanged gets the 1-based list index.
+  local styles = { 'Keins' }
+  for i = 0, maxStyle do
+    styles[i + 2] = Labels.overlayStyle(id, i + 1)
+  end
+
+  -- Pick a reasonable starting list index. A "no overlay" state means
+  -- either opacity 0 or style 0 + opacity 0; we land on "Keins" (index 1).
+  -- A real style maps to index 2 + style.
+  local startIndex = (current.opacity and current.opacity > 0.01) and (current.style + 2) or 1
+  if startIndex < 1 then startIndex = 1 end
+  if startIndex > #styles then startIndex = #styles end
+
+  local styleItem = NativeUI.CreateListItem(label, styles, startIndex,
+    'Stil waehlen. "Keins" schaltet das Merkmal aus.')
+
+  -- Opacity: lbg-char attaches a CreatePercentagePanel alongside the
+  -- colour panel. 0% to 100%, integer percent. The value list is
+  -- {"0%", "1%", ..., "100%"} so the player sees the percentage.
+  local opacityList = {}
+  for i = 0, 100 do opacityList[i + 1] = (i .. '%') end
+  local opacityItem = NativeUI.CreateSliderItem('Deckkraft', opacityList,
+    math.floor(math.clamp((current.opacity or 1.0) * 100, 0, 100)) + 1,
+    'Deckkraft in Prozent (0% = aus).', true)
+  styleItem:AddPanel(opacityItem)
+
+  -- Colour panel for overlays the engine accepts a colour for. The
+  -- current value is clamped into the matching palette; if the stored
+  -- colourType is unknown, default to the first palette's first entry.
+  local palettes = OVERLAY_PALETTES[id]
+  if palettes then
+    -- Pick the active palette + index from the current state.
+    local activeEntry = palettes[1]
+    for _, entry in ipairs(palettes) do
+      if entry[1] == current.colourType then activeEntry = entry end
+    end
+    local activePalette = activeEntry[3]
+    local colourIndex = math.floor((current.colour or 0)) + 1
+    if colourIndex < 1 then colourIndex = 1 end
+    if colourIndex > #activePalette then colourIndex = #activePalette end
+    local colourItem = NativeUI.CreateColourPanel(activeEntry[2], activePalette)
+    colourItem:CurrentSelection(colourIndex, true)
+    styleItem:AddPanel(colourItem)
+  end
+
+  -- The lbg-char style: a single OnListChanged on the item reads the
+  -- current list index AND the attached panel values, and applies the
+  -- whole overlay state in one go. No menu rebuild, no engine calls
+  -- scattered across three handlers.
+  styleItem.OnListChanged = function(_parent, _item, index)
+    if index == 1 then
+      -- "Keins" — disable the overlay (style 0, opacity 0, no colour).
       face.overlays[tostring(id)] = {
         style = 0, opacity = 0.0, colourType = 1, colour = 0, secondColour = 0,
       }
-      refresh()
-      Menu.pushMenu(RESOURCE, buildOverlayMenu(id))
-    end,
-  })
-
-  Menu.separator(menu, 'Stil')
-
-  Menu.slider(menu, 'Stil', {
-    min = 0, max = maxStyle, step = 1, value = math.min(current.style, maxStyle),
-    format = function(value)
-      -- One entry later, because the list starts with the off-state.
-      return Labels.overlayStyle(id, value + 1)
-    end,
-    onChange = function(value)
-      face.overlays[tostring(id)] = {
-        style = value,
-        opacity = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].opacity) or 1.0,
-        colourType = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].colourType) or 1,
-        colour = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].colour) or 0,
-        secondColour = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].secondColour) or 0,
-      }
-      refresh()
-    end,
-  })
-
-  -- Opacity in percent, because the native takes 0.0..1.0 and a slider that shows
-  -- "0.42" for a beard reads as a fault rather than as a setting.
-  Menu.slider(menu, 'Deckkraft', {
-    min = 0, max = 100, step = 1, value = math.floor((current.opacity or 1.0) * 100 + 0.5),
-    format = function(value) return ('%d %%'):format(value) end,
-    onChange = function(value)
+    else
       local live = face.overlays[tostring(id)] or {}
+      local styleValue = index - 2
+      local colourType = (palettes and palettes[1] and palettes[1][1]) or 1
+      local colourValue = 0
+      if palettes then
+        -- Find the panel for the current selection. UIMenuListItem keeps
+        -- its attached panels under .Panels; the colour panel's value
+        -- is what we want.
+        local liveItem = styleItem
+        local livePanels = liveItem.Panels
+        if livePanels and livePanels[1] then
+          -- The colour panel is whichever entry in OVERLAY_PALETTES matches
+          -- colourType. All current overlays have a single colour panel.
+          colourValue = livePanels[1]:CurrentSelection() - 1
+        end
+      end
+      local opacity = opacityItem:CurrentSelection() / 100
       face.overlays[tostring(id)] = {
-        style = live.style or 0,
-        opacity = value / 100,
-        colourType = live.colourType or 1,
-        colour = live.colour or 0,
+        style = styleValue,
+        opacity = opacity,
+        colourType = colourType,
+        colour = colourValue,
         secondColour = live.secondColour or 0,
       }
-      refresh()
-    end,
-  })
-
-  Menu.separator(menu, 'Farbe')
-
-  -- Only overlays that have a colour get pickers, and only the palettes
-  -- the engine accepts for them. Beard (1) is hair-only; Lipstick (8) is
-  -- makeup-only; Makeup (4) accepts both. OVERLAY_PALETTES encodes this
-  -- once so the menu reflects the engine, not the player's reading of it.
-  local palettes = OVERLAY_PALETTES[id]
-  if palettes then
-    for _, entry in ipairs(palettes) do
-      local colourType = entry[1]
-      local pickerLabel = entry[2]
-      local palette = entry[3]
-      local value = (current.colourType == colourType) and (current.colour + 1) or 1
-      if value < 1 then value = 1 end
-      if value > #palette then value = #palette end
-
-      Menu.colourPicker(menu, pickerLabel, {
-        palette = palette,
-        panelTitle = pickerLabel,
-        value = value,
-        onChange = function(colour)
-          local live = face.overlays[tostring(id)] or {}
-          face.overlays[tostring(id)] = {
-            style = live.style or 0,
-            opacity = live.opacity or 1.0,
-            colourType = colourType,
-            colour = colour - 1,
-            secondColour = live.secondColour or 0,
-          }
-          refresh()
-        end,
-      })
     end
+    refresh()
   end
 
+  menu:AddItem(styleItem)
   return menu
 end
 
@@ -1365,50 +1370,57 @@ end
 --- horizontal panel. The cursor position is normalised 0..1; the onChange
 --- handler maps it to the engine's -1..1 range.
 local function buildFaceMenu()
-  local menu = Menu.menu({
-    title = 'Gesichtsform',
-    subtitle = 'Ziehen, um das Gesicht zu formen.',
-    dock = 'right',
-  })
+  -- lbg-char pattern: one CreateSliderItem per face feature, with a
+  -- shared 21-entry value list "-1.0..1.0 in 0.1 steps". The engine's
+  -- SetPedFaceFeature takes -1.0..1.0, the slider's 1-based index maps
+  -- to a fraction -1..1 via (index-11) / 10. Twenty features means twenty
+  -- slider items in one submenu; events wired on the submenu itself.
+  local menu = NativeUI.CreateMenu(
+    'Gesichtsform', 'Zwanzig Schieberegler, -1.0 bis 1.0.', 1300, 0,
+    'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
+  )
 
-  local function setFeature(id, value)
-    -- Sparse: an untouched feature is not stored. A ped whose stored face
-    -- is full of zeros and a ped whose stored face has no entries are the
-    -- same ped, but only one of them round-trips through the database
-    -- identically.
-    if math.abs(value) < 0.001 then
-      face.features[tostring(id)] = nil
-    else
-      face.features[tostring(id)] = value
+  local FeatureList = {}
+  for i = 1, 21 do FeatureList[i] = ('%+.1f'):format((i - 11) / 10) end
+
+  -- Display label and engine index for each face feature. The order
+  -- matches lbg-char: nose (0..5), eyebrows (6..7), cheekbones (8..9),
+  -- cheeks (10), eyes (11), lips (12), jaw (13..14), chin (15..18), neck (19).
+  local FeatureLabels = {
+    'Nasenbreite',     'Nasenbeinhoehe', 'Nasenspitzenlaenge', 'Nasenknochenhoehe', 'Nasenspitze-Tiefe', 'Nasenknochen-Drehung',
+    'Augenbrauen-Tiefe', 'Augenbrauen-Hoehe',
+    'Wangenkochen-Hoehe', 'Wangenkochen-Breite',
+    'Wangen-Breite',
+    'Augenoeffnung',
+    'Lippendicke',
+    'Kieferkochen-Breite', 'Kieferkochen-Tiefe',
+    'Kinn-Hoehe', 'Kinn-Tiefe', 'Kinn-Breite', 'Kinn-Loch',
+    'Hals-Dicke',
+  }
+  local function featureIndex(value) return math.floor((value + 1) * 10) + 1 end
+  local function featureValue(index) return (index - 11) / 10 end
+
+  local FeatureItems = {}
+  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
+    local value = face.features[tostring(id)] or 0.0
+    local item = NativeUI.CreateSliderItem(FeatureLabels[id + 1], FeatureList,
+      featureIndex(value),
+      ('SetPedFaceFeature(' .. id .. ', ' .. ('%+.1f'):format(value) .. ')'),
+      true)
+    menu:AddItem(item)
+    FeatureItems[id] = item
+  end
+
+  menu.OnSliderChange = function(_sender, item, index)
+    -- Dispatch by item identity: the 20 sliders share one handler.
+    for id, stored in pairs(FeatureItems) do
+      if stored == item then
+        face.features[tostring(id)] = featureValue(index)
+        SetPedFaceFeature(PlayerPedId(), id, featureValue(index))
+        refresh()
+        return
+      end
     end
-  end
-
-  for _, g in ipairs(FACE_2D_GROUPS) do
-    local xv = face.features[tostring(g.xId)] or 0.0
-    local yv = face.features[tostring(g.yId)] or 0.0
-    Menu.gridPanel(menu, g.title, {
-      kind = 'grid',
-      top = g.top, bottom = g.bottom, left = g.left, right = g.right,
-      x = (xv + 1) / 2, y = (yv + 1) / 2,
-      onChange = function(pos)
-        setFeature(g.xId, (pos.X or 0.5) * 2 - 1)
-        setFeature(g.yId, (pos.Y or 0.5) * 2 - 1)
-        refresh()
-      end,
-    })
-  end
-
-  for _, g in ipairs(FACE_1D_GROUPS) do
-    local v = face.features[tostring(g.id)] or 0.0
-    Menu.gridPanel(menu, g.title, {
-      kind = 'horizontal',
-      left = g.left, right = g.right,
-      x = (v + 1) / 2,
-      onChange = function(pos)
-        setFeature(g.id, (pos.X or 0.5) * 2 - 1)
-        refresh()
-      end,
-    })
   end
 
   return menu
