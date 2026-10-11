@@ -71,15 +71,54 @@ end)
 --- throw away the clothing the player just picked, roughly forty times a second.
 local function applyFace(ped, appearance)
   -- HEAD BLEND FIRST. It rebuilds the face the overlays are painted onto, so
-  -- applying overlays first and the blend afterwards throws them away. The
-  -- argument order looks wrong and is not: the native takes MOTHER before
-  -- FATHER, and the two shape/skin slots mirror the two id slots.
+  -- applying overlays first and the blend afterwards throws them away.
   if appearance.headBlend and Natives.setHeadBlendData then
     local blend = appearance.headBlend
+
+    -- THE CONVERSION. The engine takes three presets but only two shape weights
+    -- plus one third blend, and derives the actual proportions itself:
+    --
+    --   third  = thirdMix
+    --   mother = (1 - shapeMix) * (1 - thirdMix)
+    --   father =       shapeMix  * (1 - thirdMix)
+    --
+    -- So a player asking for a, b, c gets them back by choosing thirdMix = c and
+    -- shapeMix = b / (a + b) on the NORMALISED weights. Divide all three by one
+    -- and the same face comes out - which is why the sliders can be percentages
+    -- that do not have to add up to anything.
+    --
+    -- Three parents at equal strength is reachable this way: 33 / 33 / 33.
+    --
+    -- This is the ONLY place that conversion exists. The database stores what the
+    -- player set; if a second copy of this arithmetic appeared anywhere, the menu
+    -- and the ped would drift apart on the first save/load round trip.
+    local wm = tonumber(blend.motherWeight) or 0.5
+    local wf = tonumber(blend.fatherWeight) or 0.5
+    local wc = tonumber(blend.thirdWeight) or 0.0
+
+    local total = wm + wf + wc
+    if total <= 0 then
+      -- All three at zero is a request with no answer. Falling back to the plain
+      -- two-parent average is what the menu would show anyway, and returning
+      -- without calling would leave the ped on whatever it had.
+      wm, wf, wc, total = 0.5, 0.5, 0.0, 1.0
+    end
+
+    local parents = wm + wf
+    -- Parents both at zero leaves only the third parent, and shapeMix is then a
+    -- division by zero. 0.5 is the neutral middle, and with no parent weight left
+    -- it has no effect on the result anyway.
+    local shapeMix = (parents > 0) and (wf / parents) or 0.5
+    local thirdMix = wc / total
+
+    -- Argument order looks wrong and is not: MOTHER before FATHER, and the two
+    -- skin slots mirror the two id slots. The third preset supplies both the third
+    -- shape and the third skin tone, because `thirdMix` is shared between them -
+    -- the one degree of freedom the native does not give us.
     Natives.setHeadBlendData(ped,
-      blend.mother, blend.father, 0,
-      blend.mother, blend.father, 0,
-      blend.resemblance or 0.0, blend.skinTone or 0.0, 0.0,
+      blend.mother, blend.father, blend.third,
+      blend.mother, blend.father, blend.third,
+      shapeMix, tonumber(blend.skinTone) or 0.5, thirdMix,
       false)
   end
 

@@ -103,10 +103,19 @@ AppearanceConfig = {
   --- Head blend presets (`SetPedHeadBlendData`). The engine identifies them as
   --- plain indices, not as a name, and the twenty-four "father" entries in
   --- third-party menus are English first names that mean nothing to a German
-  --- player - two of them are the same blend. Presets 0..20 are the fathers,
-  --- 21..45 the mothers; the upper bound is the whole range with room for the
-  --- next content update.
-  MAX_HEADBLEND_PRESET = 63,
+  --- player - two of them are the same blend.
+  ---
+  --- THE RANGE IS OBSERVED, NOT ASKED FOR. There is no native that reports how many
+  --- heritage presets exist, so this bound comes from what the freemode peds
+  --- actually use: 0..20 plus 42..44 on one side, 21..41 plus 45 on the other -
+  --- 46 in total. Offering the slider up to 63 would let a player pick an index
+  --- the engine has no face for, and the result would be whatever it clamps to,
+  --- silently, and looking like the game had ignored them.
+  ---
+  --- The third parent draws from the WHOLE range, not from one side of it. That is
+  --- the point of a third face: it can be whoever, including a preset the
+  --- "mother" list also happens to contain.
+  MAX_HEADBLEND_PRESET = 45,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.

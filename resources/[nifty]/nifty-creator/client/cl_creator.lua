@@ -757,7 +757,29 @@ local function buildOverlayMenu(id)
   return menu
 end
 
---- Parents and the two blends (`SetPedHeadBlendData`).
+--- How the three weights will actually come out as a face.
+---
+--- The sliders do not have to add up to a hundred, so without this the player
+--- cannot tell that 40/40/40 is already a perfectly balanced face. The arithmetic
+--- mirrors the one in nifty-world on purpose - same formula, two places, and if
+--- they ever disagree it will be because one of them was changed alone.
+local function parentsSummary()
+  local wm = tonumber(face.headBlend.motherWeight) or 0.5
+  local wf = tonumber(face.headBlend.fatherWeight) or 0.5
+  local wc = tonumber(face.headBlend.thirdWeight) or 0.0
+  local total = wm + wf + wc
+
+  if total <= 0 then
+    return 'Alle Anteile auf null - es bleibt ein neutrales Gesicht.'
+  end
+
+  return ('Ergebnis: Mutter %d %%, Vater %d %%, dritte Person %d %%'):format(
+    math.floor((wm / total) * 100 + 0.5),
+    math.floor((wf / total) * 100 + 0.5),
+    math.floor((wc / total) * 100 + 0.5))
+end
+
+--- Parents and the three blends (`SetPedHeadBlendData`).
 ---
 --- The engine names these presets with numbers and nothing else. Third-party
 --- menus turn them into English first names, which tells a German player nothing
@@ -772,8 +794,20 @@ local MOTHER_COUNT = 22
 local function buildParentsMenu()
   local menu = Menu:menu({
     title = 'Eltern',
-    subtitle = 'Zwei Presets und zwei Mischungen.',
+    subtitle = parentsSummary(),
     dock = 'right',
+  })
+
+  Menu:separator(menu, 'Praesets')
+
+  Menu:slider(menu, 'Mutter', {
+    min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
+    format = function(value) return Labels.MOTHER(value) end,
+    onChange = function(value)
+      face.headBlend.mother = value
+      refresh()
+      Menu:pushMenu(RESOURCE, buildParentsMenu())
+    end,
   })
 
   Menu:slider(menu, 'Vater', {
@@ -782,39 +816,85 @@ local function buildParentsMenu()
     onChange = function(value)
       face.headBlend.father = value
       refresh()
+      Menu:pushMenu(RESOURCE, buildParentsMenu())
     end,
   })
 
-  Menu:slider(menu, 'Mutter', {
-    min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
-    format = function(value) return Labels.MOTHER(value) end,
+  Menu:slider(menu, 'Dritte Person', {
+    -- The whole preset range, not just the mother block. That is the point of a
+    -- third face: it can be whoever, including a preset the "mother" list also
+    -- contains, and the engine does not care which list a name came from.
+    min = 0, max = AppearanceConfig.MAX_HEADBLEND_PRESET, step = 1, value = face.headBlend.third,
+    format = function(value) return ('Person %d'):format(value + 1) end,
     onChange = function(value)
-      face.headBlend.mother = value
+      face.headBlend.third = value
       refresh()
+      Menu:pushMenu(RESOURCE, buildParentsMenu())
     end,
   })
 
-  Menu:separator(menu, 'Mischung')
+  Menu:separator(menu, 'Anteile')
 
-  -- Percent, because "0.35 Aehnlichkeit" is a fraction nobody reads at a glance,
-  -- and the native takes the fraction anyway.
-  Menu:slider(menu, 'Aehnlichkeit', {
-    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.resemblance or 0.0) * 100 + 0.5),
-    format = function(value) return ('%d %%'):format(value) end,
-    onChange = function(value)
-      face.headBlend.resemblance = value / 100
-      refresh()
-    end,
-  })
+  -- THREE weights, not one resemblance slider.
+  --
+  -- They are percentages that do NOT have to add up to a hundred: the native
+  -- works with ratios, so 33/33/33 and 66/66/66 are the same face. The subtitle
+  -- shows the proportions the engine will actually produce, because a player who
+  -- set 40/40/40 has no way to know it is a perfectly balanced face without being
+  -- told.
+  local weights = {
+    { key = 'motherWeight', label = 'Mutter-Anteil' },
+    { key = 'fatherWeight', label = 'Vater-Anteil' },
+    { key = 'thirdWeight',  label = 'Anteil dritte Person' },
+  }
+
+  for _, weight in ipairs(weights) do
+    local key = weight.key
+    Menu:slider(menu, weight.label, {
+      min = 0, max = 100, step = 1, value = math.floor((face.headBlend[key] or 0.0) * 100 + 0.5),
+      format = function(value) return ('%d'):format(value) end,
+      onChange = function(value)
+        face.headBlend[key] = value / 100
+        refresh()
+        Menu:pushMenu(RESOURCE, buildParentsMenu())
+      end,
+    })
+  end
+
+  Menu:separator(menu, 'Hautton')
 
   Menu:slider(menu, 'Hautton', {
-    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.0) * 100 + 0.5),
+    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.5) * 100 + 0.5),
     format = function(value) return ('%d %%'):format(value) end,
     onChange = function(value)
       face.headBlend.skinTone = value / 100
       refresh()
     end,
   })
+
+  -- One-touch presets for the shapes players actually ask for. Without these,
+  -- "give me a face that is a bit of everyone" means dragging three sliders and
+  -- watching a number that is not the number they are setting.
+  Menu:separator(menu, 'Schnellwahl')
+  for _, preset in ipairs({
+    { label = 'Nur Mutter', w = { 1.0, 0.0, 0.0 } },
+    { label = 'Nur Vater', w = { 0.0, 1.0, 0.0 } },
+    { label = 'Nur dritte Person', w = { 0.0, 0.0, 1.0 } },
+    { label = 'Eltern gleich', w = { 0.5, 0.5, 0.0 } },
+    { label = 'Alle drei gleich', w = { 1 / 3, 1 / 3, 1 / 3 } },
+  }) do
+    local weightsToSet = preset.w
+    Menu:button(menu, preset.label, {
+      description = 'Anteile setzen.',
+      onSelect = function()
+        face.headBlend.motherWeight = weightsToSet[1]
+        face.headBlend.fatherWeight = weightsToSet[2]
+        face.headBlend.thirdWeight = weightsToSet[3]
+        refresh()
+        Menu:pushMenu(RESOURCE, buildParentsMenu())
+      end,
+    })
+  end
 
   return menu
 end
@@ -1225,7 +1305,7 @@ reset = function()
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
   face.eyeColour = 0
-  face.headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 }
+  face.headBlend = { father = 0, mother = 21, third = 21, motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0, skinTone = 0.5 }
 
   local n = natives()
   if n.clearPedDecorations then n.clearPedDecorations(PlayerPedId()) end
@@ -1284,7 +1364,7 @@ exports('openCreator', function(data)
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
   face.eyeColour = 0
-  face.headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 }
+  face.headBlend = { father = 0, mother = 21, third = 21, motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0, skinTone = 0.5 }
 
   -- The probe result is per model, so it is re-run when the model changes. A
   -- female ped has its own tattoo shop, and a map built for the male one would

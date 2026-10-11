@@ -239,20 +239,35 @@ function Validate.eyeColour(value)
   return colour or 0
 end
 
---- Head blend: which mother, which father, and the two mixes.
+--- Head blend: three presets and how much of each.
 ---
---- `resemblance` is the SHAPE mix (0 = entirely the mother's shape, 1 = entirely
---- the father's) and `skinTone` the skin mix. Both 0.0..1.0. They are stored as
---- fractions rather than percentages because that is what the native takes, and a
---- conversion in the middle would be one more place for the two to disagree.
+--- `SetPedHeadBlendData` takes THREE form presets, not two - mother, father and a
+--- third, which is how a face can show all three at once. What it does not have
+--- is three independent weights: the engine derives them from two numbers plus a
+--- third blend, so the weights a player asks for have to be converted on the way
+--- in. See `shapeMix` in nifty-world/client/cl_identity.lua, which is the one
+--- place that conversion happens.
+---
+--- The weights are stored as the player set them, 0..1 and unnormalised. Storing
+--- the engine's derived numbers instead would make the database disagree with
+--- every slider on the menu.
+---
+--- `skinTone` is the mix between the two SKIN presets. It is separate from the
+--- three shape weights because the engine gives it its own parameter - with the
+--- third blend, which it shares, as the one unavoidable exception.
 function Validate.headBlend(value)
   if type(value) ~= 'table' then return nil end
 
   return {
-    father     = boundedInt(value.father, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
-    mother     = boundedInt(value.mother, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
-    resemblance = boundedFloat(value.resemblance, 0.0, 1.0) or 0.0,
-    skinTone   = boundedFloat(value.skinTone, 0.0, 1.0) or 0.0,
+    mother = boundedInt(value.mother, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    father = boundedInt(value.father, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    third  = boundedInt(value.third, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+
+    motherWeight = boundedFloat(value.motherWeight, 0.0, 1.0) or 0.5,
+    fatherWeight = boundedFloat(value.fatherWeight, 0.0, 1.0) or 0.5,
+    thirdWeight  = boundedFloat(value.thirdWeight, 0.0, 1.0) or 0.0,
+
+    skinTone = boundedFloat(value.skinTone, 0.0, 1.0) or 0.5,
   }
 end
 
