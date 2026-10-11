@@ -1202,116 +1202,132 @@ local FATHER_COUNT = 21
 local MOTHER_COUNT = 22
 
 local function buildParentsMenu()
-  local menu = Menu.menu({
-    title = 'Eltern',
-    subtitle = parentsSummary(),
-    dock = 'right',
-  })
+  -- lbg-char pattern: build the menu and its items directly through
+  -- the NativeUI factory calls, wire the events on the menu object
+  -- itself (OnListChange, OnSliderChange) rather than per-item, and
+  -- update the heritage window in real time. No Menu.pushMenu rebuild
+  -- on every change - the only reason the old code rebuilt was to
+  -- refresh the subtitle (parentsSummary). The subtitle is set on the
+  -- menu once here; subsequent weight changes do not need it.
 
-  -- The heritage window draws the two parent face portraits and a small
-  -- resemblance / skin-tone bar in the panel header. Updating it is just
-  -- `heritage:Index(mom, dad)`.
+  local menu = NativeUI.CreateMenu(
+    'Eltern', parentsSummary(), 1300, 0,
+    'commonmenu', 'interaction_bgd', 0,
+    255, 255, 255, 255
+  )
+
+  -- Heritage window: the two parent face portraits in the panel header.
+  -- heritage:Index(mom, dad) updates the previews.
   local heritage = NativeUI.CreateHeritageWindow(face.headBlend.mother, face.headBlend.father)
   menu:AddWindow(heritage)
 
-  Menu.separator(menu, 'Präsets')
+  -- The slider's value list, shared by Resemblance and Skin Tone. Each
+  -- entry is a string the library displays in the bar; the index 1..N
+  -- is what the OnSliderChange callback sees.
+  local ZtO = {}
+  for i = 1, 11 do ZtO[i] = ('%.1f'):format((i - 1) / 10) end
 
-  Menu.slider(menu, 'Mutter', {
-    min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
-    format = function(value) return Labels.MOTHER(value) end,
-    onChange = function(value)
-      face.headBlend.mother = value
-      heritage:Index(face.headBlend.mother, face.headBlend.father)
-      refresh()
-      Menu.pushMenu(RESOURCE, buildParentsMenu())
-    end,
-  })
+  -- 1-based item lists: UIMenuListItem is 1-based, the engine is 0-based.
+  -- We carry the same array the engine wants and let OnListChange
+  -- convert via index - 1.
+  local momItems, dadItems, thirdItems = {}, {}, {}
+  for i = 0, MOTHER_COUNT - 1 do momItems[i + 1] = Labels.MOTHER(i) end
+  for i = 0, FATHER_COUNT - 1 do dadItems[i + 1] = Labels.FATHER(i) end
+  for i = 0, AppearanceConfig.MAX_HEADBLEND_PRESET do thirdItems[i + 1] = ('Person %d'):format(i + 1) end
 
-  Menu.slider(menu, 'Vater', {
-    min = 0, max = FATHER_COUNT - 1, step = 1, value = face.headBlend.father,
-    format = function(value) return Labels.FATHER(value) end,
-    onChange = function(value)
-      face.headBlend.father = value
-      heritage:Index(face.headBlend.mother, face.headBlend.father)
-      refresh()
-      Menu.pushMenu(RESOURCE, buildParentsMenu())
-    end,
-  })
+  local momItem = NativeUI.CreateListItem('Mutter', momItems, (face.headBlend.mother or 0) + 1, 'Wähle die Mutter.')
+  local dadItem = NativeUI.CreateListItem('Vater', dadItems, (face.headBlend.father or 0) + 1, 'Wähle den Vater.')
+  local thirdItem = NativeUI.CreateListItem('Dritte Person', thirdItems, (face.headBlend.third or 0) + 1,
+    'Beliebige weitere Person im Mix.')
+  menu:AddItem(momItem)
+  menu:AddItem(dadItem)
+  menu:AddItem(thirdItem)
 
-  Menu.slider(menu, 'Dritte Person', {
-    -- The whole preset range, not just the mother block. That is the point of a
-    -- third face: it can be whoever, including a preset the "mother" list also
-    -- contains, and the engine does not care which list a name came from.
-    min = 0, max = AppearanceConfig.MAX_HEADBLEND_PRESET, step = 1, value = face.headBlend.third,
-    format = function(value) return ('Person %d'):format(value + 1) end,
-    onChange = function(value)
-      face.headBlend.third = value
-      refresh()
-      Menu.pushMenu(RESOURCE, buildParentsMenu())
-    end,
-  })
+  -- One OnListChange for all three list items. The library passes the
+  -- item that changed, so we dispatch on identity. Updates the state,
+  -- the heritage window, and the engine's head-blend data without a
+  -- menu rebuild.
+  menu.OnListChange = function(_sender, item, index)
+    if item == momItem then
+      face.headBlend.mother = index - 1
+    elseif item == dadItem then
+      face.headBlend.father = index - 1
+    elseif item == thirdItem then
+      face.headBlend.third = index - 1
+    end
+    heritage:Index(face.headBlend.mother, face.headBlend.father)
+    refresh()
+  end
 
-  Menu.separator(menu, 'Anteile')
+  -- Weights and skin tone: a single OnSliderChange dispatches the index
+  -- to the right weight. Slider items use the value-list API (item index
+  -- 1..N); we map back to 0..1 via (index - 1) / (N - 1).
+  local function frac(index, n) return (index - 1) / (n - 1) end
+  local resItem = NativeUI.CreateSliderItem('Ähnlichkeit', ZtO,
+    math.floor((face.headBlend.resemblance or 0.5) * 10) + 1,
+    'Wie sehr die Merkmale von Mutter oder Vater geprägt sind.', true)
 
-  -- THREE weights, not one resemblance slider.
-  --
-  -- They are percentages that do NOT have to add up to a hundred: the native
-  -- works with ratios, so 33/33/33 and 66/66/66 are the same face. The subtitle
-  -- shows the proportions the engine will actually produce, because a player who
-  -- set 40/40/40 has no way to know it is a perfectly balanced face without being
-  -- told.
-  local weights = {
+  -- Half-percent granularity on the three weights: 0..100 in 201 steps.
+  -- The engine reads the ratio, so storing frac01 keeps the precision;
+  -- the right-label shows the percent (0..100, 1 decimal).
+  local halfStep = {}
+  for i = 0, 200 do halfStep[i + 1] = ('%.1f%%'):format(i * 0.5) end
+  local function halfStepIndex(frac01)
+    return math.floor(math.clamp(frac01, 0, 1) * 200) + 1
+  end
+  local weightDefs = {
     { key = 'motherWeight', label = 'Mutter-Anteil' },
     { key = 'fatherWeight', label = 'Vater-Anteil' },
     { key = 'thirdWeight',  label = 'Anteil dritte Person' },
   }
+  local weightMenuItems = {}
+  for _, w in ipairs(weightDefs) do
+    local item = NativeUI.CreateSliderItem(w.label, halfStep,
+      halfStepIndex(face.headBlend[w.key] or 0.0),
+      'Anteil an der Mischung. Die drei Werte addieren sich nicht zu 100 - die Engine rechnet mit Verhältnissen.', true)
+    weightMenuItems[w.key] = item
+    menu:AddItem(item)
+  end
+  local skinItem = NativeUI.CreateSliderItem('Hautton', ZtO,
+    math.floor((face.headBlend.skinTone or 0.5) * 10) + 1,
+    'Hautton aus Mutter oder Vater.', true)
+  menu:AddItem(skinItem)
 
-  for _, weight in ipairs(weights) do
-    local key = weight.key
-    Menu.slider(menu, weight.label, {
-      min = 0, max = 100, step = 1, value = math.floor((face.headBlend[key] or 0.0) * 100 + 0.5),
-      format = function(value) return ('%d'):format(value) end,
-      onChange = function(value)
-        face.headBlend[key] = value / 100
-        refresh()
-        Menu.pushMenu(RESOURCE, buildParentsMenu())
-      end,
-    })
+  menu.OnSliderChange = function(_sender, item, index)
+    if item == resItem then
+      face.headBlend.resemblance = frac(index, #ZtO)
+    elseif item == weightMenuItems.motherWeight then
+      face.headBlend.motherWeight = frac(index, #halfStep)
+    elseif item == weightMenuItems.fatherWeight then
+      face.headBlend.fatherWeight = frac(index, #halfStep)
+    elseif item == weightMenuItems.thirdWeight then
+      face.headBlend.thirdWeight = frac(index, #halfStep)
+    elseif item == skinItem then
+      face.headBlend.skinTone = frac(index, #ZtO)
+    end
+    refresh()
   end
 
-  Menu.separator(menu, 'Hautton')
-
-  Menu.slider(menu, 'Hautton', {
-    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.5) * 100 + 0.5),
-    format = function(value) return ('%d %%'):format(value) end,
-    onChange = function(value)
-      face.headBlend.skinTone = value / 100
-      refresh()
-    end,
-  })
-
-  -- One-touch presets for the shapes players actually ask for. Without these,
-  -- "give me a face that is a bit of everyone" means dragging three sliders and
-  -- watching a number that is not the number they are setting.
-  Menu.separator(menu, 'Schnellwahl')
+  -- One-touch weight presets. The slider's OnSliderChange will fire
+  -- when :Index() moves the cursor, so the weight values sync through
+  -- the regular path - no duplicate state write here.
   for _, preset in ipairs({
-    { label = 'Nur Mutter', w = { 1.0, 0.0, 0.0 } },
-    { label = 'Nur Vater', w = { 0.0, 1.0, 0.0 } },
-    { label = 'Nur dritte Person', w = { 0.0, 0.0, 1.0 } },
-    { label = 'Eltern gleich', w = { 0.5, 0.5, 0.0 } },
-    { label = 'Alle drei gleich', w = { 1 / 3, 1 / 3, 1 / 3 } },
+    { label = 'Nur Mutter',          w = { 1.0, 0.0, 0.0 } },
+    { label = 'Nur Vater',           w = { 0.0, 1.0, 0.0 } },
+    { label = 'Nur dritte Person',   w = { 0.0, 0.0, 1.0 } },
+    { label = 'Eltern gleich',       w = { 0.5, 0.5, 0.0 } },
+    { label = 'Alle drei gleich',    w = { 1 / 3, 1 / 3, 1 / 3 } },
   }) do
-    local weightsToSet = preset.w
-    Menu.button(menu, preset.label, {
-      description = 'Anteile setzen.',
-      onSelect = function()
-        face.headBlend.motherWeight = weightsToSet[1]
-        face.headBlend.fatherWeight = weightsToSet[2]
-        face.headBlend.thirdWeight = weightsToSet[3]
-        refresh()
-        Menu.pushMenu(RESOURCE, buildParentsMenu())
-      end,
-    })
+    local w = preset.w
+    local item = NativeUI.CreateItem(preset.label, 'Anteile setzen.')
+    item.Activated = function(_, _)
+      weightMenuItems.motherWeight:Index(halfStepIndex(w[1]))
+      weightMenuItems.fatherWeight:Index(halfStepIndex(w[2]))
+      weightMenuItems.thirdWeight:Index(halfStepIndex(w[3]))
+      -- The OnSliderChange handler will fire from the Index() calls and
+      -- update face.headBlend.* and refresh. We do not need to do it here.
+    end
+    menu:AddItem(item)
   end
 
   return menu
