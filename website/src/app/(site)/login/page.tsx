@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
 import { signInAction } from '@/lib/account-actions';
+import { Card, Notice } from '@/components/ui';
 import AuthForm from './form';
 
 export const metadata: Metadata = { title: 'Anmelden — Nifty Life 2.0' };
@@ -35,16 +36,20 @@ export default async function LoginPage({
   const error = params.error ? ERRORS[params.error] : undefined;
 
   return (
-    <div className="card" style={{ maxWidth: '26rem' }}>
-      <h1 style={{ marginTop: 0 }}>Anmelden</h1>
+    <Card className="max-w-[26rem]">
+      <h1 className="mt-0">Anmelden</h1>
 
-      {error ? <div className="notice error">{error}</div> : null}
+      {error ? (
+        <Notice tone="error" role="alert">
+          {error}
+        </Notice>
+      ) : null}
 
       <AuthForm action={signInAction} submitLabel="Anmelden" />
 
-      <p className="small muted" style={{ marginTop: '1.5rem' }}>
+      <p className="mt-6 text-sm text-muted">
         Noch kein Konto? <Link href="/register">Hier registrieren</Link>
       </p>
-    </div>
+    </Card>
   );
 }

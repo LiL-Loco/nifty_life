@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 
+import { Button, Field, Label, Notice } from '@/components/ui';
 import type { AuthState } from '@/lib/account-actions';
 
 type Action = (state: AuthState, form: FormData) => Promise<AuthState>;
@@ -27,10 +28,14 @@ export default function AuthForm({
 
   return (
     <form action={formAction}>
-      {state?.error ? <div className="notice error">{state.error}</div> : null}
+      {state?.error ? (
+        <Notice tone="error" role="alert">
+          {state.error}
+        </Notice>
+      ) : null}
 
-      <div className="field">
-        <label htmlFor="email">E-Mail-Adresse</label>
+      <Field>
+        <Label htmlFor="email">E-Mail-Adresse</Label>
         <input
           id="email"
           name="email"
@@ -39,10 +44,10 @@ export default function AuthForm({
           required
           maxLength={254}
         />
-      </div>
+      </Field>
 
-      <div className="field">
-        <label htmlFor="password">Passwort</label>
+      <Field>
+        <Label htmlFor="password">Passwort</Label>
         <input
           id="password"
           name="password"
@@ -53,16 +58,16 @@ export default function AuthForm({
           maxLength={200}
         />
         {showRepeat ? (
-          <p className="small muted" style={{ margin: '0.35rem 0 0' }}>
+          <p className="mt-1.5 mb-0 text-sm text-muted">
             Mindestens 10 Zeichen. Keine Regeln zu Zeichenarten — ein Satz ist ein
             gutes Passwort.
           </p>
         ) : null}
-      </div>
+      </Field>
 
       {showRepeat ? (
-        <div className="field">
-          <label htmlFor="password_repeat">Passwort wiederholen</label>
+        <Field>
+          <Label htmlFor="password_repeat">Passwort wiederholen</Label>
           <input
             id="password_repeat"
             name="password_repeat"
@@ -72,12 +77,12 @@ export default function AuthForm({
             minLength={10}
             maxLength={200}
           />
-        </div>
+        </Field>
       ) : null}
 
-      <button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending}>
         {pending ? 'Einen Moment …' : submitLabel}
-      </button>
+      </Button>
     </form>
   );
 }

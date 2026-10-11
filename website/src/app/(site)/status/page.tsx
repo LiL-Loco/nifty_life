@@ -8,6 +8,7 @@ import {
   latestApplication,
   type ApplicationStatus,
 } from '@/lib/applications';
+import { Card, Notice, StatusPill, buttonLinkClass } from '@/components/ui';
 
 const LABELS: Record<ApplicationStatus, string> = {
   submitted: 'Eingegangen',
@@ -23,6 +24,14 @@ const BLURB: Record<ApplicationStatus, string> = {
   rejected: 'Lies die Nachricht unten. Du kannst dich erneut bewerben.',
 };
 
+/**
+ * The status of THIS person's application.
+ *
+ * Looked up by account OR by Discord ID, because the account is the login but
+ * the Discord ID is what the game server knows. Keying on both is what lets
+ * somebody who registered today still see an application they filed through the
+ * old Discord login last week.
+ */
 export default async function StatusPage({
   searchParams,
 }: {
@@ -45,11 +54,11 @@ export default async function StatusPage({
   return (
     <>
       <h1>Deine Bewerbung</h1>
-      <p className="lede">
+      <p className="mb-8 text-muted">
         {account.user.email}
         {account.discord ? (
           <>
-            {' · '}Discord <span className="small">{account.discord.discordId}</span>
+            {' · '}Discord <span className="text-xs">{account.discord.discordId}</span>
           </>
         ) : (
           <>
@@ -60,67 +69,63 @@ export default async function StatusPage({
       </p>
 
       {params.submitted ? (
-        <div className="notice ok">
+        <Notice tone="ok">
           Bewerbung eingegangen. Ein Mensch wird sie lesen.
-        </div>
+        </Notice>
       ) : null}
 
       {ban ? (
-        <div className="notice error">
+        <Notice tone="error" role="alert">
           <strong>Auf diesem Konto ist ein aktives Ban hinterlegt.</strong>
           <br />
           {ban.reason ? <span>{ban.reason} - </span> : null}
           {ban.expires_at ? `Läuft ab am ${ban.expires_at}.` : 'Ohne Ablaufdatum.'}
-        </div>
+        </Notice>
       ) : null}
 
       {!application ? (
-        <div className="card">
+        <Card>
           <p>Du hast dich noch nicht beworben.</p>
-          <Link className="button" href="/apply">
+          <Link className={buttonLinkClass()} href="/apply">
             Bewerben
           </Link>
-        </div>
+        </Card>
       ) : (
         <>
-          <div className="card">
-            <div className="post-head">
+          <Card>
+            <div className="mb-1.5 flex justify-between gap-4 text-sm">
               <strong>Aktuelle Bewerbung</strong>
-              <span className={`status-pill ${application.status}`}>
-                {LABELS[application.status]}
-              </span>
+              <StatusPill tone={application.status}>{LABELS[application.status]}</StatusPill>
             </div>
-            <p className="muted small" style={{ marginTop: 0 }}>
+            <p className="mb-0 mt-0 text-sm text-muted">
               {BLURB[application.status]} Eingegangen am {application.submitted_at}.
             </p>
 
             {application.decision_note ? (
-              <p className="small">
+              <p className="text-sm">
                 <strong>Nachricht:</strong> {application.decision_note}
               </p>
             ) : null}
 
             {application.status === 'approved' && !ban ? (
-              <p className="small">
+              <p className="text-sm">
                 Verbinde dich während des Zeitfensters mit{' '}
                 <code>connect 127.0.0.1:30120</code>.
               </p>
             ) : null}
-          </div>
+          </Card>
 
           {history.length > 1 ? (
             <>
               <h2>Frühere Bewerbungen</h2>
               {history.slice(1).map((row) => (
-                <div className="card small" key={row.id}>
-                  <span className={`status-pill ${row.status}`}>
-                    {LABELS[row.status]}
-                  </span>{' '}
-                  <span className="muted">eingegangen am {row.submitted_at}</span>
+                <Card className="text-sm" key={row.id}>
+                  <StatusPill tone={row.status}>{LABELS[row.status]}</StatusPill>{' '}
+                  <span className="text-muted">eingegangen am {row.submitted_at}</span>
                   {row.decision_note ? (
-                    <div className="muted">{row.decision_note}</div>
+                    <div className="text-muted">{row.decision_note}</div>
                   ) : null}
-                </div>
+                </Card>
               ))}
             </>
           ) : null}
@@ -128,7 +133,7 @@ export default async function StatusPage({
       )}
 
       <h2>Was diese Seite nicht kann</h2>
-      <p className="small muted">
+      <p className="text-sm text-muted">
         Hier gibt es keinen Knopf, um eine Bewerbung freizugeben - der
         Datenbankzugang dieser Seite besitzt auf keinerlei Tabelle ein UPDATE-Recht.
         Das ist eine Eigenschaft der Rechtevergabe, nicht dieser Oberfläche.

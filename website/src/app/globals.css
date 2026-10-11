@@ -1,363 +1,186 @@
-/* Nifty Life 2.0 - no brand palette has been settled yet, so this is deliberately
-   neutral: a dark ground, one readable type scale, a single link colour. If a
-   look is chosen later it replaces this file and nothing else. */
+@import 'tailwindcss';
 
-:root {
-  --ground: #0d0f11;
-  --surface: #14181c;
-  --line: #232a30;
-  --text: #e7ebee;
-  --muted: #97a2ab;
-  --accent: #6ea8fe;
-  --danger: #e5796b;
-  --ok: #6bbf8a;
+/**
+ * The theme.
+ *
+ * Tailwind v4 has no tailwind.config.js: the design tokens are declared here, in
+ * `@theme`, and Tailwind generates the utilities from the names. Declaring
+ * `--color-ground` is what makes `bg-ground` exist.
+ *
+ * A token that is not declared here is a class that silently does nothing —
+ * Tailwind emits no error for a utility it does not recognise, so a typo in a
+ * class name is invisible until somebody notices the page looks unstyled.
+ *
+ * The names are kept from the hand-written stylesheet rather than replaced with
+ * shadcn's generic `--background` / `--foreground` / `--primary`. Those names
+ * describe a system; these describe this one. `ground` is the page, `surface` is
+ * a raised panel, `line` is the border between them, and a reader who does not
+ * know this codebase can still tell them apart.
+ *
+ * The values are byte-for-byte the ones the stylesheet carried before the move.
+ * This is a change of mechanism, not of design: if a colour shifts here, that is
+ * a design decision and belongs in its own commit.
+ */
+@theme {
+  --color-ground: #0d0f11;
+  --color-surface: #14181c;
+  --color-line: #232a30;
+  --color-text: #e7ebee;
+  --color-muted: #97a2ab;
+  --color-accent: #6ea8fe;
+  --color-danger: #e5796b;
+  --color-ok: #6bbf8a;
 
   /* The landing page's amber. Kept separate from --accent on purpose: that one
      is a link colour chosen for legibility on the dark portal ground, this one
      is a fill for a large shape. Changing one must not change the other. */
-  --amber: #f0a53a;
+  --color-amber: #f0a53a;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-* {
-  box-sizing: border-box;
+/**
+ * The reading column.
+ *
+ * 46rem is the width the hand-written header, footer and `main` all used. It is
+ * a token rather than a repeated literal because every portal page has to agree
+ * on it: a header at one width and a paragraph at another is the single most
+ * common way a layout looks "almost right" and not right.
+ */
+@theme {
+  --container-page: 46rem;
 }
 
-html,
-body {
-  margin: 0;
-  padding: 0;
+/**
+ * Element defaults.
+ *
+ * Only BARE tags live here, and only where the alternative is repeating the same
+ * utilities on every page: the reading column, the two heading sizes, and the
+ * link colour. Everything with a shape — button, card, notice, pill, header,
+ * footer, nav — is a component or a class list at its one call site, which is
+ * what makes the stylesheet reviewable in a diff.
+ */
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--color-line);
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Focus stays visible on every control, including inside dark cards. The
+     original set `outline` per element; `:focus-visible` covers all of them in
+     one place, and removes the class of bug where a new control forgets. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+
+  input,
+  textarea,
+  select {
+    width: 100%;
+    padding: 0.6rem 0.7rem;
+    background-color: var(--color-ground);
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  textarea {
+    min-height: 7rem;
+    resize: vertical;
+  }
+
+  /* A checkbox must stay its own size — the full-width rule is for text inputs,
+     and letting it apply to a checkbox is the one case where it is wrong. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: auto;
+  }
+
+  ::placeholder {
+    color: var(--color-muted);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+
+  * {
+    scrollbar-color: var(--color-line) var(--color-ground);
+  }
 }
 
-body {
-  background: var(--ground);
-  color: var(--text);
-  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  -webkit-font-smoothing: antialiased;
+@layer components {
+  /*
+   * The reading column.
+   *
+   * 46rem is the width the hand-written header, footer and `main` all used. It is
+   * a token rather than a repeated literal because every portal page has to agree
+   * on it: a header at one width and a paragraph at another is the single most
+   * common way a layout looks "almost right" and not right.
+   */
+  main {
+    max-width: var(--container-page);
+    margin: 0 auto;
+    padding: 3rem 1.25rem 5rem;
+  }
+
+  /*
+   * The hero owns the whole viewport, so the portal's centred column and its
+   * padding must not apply here — `.hero` IS a <main>, and the `main` rule above
+   * would otherwise centre and pad it. This is the one place that override is
+   * needed, and it is why the hero is a `main` with a class rather than a
+   * dedicated wrapper element.
+   */
+  main.hero {
+    max-width: none;
+    margin: 0;
+    padding: 4rem 1.5rem;
+  }
+
+  /*
+   * Links are accent-coloured here rather than per component because a link is a
+   * semantic thing, not a variant. A control styled as a button overrides it, so
+   * a filled button never reads as underlined prose.
+   */
+  a {
+    color: var(--color-accent);
+  }
+
+  h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem;
+  }
+
+  h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 2.5rem 0 0.75rem;
+  }
 }
 
-main {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 3rem 1.25rem 5rem;
-}
-
-/* ---- Chrome -------------------------------------------------------------- */
-
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 1.25rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.site-header nav {
-  display: flex;
-  gap: 1.25rem;
-}
-
-/* The team's own bar inside /admin. Deliberately NOT the site header: the site
-   navigation already differs for staff, and having two bars that look alike would
-   make it unclear which one applies. This one is a tab strip over the team
-   area, and it deliberately offers no link to the application form — the team
-   reads applications, it does not submit them. */
-.team-nav {
-  display: flex;
-  gap: 1.25rem;
-  padding: 0.75rem 0;
-  margin-bottom: 1.25rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.team-nav a {
-  text-decoration: none;
-  color: var(--muted);
-  font-size: 0.875rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid transparent;
-}
-
-.team-nav a:hover {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-
-.wordmark {
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-  color: var(--text);
-}
-
-.wordmark span {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.site-footer {
-  max-width: 46rem;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 3rem;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.875rem;
-}
-
-a {
-  color: var(--accent);
-}
-
-/* ---- Type ---------------------------------------------------------------- */
-
-h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.5rem;
-}
-
-h2 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin: 2.5rem 0 0.75rem;
-}
-
-.lede {
-  color: var(--muted);
-  margin: 0 0 2rem;
-}
-
-/* ---- Surfaces ------------------------------------------------------------ */
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 1.25rem;
-  margin-bottom: 1rem;
-}
-
-.notice {
-  border-left: 3px solid var(--accent);
-  background: var(--surface);
-  padding: 0.85rem 1rem;
-  margin-bottom: 1.5rem;
-  border-radius: 0 6px 6px 0;
-}
-
-.notice.error {
-  border-left-color: var(--danger);
-}
-
-.notice.ok {
-  border-left-color: var(--ok);
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.small {
-  font-size: 0.875rem;
-}
-
-/* ---- Forms --------------------------------------------------------------- */
-
-label {
-  display: block;
-  font-size: 0.875rem;
-  color: var(--muted);
-  margin-bottom: 0.35rem;
-}
-
-input,
-textarea {
-  width: 100%;
-  padding: 0.6rem 0.7rem;
-  background: var(--ground);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--text);
-  font: inherit;
-}
-
-input:focus,
-textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-textarea {
-  min-height: 7rem;
-  resize: vertical;
-}
-
-.field {
-  margin-bottom: 1.1rem;
-}
-
-button,
-.button {
-  display: inline-block;
-  padding: 0.6rem 1.1rem;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--accent);
-  color: #08111c;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-button.secondary,
-.button.secondary {
-  background: transparent;
-  color: var(--text);
-}
-
-button:hover,
-.button:hover {
-  filter: brightness(1.08);
-}
-
-/* ---- Feed ---------------------------------------------------------------- */
-
-.post {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 1rem 1.1rem;
-  margin-bottom: 0.85rem;
-}
-
-.post-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.875rem;
-  margin-bottom: 0.4rem;
-}
-
-.post-body {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.post-foot {
-  margin-top: 0.6rem;
-  font-size: 0.8125rem;
-  color: var(--muted);
-  display: flex;
-  gap: 1rem;
-}
-
-.status-pill {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border: 1px solid var(--line);
-  color: var(--muted);
-}
-
-.status-pill.approved {
-  color: var(--ok);
-  border-color: var(--ok);
-}
-
-.status-pill.rejected {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
-.status-pill.under_review {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* A button that looks like a link and behaves like one. Used for a destructive
-   inline action ("Alles verwerfen") that must not read as the primary button. */
-button.link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--accent);
-  text-decoration: underline;
-  cursor: pointer;
-  font: inherit;
-  font-size: inherit;
-}
-
-/* ---------------------------------------------------------------------------
-   The application answer list (admin review screen).
-
-   Twenty questions rendered as twenty cards stop reading as twenty ANSWERS —
-   each card looks like a section of the page instead of a prompt and a reply.
-   What makes a review workable is that a question and its answer cannot be
-   separated by scrolling: a fixed number, the question, the answer indented
-   beneath it, a hairline between pairs.
-
-   The number is not decoration. Reviewing twenty answers means saying "question
-   7" in a Discord conversation an hour later, and an ordinal is the only
-   identifier that survives a reworded rulebook.
-   --------------------------------------------------------------------------- */
-.answers {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.answers > li {
-  padding: 1rem 1.1rem;
-  border-top: 1px solid var(--line);
-}
-
-.answers > li:first-child {
-  border-top: none;
-}
-
-.answers .q {
-  display: flex;
-  gap: 0.7rem;
-  align-items: baseline;
-  font-weight: 500;
-}
-
-.answers .q-num {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.answers .q-text {
-  flex: 1;
-}
-
-.answers .a {
-  margin: 0.5rem 0 0 2.1rem;
-  padding-left: 0.9rem;
-  border-left: 2px solid var(--accent);
-  white-space: pre-wrap;
-}
 /* ===========================================================================
    The landing page.
 
@@ -372,14 +195,14 @@ button.link {
    there is no licence to honour. To use a real photograph, drop it at
    public/hero.jpg and uncomment the background-image line in `.hero::before`.
 
-   The buttons read at a glance because of the three things the reference does:
-   a filled pill, a thick dark outline that separates it from ANY background, and
-   heavy uppercase type. The outline is what makes it survive a photograph.
+   These four rules stay as CSS rather than becoming utilities. A hero written as
+   `bg-[radial-gradient(120%_80%_at_50%_115%,rgba(214,138,60,0.5)_0%,transparent_62%)]`
+   would be technically correct and unreadable, and nothing about this composition
+   can be restated from a class name. Everything else on the site IS utilities.
    =========================================================================== */
 
 .hero {
   position: relative;
-  min-height: 100vh;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -433,8 +256,6 @@ button.link {
   z-index: 2;
 }
 
-/* ---- The mark ------------------------------------------------------------ */
-
 .hero-mark {
   display: flex;
   flex-direction: column;
@@ -457,7 +278,7 @@ button.link {
 
 .hero-mark-top {
   font-size: clamp(2.6rem, 9vw, 5.2rem);
-  color: var(--amber);
+  color: var(--color-amber);
 }
 
 .hero-mark-bottom {
@@ -472,10 +293,8 @@ button.link {
   letter-spacing: 0.42em;
   text-indent: 0.42em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--color-muted);
 }
-
-/* ---- The two doors ------------------------------------------------------- */
 
 .hero-doors {
   display: flex;
@@ -494,10 +313,12 @@ button.link {
   padding: 1.05rem 1.5rem;
   border-radius: 999px;
   border: 3px solid #07080a;
-  background: var(--amber);
+  background: var(--color-amber);
   color: #14100b;
   text-decoration: none;
-  transition: transform 120ms ease, filter 120ms ease;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
 }
 
 .door:hover {
@@ -520,7 +341,7 @@ button.link {
 
 .door.is-off {
   background: #23262b;
-  color: var(--muted);
+  color: var(--color-muted);
   cursor: not-allowed;
 }
 
@@ -536,26 +357,17 @@ button.link {
   opacity: 0.75;
 }
 
-/* ---- Footnote ------------------------------------------------------------ */
-
 .hero-foot {
   margin: 0;
   font-size: 0.8rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--color-muted);
   text-align: center;
 }
 
-/* The hero owns the whole viewport, so the portal's centred column and its
-   padding must not apply here — `.hero` is a <main>, and the global `main` rule
-   would otherwise centre and pad it. */
-main.hero {
-  max-width: none;
-  margin: 0;
-  padding: 4rem 1.5rem;
-}
-
+/* A lift on hover is decoration. Somebody who has asked the operating system to
+   reduce motion gets the colour change and nothing else. */
 @media (prefers-reduced-motion: reduce) {
   .door {
     transition: none;

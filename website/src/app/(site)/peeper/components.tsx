@@ -2,43 +2,53 @@
 
 import { useActionState } from 'react';
 
-import { publish, report, staffDelete, staffPublish, toggleLike, type ActionState } from './actions';
+import { Button, Card, Field, Label, Notice } from '@/components/ui';
+import {
+  publish,
+  report,
+  staffDelete,
+  staffPublish,
+  toggleLike,
+  type ActionState,
+} from './actions';
 
 export function Composer({ disabled }: { disabled: boolean }) {
   const [state, action] = useActionState<ActionState, FormData>(publish, undefined);
 
   return (
-    <div className="card">
+    <Card>
       <form action={action}>
-        {state?.error ? <div className="notice error">{state.error}</div> : null}
-        {state?.ok ? <div className="notice ok">{state.ok}</div> : null}
+        {state?.error ? (
+          <Notice tone="error" role="alert">
+            {state.error}
+          </Notice>
+        ) : null}
+        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
 
-        <div className="field">
-          <label htmlFor="body">Schreib etwas</label>
+        <Field>
+          <Label htmlFor="body">Schreib etwas</Label>
           <textarea
             id="body"
             name="body"
             maxLength={500}
             disabled={disabled}
             placeholder={
-              disabled
-                ? 'Verknüpfe zuerst deinen Charakter.'
-                : 'Bis zu 500 Zeichen.'
+              disabled ? 'Verknüpfe zuerst deinen Charakter.' : 'Bis zu 500 Zeichen.'
             }
             required
           />
-        </div>
+        </Field>
 
-        <div className="field">
-          <label htmlFor="place">Ort (optional)</label>
+        <Field>
+          <Label htmlFor="place">Ort (optional)</Label>
           <input id="place" name="place" maxLength={64} disabled={disabled} />
-        </div>
+        </Field>
 
-        <button type="submit" disabled={disabled}>
+        <Button type="submit" disabled={disabled}>
           Abschicken
-        </button>
+        </Button>
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -53,18 +63,22 @@ export function StaffComposer({ name }: { name: string }) {
   const [state, action] = useActionState<ActionState, FormData>(staffPublish, undefined);
 
   return (
-    <div className="card" style={{ borderColor: 'var(--accent)' }}>
-      <p className="small muted" style={{ margin: '0 0 0.75rem' }}>
-        <strong style={{ color: 'var(--accent)' }}>P&amp;R-Team</strong> · du schreibst
-        als <strong>{name}</strong>
+    <Card accent>
+      <p className="mb-3 mt-0 text-sm text-muted">
+        <strong className="text-accent">P&amp;R-Team</strong> · du schreibst als{' '}
+        <strong>{name}</strong>
       </p>
 
       <form action={action}>
-        {state?.error ? <div className="notice error">{state.error}</div> : null}
-        {state?.ok ? <div className="notice ok">{state.ok}</div> : null}
+        {state?.error ? (
+          <Notice tone="error" role="alert">
+            {state.error}
+          </Notice>
+        ) : null}
+        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
 
-        <div className="field">
-          <label htmlFor="staff_body">Ankündigung</label>
+        <Field>
+          <Label htmlFor="staff_body">Ankündigung</Label>
           <textarea
             id="staff_body"
             name="body"
@@ -72,16 +86,16 @@ export function StaffComposer({ name }: { name: string }) {
             placeholder="Bis zu 500 Zeichen. Sichtbar für alle."
             required
           />
-        </div>
+        </Field>
 
-        <div className="field">
-          <label htmlFor="staff_place">Ort (optional)</label>
+        <Field>
+          <Label htmlFor="staff_place">Ort (optional)</Label>
           <input id="staff_place" name="place" maxLength={64} />
-        </div>
+        </Field>
 
-        <button type="submit">Veröffentlichen</button>
+        <Button type="submit">Veröffentlichen</Button>
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -97,18 +111,20 @@ export function DeletePost({ postId, authorName }: { postId: string; authorName:
   const [state, action] = useActionState<ActionState, FormData>(staffDelete, undefined);
 
   return (
-    <details style={{ marginLeft: 'auto' }}>
-      <summary className="small muted" style={{ cursor: 'pointer', listStyle: 'none' }}>
-        löschen
-      </summary>
+    <details className="ml-auto">
+      <summary className="cursor-pointer list-none text-sm text-muted">löschen</summary>
 
-      <form action={action} style={{ marginTop: '0.5rem' }}>
+      <form action={action} className="mt-2">
         <input type="hidden" name="post" value={postId} />
 
-        {state?.error ? <div className="notice error">{state.error}</div> : null}
-        {state?.ok ? <div className="notice ok">{state.ok}</div> : null}
+        {state?.error ? (
+          <Notice tone="error" role="alert">
+            {state.error}
+          </Notice>
+        ) : null}
+        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
 
-        <p className="small muted" style={{ margin: '0 0 0.4rem' }}>
+        <p className="mb-1.5 mt-0 text-sm text-muted">
           Beitrag von <strong>{authorName}</strong> ausblenden. Der Beitrag bleibt in
           der Datenbank — gelöscht wird nur die Sichtbarkeit.
         </p>
@@ -117,15 +133,11 @@ export function DeletePost({ postId, authorName }: { postId: string; authorName:
           name="reason"
           maxLength={255}
           placeholder="Grund (optional, wird gespeichert)"
-          style={{ fontSize: '0.8125rem', padding: '0.25rem 0.4rem', width: '100%' }}
+          className="px-1.5 py-1 text-[0.8125rem]"
         />
-        <button
-          type="submit"
-          className="secondary"
-          style={{ marginTop: '0.4rem', padding: '0.25rem 0.6rem', fontSize: '0.8125rem' }}
-        >
+        <Button type="submit" variant="secondary" size="sm" className="mt-1.5">
           Löschen
-        </button>
+        </Button>
       </form>
     </details>
   );
@@ -147,18 +159,13 @@ export function PostActions({
   );
 
   return (
-    <div className="post-foot">
+    <div className="mt-2.5 flex gap-4 text-[0.8125rem] text-muted">
       <form action={likeAction}>
         <input type="hidden" name="post" value={postId} />
         <input type="hidden" name="liked" value="0" />
-        <button
-          className="secondary"
-          type="submit"
-          disabled={disabled}
-          style={{ padding: '0.25rem 0.6rem', fontSize: '0.8125rem' }}
-        >
+        <Button variant="secondary" size="sm" type="submit" disabled={disabled}>
           Gefällt mir · {likeCount}
-        </button>
+        </Button>
       </form>
 
       <form action={reportAction}>
@@ -167,25 +174,20 @@ export function PostActions({
           name="reason"
           defaultValue="spam"
           disabled={disabled}
-          style={{ padding: '0.2rem', fontSize: '0.8125rem', width: 'auto' }}
+          className="w-auto py-1 pr-1 text-[0.8125rem]"
         >
           <option value="spam"> Spam</option>
           <option value="harassment"> Belästigung</option>
           <option value="impersonation"> Identitätsmissbrauch</option>
           <option value="other"> Sonstiges</option>
         </select>
-        <button
-          className="secondary"
-          type="submit"
-          disabled={disabled}
-          style={{ padding: '0.25rem 0.6rem', fontSize: '0.8125rem' }}
-        >
+        <Button variant="secondary" size="sm" type="submit" disabled={disabled}>
           Melden
-        </button>
+        </Button>
       </form>
 
       {reportState?.error ? (
-        <span style={{ color: 'var(--danger)' }}>{reportState.error}</span>
+        <span className="text-danger">{reportState.error}</span>
       ) : null}
       {reportState?.ok ? <span>{reportState.ok}</span> : null}
     </div>

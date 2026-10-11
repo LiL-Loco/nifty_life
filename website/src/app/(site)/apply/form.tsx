@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 
 import { RULEBOOK_QUESTIONS, RULEBOOK_SECTIONS, RULEBOOK_URL } from '@/lib/rulebook';
+import { Button, Card, Notice } from '@/components/ui';
 import { submit, type ApplyState } from './actions';
 
 /** Mirrors LIMITS.answerMin in src/lib/applications.ts. */
@@ -170,22 +171,30 @@ export default function ApplicationWizard() {
       {/* One <form> for the whole wizard. Every input stays mounted so the
           browser keeps what was typed when the applicant steps back. */}
       <form action={action}>
-        {state?.error ? <div className="notice error">{state.error}</div> : null}
-        {stepError ? <div className="notice error">{stepError}</div> : null}
+        {state?.error ? (
+          <Notice tone="error" role="alert">
+            {state.error}
+          </Notice>
+        ) : null}
+        {stepError ? (
+          <Notice tone="error" role="alert">
+            {stepError}
+          </Notice>
+        ) : null}
 
         {restored && step === 0 ? (
-          <div className="notice">
+          <Notice>
             Deine Antworten sind gespeichert. Du machst dort weiter, wo du
             aufgehört hast.
-            <button
+            <Button
               type="button"
-              className="link"
-              style={{ marginLeft: '0.75rem' }}
+              variant="link"
+              className="ml-3"
               onClick={startOver}
             >
               Alles verwerfen
-            </button>
-          </div>
+            </Button>
+          </Notice>
         ) : null}
 
         {question ? (
@@ -204,7 +213,7 @@ export default function ApplicationWizard() {
               autoFocus
             />
 
-            <p className="small muted" style={{ marginTop: '0.5rem' }}>
+            <p className="mt-2 mb-0 text-sm text-muted">
               Frage {step + 1} von {RULEBOOK_QUESTIONS.length} ·{' '}
               {(answers[question.id] ?? '').trim().length < ANSWER_MIN ? (
                 <>noch {ANSWER_MIN - (answers[question.id] ?? '').trim().length} Zeichen</>
@@ -217,8 +226,8 @@ export default function ApplicationWizard() {
 
         {step === RULEBOOK_STEP ? (
           <Step title="Regelwerk" hint="Lies es einmal komplett, dann bestätige es." wide>
-            <div className="card" style={{ background: 'var(--ground)' }}>
-              <p className="small">
+            <Card className="bg-ground">
+              <p className="text-sm">
                 Das vollständige Regelwerk liegt als Google-Dokument vor:{' '}
                 <a href={RULEBOOK_URL} target="_blank" rel="noreferrer noopener">
                   Regelwerk öffnen
@@ -226,8 +235,8 @@ export default function ApplicationWizard() {
                 .
               </p>
 
-              <p className="small muted">Es besteht aus:</p>
-              <ul className="small muted">
+              <p className="text-sm text-muted">Es besteht aus:</p>
+              <ul className="text-sm text-muted">
                 {RULEBOOK_SECTIONS.map((section) => (
                   <li key={section.ref}>
                     <strong>{section.ref}</strong> {section.title}
@@ -235,32 +244,29 @@ export default function ApplicationWizard() {
                 ))}
               </ul>
 
-              <label
-                className="small"
-                style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginTop: '1rem' }}
-              >
+              <label className="mt-4 flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"
                   name="rulebook_read"
-                  style={{ width: 'auto', marginTop: '0.2rem' }}
+                  className="mt-0.5"
                   checked={rulebookRead}
                   onChange={(e) => setRulebookRead(e.target.checked)}
                 />
                 <span>Ich habe das vollständige Regelwerk gelesen und verstanden.</span>
               </label>
-            </div>
+            </Card>
           </Step>
         ) : null}
 
         {step === REVIEW_STEP ? (
           <Step title="Prüfen und abschicken" hint="So wird deine Bewerbung gespeichert." wide>
-            <p className="small muted">
+            <p className="mt-0 text-sm text-muted">
               {answered === RULEBOOK_QUESTIONS.length
                 ? 'Alle 20 Fragen beantwortet.'
                 : `Noch ${RULEBOOK_QUESTIONS.length - answered} von ${RULEBOOK_QUESTIONS.length} Fragen unbeantwortet oder zu kurz.`}
             </p>
 
-            <dl className="small">
+            <dl className="text-sm">
               {RULEBOOK_QUESTIONS.map((item, index) => {
                 const value = (answers[item.id] ?? '').trim();
                 const short = value.length > 0 && value.length < ANSWER_MIN;
@@ -284,14 +290,11 @@ export default function ApplicationWizard() {
                 are their own — which a moderator weighs, rather than a rule they
                 accepted. */}
             {state?.error ? (
-              <label
-                className="small"
-                style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginTop: '1rem' }}
-              >
+              <label className="mt-4 flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"
                   name="own_words_ack"
-                  style={{ width: 'auto', marginTop: '0.2rem' }}
+                  className="mt-0.5"
                   checked={ackOwnWords}
                   onChange={(e) => setAckOwnWords(e.target.checked)}
                 />
@@ -299,32 +302,32 @@ export default function ApplicationWizard() {
               </label>
             ) : null}
 
-            <p className="small muted" style={{ marginTop: '1rem' }}>
+            <p className="mt-4 text-sm text-muted">
               Eine Bewerbung kann nur einmal eingereicht werden — danach entscheidet
               ein Mensch in Discord, und zwar endgültig.
             </p>
           </Step>
         ) : null}
 
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+        <div className="mt-6 flex gap-3">
           {step > 0 ? (
-            <button type="button" className="secondary" onClick={back}>
+            <Button type="button" variant="secondary" onClick={back}>
               Zurück
-            </button>
+            </Button>
           ) : null}
 
           {step < REVIEW_STEP ? (
-            <button type="button" onClick={next}>
+            <Button type="button" onClick={next}>
               Weiter
-            </button>
+            </Button>
           ) : (
-            <button type="submit" disabled={answered < RULEBOOK_QUESTIONS.length || !rulebookRead}>
+            <Button type="submit" disabled={answered < RULEBOOK_QUESTIONS.length || !rulebookRead}>
               Bewerbung abschicken
-            </button>
+            </Button>
           )}
         </div>
 
-        <p className="small muted" style={{ marginTop: '1rem' }}>
+        <p className="mt-4 text-sm text-muted">
           Den <Link href="/status">Status</Link> deiner Bewerbung kannst du jederzeit
           abrufen.
         </p>
@@ -375,23 +378,12 @@ function NoPasteTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 function Progress({ current, total }: { current: number; total: number }) {
   return (
-    <div className="small muted" style={{ marginBottom: '1.5rem' }}>
+    <div className="mb-6 text-sm text-muted">
       Schritt {current + 1} von {total}
-      <div
-        style={{
-          height: '3px',
-          background: 'var(--line)',
-          borderRadius: '2px',
-          marginTop: '0.5rem',
-        }}
-      >
+      <div className="mt-2 h-[3px] rounded-[2px] bg-line">
         <div
-          style={{
-            height: '3px',
-            width: `${((current + 1) / total) * 100}%`,
-            background: 'var(--accent)',
-            borderRadius: '2px',
-          }}
+          className="h-[3px] rounded-[2px] bg-accent"
+          style={{ width: `${((current + 1) / total) * 100}%` }}
         />
       </div>
     </div>
@@ -410,15 +402,11 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <div className="card">
-      <h2 style={{ marginTop: 0 }}>{title}</h2>
-      {hint ? (
-        <p className="small muted" style={{ marginTop: '-0.35rem' }}>
-          {hint}
-        </p>
-      ) : null}
-      <div style={wide ? undefined : { maxWidth: '28rem' }}>{children}</div>
-    </div>
+    <Card>
+      <h2 className="mt-0">{title}</h2>
+      {hint ? <p className="-mt-1.5 text-sm text-muted">{hint}</p> : null}
+      <div className={wide ? undefined : 'max-w-[28rem]'}>{children}</div>
+    </Card>
   );
 }
 
@@ -433,13 +421,11 @@ function Review({
 }) {
   return (
     <>
-      <dt style={{ color: 'var(--muted)', marginTop: '0.75rem' }}>{label}</dt>
+      <dt className="mt-3 text-muted">{label}</dt>
       <dd
-        style={{
-          margin: 0,
-          whiteSpace: 'pre-wrap',
-          color: bad ? 'var(--danger)' : undefined,
-        }}
+        className={
+          bad ? 'm-0 whitespace-pre-wrap text-danger' : 'm-0 whitespace-pre-wrap'
+        }
       >
         {children}
       </dd>

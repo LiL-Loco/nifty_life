@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { confirmEmail } from '@/lib/users';
+import { Card, Notice, buttonLinkClass } from '@/components/ui';
 
 /**
  * The confirmation link target.
@@ -24,37 +25,37 @@ export default async function VerifyEmailPage({
   const result = token ? await confirmEmail(token) : { ok: false as const };
 
   return (
-    <div className="card" style={{ maxWidth: '30rem' }}>
-      <h1 style={{ marginTop: 0 }}>E-Mail-Adresse bestätigen</h1>
+    <Card className="max-w-[30rem]">
+      <h1 className="mt-0">E-Mail-Adresse bestätigen</h1>
 
       {result.ok ? (
         <>
-          <div className="notice ok">Deine Adresse ist bestätigt.</div>
+          <Notice tone="ok">Deine Adresse ist bestätigt.</Notice>
           <p>
-            <Link className="button" href="/account">
+            <Link className={buttonLinkClass()} href="/account">
               Weiter zu deinem Konto
             </Link>
           </p>
         </>
       ) : (
         <>
-          <div className="notice error">
+          <Notice tone="error" role="alert">
             Dieser Bestätigungslink ist ungültig oder abgelaufen.
-          </div>
-          <p className="small muted">
+          </Notice>
+          <p className="text-sm text-muted">
             Ein Link funktioniert genau einmal und ist 24 Stunden gültig. Ist er
             abgelaufen, hol dir auf der Kontoseite einen neuen.
           </p>
-          <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <Link className="button secondary" href="/account">
+          <p className="flex flex-wrap gap-3">
+            <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
               Neuen Link anfordern
             </Link>
-            <Link className="button secondary" href="/login">
+            <Link className={buttonLinkClass({ variant: 'secondary' })} href="/login">
               Anmelden
             </Link>
           </p>
         </>
       )}
-    </div>
+    </Card>
   );
 }

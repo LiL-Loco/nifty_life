@@ -2,6 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { application } from '@/lib/admin';
+import {
+  AnswerBody,
+  AnswerNumber,
+  AnswerPair,
+  Answers,
+  Card,
+} from '@/components/ui';
 import DecisionForm from './decision-form';
 
 export const dynamic = 'force-dynamic';
@@ -39,28 +46,33 @@ export default async function AdminApplication({ params }: { params: Promise<{ i
 
   return (
     <>
-      <p className="small muted">
+      <p className="text-sm text-muted">
         <Link href="/admin">← zurück zur Übersicht</Link>
       </p>
 
-      <h1 style={{ marginBottom: '0.25rem' }}>
-        Bewerbung <span style={{ color: 'var(--muted)' }}>#{row.id.slice(0, 8)}</span>
+      <h1 className="mb-1">
+        Bewerbung <span className="text-muted">#{row.id.slice(0, 8)}</span>
       </h1>
 
-      <dl className="small" style={{ marginBottom: '2rem' }}>
-        <dt style={label}>Bewerber</dt>
-        <dd style={value}>{row.discord_id}</dd>
+      <dl className="mb-8 text-sm">
+        <dt className={term}>Bewerber</dt>
+        <dd className={value}>
+          {row.email ?? (
+            <span className="font-normal text-muted">kein Portal-Konto</span>
+          )}{' '}
+          <span className="font-mono">{row.discord_id}</span>
+        </dd>
 
-        <dt style={label}>Eingegangen</dt>
-        <dd style={value}>{String(row.submitted_at).replace('T', ' ').slice(0, 16)}</dd>
+        <dt className={term}>Eingegangen</dt>
+        <dd className={value}>{String(row.submitted_at).replace('T', ' ').slice(0, 16)}</dd>
 
-        <dt style={label}>Status</dt>
-        <dd style={value}>{LABELS[row.status] ?? row.status}</dd>
+        <dt className={term}>Status</dt>
+        <dd className={value}>{LABELS[row.status] ?? row.status}</dd>
 
         {row.reviewed_at ? (
           <>
-            <dt style={label}>Entschieden</dt>
-            <dd style={value}>
+            <dt className={term}>Entschieden</dt>
+            <dd className={value}>
               {String(row.reviewed_at).replace('T', ' ').slice(0, 16)}
               {row.reviewed_by_discord_id ? ` von ${row.reviewed_by_discord_id}` : ''}
             </dd>
@@ -69,15 +81,15 @@ export default async function AdminApplication({ params }: { params: Promise<{ i
 
         {row.decision_note ? (
           <>
-            <dt style={label}>Interne Notiz</dt>
-            <dd style={{ ...value, whiteSpace: 'pre-wrap' }}>{row.decision_note}</dd>
+            <dt className={term}>Interne Notiz</dt>
+            <dd className={`${value} whitespace-pre-wrap font-normal`}>{row.decision_note}</dd>
           </>
         ) : null}
 
         {payload.rulebook ? (
           <>
-            <dt style={label}>Regelwerk</dt>
-            <dd style={value}>
+            <dt className={term}>Regelwerk</dt>
+            <dd className={value}>
               gelesen am {payload.rulebook.at.slice(0, 10)} · Version{' '}
               {payload.rulebook.version}
             </dd>
@@ -88,40 +100,34 @@ export default async function AdminApplication({ params }: { params: Promise<{ i
       <h2>Antworten ({answers.length})</h2>
 
       {answers.length === 0 ? (
-        <div className="card">
-          <p className="small muted">
+        <Card>
+          <p className="mb-0 text-sm text-muted">
             Diese Bewerbung enthält keine auswertbaren Antworten. Prüf das Format,
             bevor du entscheidest.
           </p>
-        </div>
+        </Card>
       ) : (
-        <ol className="answers">
+        <Answers>
           {answers.map((answer, index) => (
-            <li key={answer.id}>
-              <div className="q">
-                <span className="q-num">{index + 1}</span>
-                <span className="q-text">{answer.question}</span>
+            <AnswerPair key={answer.id}>
+              <div className="flex items-baseline gap-2.5 font-medium">
+                <AnswerNumber>{index + 1}</AnswerNumber>
+                <span className="flex-1">{answer.question}</span>
               </div>
-              <div className="a">{answer.answer}</div>
-            </li>
+              <AnswerBody>{answer.answer}</AnswerBody>
+            </AnswerPair>
           ))}
-        </ol>
+        </Answers>
       )}
 
       <h2>Entscheidung</h2>
-      <div className="card">
+      <Card>
         <DecisionForm id={row.id} status={row.status} />
-      </div>
+      </Card>
     </>
   );
 }
 
-const label: React.CSSProperties = {
-  color: 'var(--muted)',
-  marginTop: '0.75rem',
-};
+const term = 'mt-3 text-muted';
 
-const value: React.CSSProperties = {
-  margin: 0,
-  fontFamily: 'monospace',
-};
+const value = 'mt-0 mb-0 font-mono';

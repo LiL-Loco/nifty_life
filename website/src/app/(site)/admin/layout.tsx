@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
+import { Card, buttonLinkClass } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Admin — Nifty Life 2.0' };
 
@@ -33,8 +34,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     // pretending the page is missing only makes a real moderator file a bug
     // report against a working site.
     return (
-      <div className="card">
-        <h1 style={{ marginTop: 0 }}>Kein Zugriff</h1>
+      <Card>
+        <h1 className="mt-0">Kein Zugriff</h1>
         <p>
           Dein Konto <strong>{account.user.email}</strong> hat keine Teamrolle,
           deshalb ist dieser Bereich gesperrt.
@@ -46,33 +47,53 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </>
           ) : null}
         </p>
-        <p className="small muted">
+        <p className="text-sm text-muted">
           Wenn das nicht stimmt: Lass dir im Discord die Teamrolle geben, warte
           einen Moment — der Bot synchronisiert sie sofort — und lade die Seite neu.
         </p>
-        <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link className="button secondary" href="/account">
+        <p className="flex flex-wrap gap-3">
+          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
             Zur Kontoseite
           </Link>
-          <Link className="button secondary" href="/auth/logout">
+          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/auth/logout">
             Abmelden
           </Link>
         </p>
-      </div>
+      </Card>
     );
   }
 
   return (
     <div>
-      <nav className="team-nav">
-        <Link href="/admin">Bewerbungen</Link>
-        <Link href="/admin/users">Registrierungen</Link>
-        <Link href="/peeper">P&amp;R</Link>
+      {/* Deliberately NOT the site header: the site navigation already differs
+          for staff, and two bars that look alike would make it unclear which one
+          applies. This is a tab strip over the team area, and it offers no link
+          to the application form — the team reads applications, it does not
+          submit them. */}
+      <nav className="mb-5 flex gap-5 border-b border-line py-3">
+        <Link
+          href="/admin"
+          className="border-b-2 border-transparent pb-2 text-sm uppercase tracking-[0.04em] text-muted hover:border-accent hover:text-text"
+        >
+          Bewerbungen
+        </Link>
+        <Link
+          href="/admin/users"
+          className="border-b-2 border-transparent pb-2 text-sm uppercase tracking-[0.04em] text-muted hover:border-accent hover:text-text"
+        >
+          Registrierungen
+        </Link>
+        <Link
+          href="/peeper"
+          className="border-b-2 border-transparent pb-2 text-sm uppercase tracking-[0.04em] text-muted hover:border-accent hover:text-text"
+        >
+          P&amp;R
+        </Link>
       </nav>
 
-      <p className="small muted">
+      <p className="text-sm text-muted">
         Team-Bereich · {account.discord.username}{' '}
-        <span className="small">({account.user.email})</span>{' '}
+        <span className="text-xs">({account.user.email})</span>{' '}
         <Link href="/auth/logout">abmelden</Link>
       </p>
 

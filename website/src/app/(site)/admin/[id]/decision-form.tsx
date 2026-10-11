@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 
+import { Button, Notice } from '@/components/ui';
 import { decideAction } from '../actions';
 
 /**
@@ -18,31 +19,35 @@ export default function DecisionForm({ id, status }: { id: string; status: strin
   // A decided application is shown, not re-decided. The record is the evidence:
   // re-readable for ever, never overwritable by a second opinion.
   if (status === 'approved' || status === 'rejected') {
-    return <p className="small muted">Diese Bewerbung ist bereits entschieden.</p>;
+    return <p className="text-sm text-muted">Diese Bewerbung ist bereits entschieden.</p>;
   }
 
   return (
     <form action={action}>
       <input type="hidden" name="id" value={id} />
 
-      {state && !state.ok ? <div className="notice error">{state.error}</div> : null}
-      {state && state.ok ? <div className="notice">Gespeichert.</div> : null}
+      {state && !state.ok ? (
+        <Notice tone="error" role="alert">
+          {state.error}
+        </Notice>
+      ) : null}
+      {state && state.ok ? <Notice>Liegt gespeichert vor.</Notice> : null}
 
-      <label className="small" style={{ display: 'block', marginBottom: '0.5rem' }}>
+      <label className="mb-2 block text-sm text-muted">
         Notiz für dich (optional, nicht für den Bewerber sichtbar)
-        <textarea name="note" rows={2} maxLength={500} style={{ marginTop: '0.35rem' }} />
+        <textarea name="note" rows={2} maxLength={500} className="mt-1.5" />
       </label>
 
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <button type="submit" name="status" value="approved">
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" name="status" value="approved">
           Freigeben
-        </button>
-        <button type="submit" name="status" value="under_review" className="secondary">
+        </Button>
+        <Button type="submit" name="status" value="under_review" variant="secondary">
           In Prüfung
-        </button>
-        <button type="submit" name="status" value="rejected" className="secondary">
+        </Button>
+        <Button type="submit" name="status" value="rejected" variant="secondary">
           Ablehnen
-        </button>
+        </Button>
       </div>
     </form>
   );

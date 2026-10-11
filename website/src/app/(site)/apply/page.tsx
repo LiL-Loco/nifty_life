@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
 import { DISCORD_REQUIRED } from '@/lib/applications';
+import { Card, buttonLinkClass } from '@/components/ui';
 import ApplicationForm from './form';
 
 /**
@@ -19,51 +20,51 @@ export default async function ApplyPage() {
 
   if (!account.user.emailVerifiedAt) {
     return (
-      <div className="card" style={{ maxWidth: '34rem' }}>
-        <h1 style={{ marginTop: 0 }}>Noch nicht bestätigt</h1>
+      <Card className="max-w-[34rem]">
+        <h1 className="mt-0">Noch nicht bestätigt</h1>
         <p>
           Deine E-Mail-Adresse <strong>{account.user.email}</strong> ist noch nicht
           bestätigt. Ohne bestätigte Adresse gehört eine Bewerbung zu niemandem, dem
           man antworten könnte.
         </p>
-        <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link className="button" href="/account">
+        <p className="flex flex-wrap gap-3">
+          <Link className={buttonLinkClass()} href="/account">
             Bestätigungslink anfordern
           </Link>
-          <Link className="button secondary" href="/status">
+          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/status">
             Mein Status
           </Link>
         </p>
-      </div>
+      </Card>
     );
   }
 
   if (!account.discord) {
     return (
-      <div className="card" style={{ maxWidth: '34rem' }}>
-        <h1 style={{ marginTop: 0 }}>Discord fehlt noch</h1>
+      <Card className="max-w-[34rem]">
+        <h1 className="mt-0">Discord fehlt noch</h1>
         <p>{DISCORD_REQUIRED}</p>
-        <p className="small muted">
+        <p className="text-sm text-muted">
           Die Bewerbung läuft unter einer Discord-Kennung. Das ist die Identität,
           gegen die der Spielserver beim Verbinden prüft — deshalb lässt sie sich
           nicht ohne Discord-Konto einreichen.
         </p>
-        <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link className="button" href="/auth/discord/connect?next=/apply">
+        <p className="flex flex-wrap gap-3">
+          <Link className={buttonLinkClass()} href="/auth/discord/connect?next=/apply">
             Discord-Konto verknüpfen
           </Link>
-          <Link className="button secondary" href="/account">
+          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
             Zur Kontoseite
           </Link>
         </p>
-      </div>
+      </Card>
     );
   }
 
   return (
     <>
       <h1>Bewerbung</h1>
-      <p className="lede">
+      <p className="mb-8 text-muted">
         Konto <strong>{account.user.email}</strong> · Discord{' '}
         <strong>{account.discord.username}</strong>. Die Bewerbung wird unter dieser
         Discord-Kennung abgelegt — das ist die Identität, die der Server beim

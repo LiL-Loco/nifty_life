@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { queue, queueCounts } from '@/lib/admin';
 import type { ApplicationStatus } from '@/lib/applications';
+import { Card, Td, Th, buttonLinkClass } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,7 @@ function isFilter(value: string): value is ApplicationStatus {
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return '—';
+  if (!value) return '-';
   // Rendered by the server, in German, from a database DATETIME. Not a locale
   // guess at the browser: the reviewer is the one person who must not be shown
   // an ambiguous date.
@@ -48,7 +49,7 @@ export default async function AdminQueue({
     <>
       <h1>Bewerbungen</h1>
 
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+      <div className="mb-6 flex flex-wrap gap-2">
         {FILTERS.map((filter) => {
           const key = filter ?? 'all';
           const label = filter === null ? 'alle' : LABELS[filter];
@@ -57,7 +58,10 @@ export default async function AdminQueue({
             <Link
               key={key}
               href={filter === null ? '/admin' : `/admin?status=${filter}`}
-              className={filter === active ? 'button' : 'button secondary'}
+              className={buttonLinkClass({
+                variant: filter === active ? 'default' : 'secondary',
+                size: 'sm',
+              })}
             >
               {label}
               {count !== null ? ` (${count})` : ''}
@@ -67,70 +71,53 @@ export default async function AdminQueue({
       </div>
 
       {entries.length === 0 ? (
-        <div className="card">
-          <p className="small muted">Keine Bewerbungen in dieser Ansicht.</p>
-        </div>
+        <Card>
+          <p className="mb-0 text-sm text-muted">Keine Bewerbungen in dieser Ansicht.</p>
+        </Card>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <Card padding="flush">
+          <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th style={cellHead}>Eingegangen</th>
-                <th style={cellHead}>E-Mail</th>
-                <th style={cellHead}>Discord</th>
-                <th style={cellHead}>Status</th>
-                <th style={cellHead}>Entschieden</th>
-                <th style={cellHead}></th>
+                <Th>Eingegangen</Th>
+                <Th>E-Mail</Th>
+                <Th>Discord</Th>
+                <Th>Status</Th>
+                <Th>Entschieden</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
               {entries.map((entry) => (
                 <tr key={entry.id}>
-                  <td style={cell}>{formatDate(entry.submitted_at)}</td>
-                  <td style={{ ...cell, fontFamily: 'inherit' }}>
+                  <Td>{formatDate(entry.submitted_at)}</Td>
+                  <Td>
                     {entry.email ?? (
                       // The one application that predates portal accounts. Said
                       // out loud rather than left blank, so nobody reads the
                       // empty cell as a bug.
-                      <span className="muted small">kein Portal-Konto</span>
+                      <span className="text-sm text-muted">kein Portal-Konto</span>
                     )}
-                  </td>
-                  <td style={{ ...cell, fontFamily: 'monospace' }}>{entry.discord_id}</td>
-                  <td style={cell}>{LABELS[entry.status] ?? entry.status}</td>
-                  <td style={{ ...cell, color: 'var(--muted)' }}>
+                  </Td>
+                  <Td className="font-mono">{entry.discord_id}</Td>
+                  <Td>{LABELS[entry.status] ?? entry.status}</Td>
+                  <Td className="text-muted">
                     {formatDate(entry.reviewed_at)}
                     {entry.reviewed_by_discord_id ? (
-                      <span style={{ display: 'block', fontSize: '0.8em' }}>
+                      <span className="block text-[0.8em]">
                         von {entry.reviewed_by_discord_id}
                       </span>
                     ) : null}
-                  </td>
-                  <td style={{ ...cell, textAlign: 'right' }}>
+                  </Td>
+                  <Td className="text-right">
                     <Link href={`/admin/${entry.id}`}>ansehen</Link>
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </>
   );
 }
-
-const cell: React.CSSProperties = {
-  padding: '0.6rem 0.8rem',
-  borderTop: '1px solid var(--line)',
-  fontSize: '0.9rem',
-  verticalAlign: 'top',
-};
-
-const cellHead: React.CSSProperties = {
-  ...cell,
-  borderTop: 'none',
-  textAlign: 'left',
-  fontSize: '0.75rem',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--muted)',
-};

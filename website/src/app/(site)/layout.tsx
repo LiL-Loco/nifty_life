@@ -17,21 +17,21 @@ import { currentAccount } from '@/lib/auth';
  * now reads the account.
  *
  * The cost is one indexed lookup on `staff` for SIGNED-IN visitors only. An
- * anonymous visitor — which is every stranger and every search engine — pays
- * nothing, because `currentAccount()` returns on the cookie alone when there is
- * no session to decode. What it buys is that a moderator never sees a link to a
- * form they are not allowed to submit.
+ * anonymous visitor — every stranger, every search engine — pays nothing, because
+ * `currentAccount()` returns on the cookie alone when there is no session to
+ * decode. What it buys is that a moderator never sees a link to a form they are
+ * not allowed to submit.
  */
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const account = await currentAccount();
 
   return (
     <>
-      <header className="site-header">
-        <Link href="/" className="wordmark">
-          Nifty Life <span>2.0</span>
+      <header className="mx-auto flex max-w-page items-center justify-between gap-4 border-b border-line px-5 py-5">
+        <Link href="/" className="font-semibold tracking-[-0.01em] text-text no-underline">
+          Nifty Life <span className="font-normal text-muted">2.0</span>
         </Link>
-        <nav>
+        <nav className="flex gap-5">
           {account?.isStaff ? (
             <>
               <Link href="/peeper">P&amp;R</Link>
@@ -53,7 +53,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
       <main>{children}</main>
 
-      <footer className="site-footer">
+      <footer className="mx-auto max-w-page border-t border-line px-5 pb-12 pt-6 text-sm text-muted">
         <p>Freitag 19:00 bis Sonntag 22:00. In der Zwischenzeit geht nichts verloren.</p>
       </footer>
     </>

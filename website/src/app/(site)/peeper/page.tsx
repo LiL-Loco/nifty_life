@@ -5,6 +5,7 @@ import { currentAccount } from '@/lib/auth';
 import { discordConfigured } from '@/lib/config';
 import { linkedCharacter, peeperActor } from '@/lib/identity';
 import { feed, replies } from '@/lib/peeper';
+import { Card, Notice, buttonLinkClass } from '@/components/ui';
 import { Composer, DeletePost, PostActions, StaffComposer } from './components';
 
 /**
@@ -24,23 +25,23 @@ export default async function PeeperPage() {
     return (
       <>
         <h1>P&amp;R</h1>
-        <div className="card">
+        <Card>
           <p>
             P&amp;R wird von Charakteren geschrieben, und die Verbindung läuft über
             dein Discord-Konto. Ohne das verknüpfte Konto lässt sich hier nichts
             schreiben.
           </p>
-          <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <p className="flex flex-wrap gap-3">
             {discordConfigured ? (
-              <Link className="button" href="/auth/discord/connect?next=/peeper">
+              <Link className={buttonLinkClass()} href="/auth/discord/connect?next=/peeper">
                 Discord-Konto verknüpfen
               </Link>
             ) : null}
-            <Link className="button secondary" href="/account">
+            <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
               Zur Kontoseite
             </Link>
           </p>
-        </div>
+        </Card>
       </>
     );
   }
@@ -68,7 +69,7 @@ export default async function PeeperPage() {
   return (
     <>
       <h1>P&amp;R</h1>
-      <p className="lede">
+      <p className="mb-8 text-muted">
         Beiträge gehören Charakteren, nicht Konten — dieselbe Person im Spiel und
         hier, dieselbe Moderation auf beiden Seiten. Teambeiträge tragen stattdessen
         die Discord-Adresse, mit der sie geschrieben wurden.
@@ -78,13 +79,13 @@ export default async function PeeperPage() {
 
       {!link && !isStaff ? (
         <>
-          <div className="notice">
+          <Notice>
             Dein Discord-Konto ist noch mit keinem Charakter verknüpft.{' '}
             <Link href="/peeper/pair">
               Erzeuge im Spiel einen Code und trage ihn hier ein
             </Link>
             .
-          </div>
+          </Notice>
 
           <Composer disabled />
         </>
@@ -93,49 +94,40 @@ export default async function PeeperPage() {
       {link ? <Composer disabled={false} /> : null}
 
       {withReplies.length === 0 ? (
-        <p className="muted">Es wurde noch nichts geschrieben.</p>
+        <p className="text-muted">Es wurde noch nichts geschrieben.</p>
       ) : (
         withReplies.map(({ post, kids }) => (
-          <article className="post" key={post.id}>
-            <div className="post-head">
+          <article className="mb-[0.85rem] rounded-lg border border-line bg-surface px-[1.1rem] py-4" key={post.id}>
+            <div className="mb-1.5 flex justify-between gap-4 text-sm">
               <strong>{post.author_name}</strong>
               {post.source === 'staff' ? (
-                <span
-                  className="small"
-                  style={{ color: 'var(--accent)', marginLeft: '0.4rem' }}
-                >
-                  Team
-                </span>
+                <span className="ml-1.5 text-xs text-accent">Team</span>
               ) : null}
-              <span className="muted">
+              <span className="text-muted">
                 {post.created_at}
                 {post.place_name ? ` · ${post.place_name}` : ''}
                 {post.source === 'web' ? ' · web' : ''}
               </span>
             </div>
 
-            <div className="post-body">{post.body}</div>
+            <div className="overflow-wrap-anywhere whitespace-pre-wrap">{post.body}</div>
 
             {kids.length > 0 ? (
-              <div
-                style={{
-                  marginTop: '0.75rem',
-                  paddingLeft: '1rem',
-                  borderLeft: '2px solid var(--line)',
-                }}
-              >
+              <div className="mt-3 border-l-2 border-line pl-4">
                 {kids.map((kid) => (
-                  <div key={kid.id} style={{ marginBottom: '0.5rem' }}>
-                    <span className="muted small">
+                  <div key={kid.id} className="mb-2">
+                    <span className="text-sm text-muted">
                       {kid.author_name} · {kid.created_at}
                     </span>
-                    <div className="post-body small">{kid.body}</div>
+                    <div className="overflow-wrap-anywhere whitespace-pre-wrap text-sm">
+                      {kid.body}
+                    </div>
                   </div>
                 ))}
               </div>
             ) : null}
 
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+            <div className="flex items-start gap-2">
               <PostActions
                 postId={post.id}
                 likeCount={post.like_count}
