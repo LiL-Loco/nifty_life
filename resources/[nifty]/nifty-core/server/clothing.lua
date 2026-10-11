@@ -497,8 +497,12 @@ end
 
 Price = Price or {}
 
---- Look up a per-(drawable, texture) override. Returns the row's price, or
---- nil when no row matches. nil signals "no DB opinion, fall back".
+--- Look up a per-(drawable, texture) override. Three answers:
+---   * nil      - no row exists in clothing_prices for this piece. Caller
+---                can fall back to the Lua defaults.
+---   * 0        - the row exists but the price column is NULL. Caller
+---                should refuse the sale: staff has not priced this piece.
+---   * number>0 - the row exists and is priced at this number.
 function Price.fromDb(kind, slotId, collection, drawable, texture)
   if kind ~= 'component' and kind ~= 'prop' then return nil end
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return nil end
@@ -517,7 +521,8 @@ function Price.fromDb(kind, slotId, collection, drawable, texture)
   }, 'price:lookup')
 
   if row == nil then return nil end
-  return tonumber(row.price)
+  if row.price == nil or row.price == '' then return 0 end
+  return tonumber(row.price) or 0
 end
 
 --- Set a per-(drawable, texture) price. Used by admin tooling - not by
@@ -566,5 +571,170 @@ function Price.clear(kind, slotId, collection, drawable, texture)
 
   return true
 end
+
+--- The localized name for a piece. Returns a string, or nil if no row
+--- exists yet (a piece the catalogue scan has not seeded yet, in practice).
+function Price.labelOf(kind, slotId, collection, drawable, texture)
+  if kind ~= 'component' and kind ~= 'prop' then return nil end
+  if type(slotId) ~= 'number' or type(drawable) ~= 'number' or type(texture) ~= 'number' then
+    return nil
+  end
+
+  local row = Db.one([[
+    SELECT name FROM clothing_prices
+     WHERE kind = ? AND slot_id = ? AND collection = ? AND drawable = ? AND texture = ?
+     LIMIT 1
+  ]], {
+    kind, tostring(slotId), collection,
+    tostring(drawable), tostring(texture),
+  }, 'price:label')
+
+  if row == nil then return nil end
+  return row.name
+end
+
+--- Catalogue for a slot. Used by the store UI when the player picks a
+--- slot from the menu - the server pushes only the relevant rows.
+---
+--- Returns an array of `{ drawable, texture, name, price }`. Rows with NULL
+--- price are filtered out - those are pieces that exist in the catalogue
+--- but staff has not yet priced.
+function Price.listForSlot(kind, slotId)
+  if kind ~= 'component' and kind ~= 'prop' then return {} end
+  if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return {} end
+
+  local rows = Db.all([[
+    SELECT drawable, texture, name, price
+      FROM clothing_prices
+     WHERE kind = ? AND slot_id = ? AND price IS NOT NULL
+     ORDER BY drawable, texture
+  ]], { kind, tostring(slotId) }, 'price:list')
+
+  local out = {}
+  for _, r in ipairs(rows or {}) do
+    out[#out + 1] = {
+      drawable = tonumber(r.drawable),
+      texture  = tonumber(r.texture),
+      name     = r.name,
+      price    = tonumber(r.price),
+    }
+  end
+  return out
+end
+
+-- ----------------------------------------------------------------------------
+-- Catalogue scan
+--
+-- Reads the per-slot JSON files in nifty-creator's data/ folder and inserts
+-- one row per (slot_id, drawable, texture) into clothing_prices with the
+-- localized name and a NULL price. The result: `clothing_prices` holds every
+-- piece the game actually has, named, with the price column still empty for
+-- staff to fill.
+--
+-- Why scan instead of seeding in SQL: the JSON files are 100k+ lines and
+-- ship with the resource that uses them (nifty-creator). Reading them here
+-- avoids re-typing the catalogue into SQL and the drift that re-typing
+-- always produces.
+--
+-- Skip when any rows are already there - the scan is idempotent for
+-- (key, name) on INSERT IGNORE, and once staff have started curating the
+-- price column we have no business overwriting their edits anyway.
+-- ----------------------------------------------------------------------------
+
+local SCAN_FILES = {
+  -- Components: one file per slot_id per gender. The pricebook is gender-
+  -- agnostic at the row level (the same drawable in male and female peds is
+  -- the same shirt), so we scan both. Filenames match the convention in
+  -- nifty-creator/data/.
+  component = {
+    { slot = 1,  fname = 'masks_male' },
+    { slot = 1,  fname = 'masks_female' },
+    { slot = 1,  fname = 'masks' },
+    { slot = 2,  fname = 'male_hair' },
+    { slot = 2,  fname = 'female_hair' },
+    { slot = 3,  fname = 'male_torsos' },
+    { slot = 3,  fname = 'female_torsos' },
+    { slot = 4,  fname = 'male_legs' },
+    { slot = 4,  fname = 'female_legs' },
+    { slot = 5,  fname = 'male_shoes' },
+    { slot = 5,  fname = 'female_shoes' },
+    { slot = 7,  fname = 'male_accessories' },
+    { slot = 7,  fname = 'female_accessories' },
+    { slot = 8,  fname = 'male_undershirts' },
+    { slot = 8,  fname = 'female_undershirts' },
+    { slot = 11, fname = 'male_tops' },
+    { slot = 11, fname = 'female_tops' },
+  },
+  prop = {
+    { slot = 0, fname = 'props_male_hats' },
+    { slot = 0, fname = 'props_female_hats' },
+    { slot = 1, fname = 'props_male_glasses' },
+    { slot = 1, fname = 'props_female_glasses' },
+    { slot = 2, fname = 'props_male_ears' },
+    { slot = 2, fname = 'props_female_ears' },
+    { slot = 6, fname = 'props_male_watches' },
+    { slot = 6, fname = 'props_female_watches' },
+    { slot = 7, fname = 'props_male_bracelets' },
+    { slot = 7, fname = 'props_female_bracelets' },
+  },
+}
+
+local function scanOneFile(kind, slotId, fileName)
+  local raw = LoadResourceFile('nifty-creator', 'data/' .. fileName .. '.json')
+  if not raw or raw == '' then return 0 end
+
+  local ok, decoded = pcall(json.decode, raw)
+  if not ok or type(decoded) ~= 'table' then return 0 end
+
+  local count = 0
+  for drawableStr, textures in pairs(decoded) do
+    if type(textures) == 'table' then
+      for textureStr, info in pairs(textures) do
+        if type(info) == 'table' then
+          local drawable = tonumber(drawableStr)
+          local texture  = tonumber(textureStr)
+          local name = info.Localized or info.GXT or ('Drawable ' .. drawableStr)
+          if drawable and texture and type(name) == 'string' then
+            Db.update([[
+              INSERT IGNORE INTO clothing_prices
+                (kind, slot_id, collection, drawable, texture, name, price)
+              VALUES (?, ?, '', ?, ?, ?, NULL)
+            ]], {
+              kind, tostring(slotId),
+              tostring(drawable), tostring(texture),
+              name,
+            }, 'price:scan')
+            count = count + 1
+          end
+        end
+      end
+    end
+  end
+  return count
+end
+
+function Price.scanCatalogue()
+  local existing = Db.one('SELECT 1 AS hit FROM clothing_prices LIMIT 1', {}, 'price:scan:probe')
+  if existing ~= nil then return end
+
+  local total = 0
+  for _, kind in ipairs({ 'component', 'prop' }) do
+    for _, file in ipairs(SCAN_FILES[kind]) do
+      total = total + scanOneFile(kind, file.slot, file.fname)
+    end
+  end
+
+  if total > 0 then
+    print(('[%s] pricebook seeded with %d rows from nifty-creator/data/'):format(
+      RESOURCE, total))
+  end
+end
+
+Db.ready(function()
+  local ok, err = pcall(Price.scanCatalogue)
+  if not ok then
+    print(('[%s] pricebook scan failed: %s'):format(RESOURCE, tostring(err)))
+  end
+end)
 
 print(('[%s] owned module ready'):format(RESOURCE))

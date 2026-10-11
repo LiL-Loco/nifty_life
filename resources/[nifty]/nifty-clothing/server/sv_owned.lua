@@ -157,6 +157,65 @@ RegisterNetEvent('nifty:server:clothingEquip', function(payload)
 end)
 
 -- ----------------------------------------------------------------------------
+-- Catalogue queries
+-- ----------------------------------------------------------------------------
+
+-- Store: every priced piece in a slot. The store UI walks slot-by-slot; the
+-- server pushes only the rows for the slot the player is browsing, so the
+-- payload stays small even when the catalogue is 1000+ rows.
+RegisterNetEvent('nifty:server:storeListForSlot', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local kind = payload.kind
+  local slot_id = tonumber(payload.slot_id)
+  if kind ~= 'component' and kind ~= 'prop' then return end
+  if type(slot_id) ~= 'number' or slot_id < 0 or slot_id > 255 then return end
+
+  TriggerClientEvent('nifty:client:storeListForSlot', src, {
+    kind   = kind,
+    slot   = slot_id,
+    items  = Price.listForSlot(kind, slot_id),
+  })
+end)
+
+-- Wardrobe: every owned piece in a slot, with the localised label from
+-- `clothing_prices` resolved alongside. Joins back to Owned.list so the
+-- wardrobe menu label looks the same as the store label.
+RegisterNetEvent('nifty:server:wardrobeListForSlot', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local kind = payload.kind
+  local slot_id = tonumber(payload.slot_id)
+  if kind ~= 'component' and kind ~= 'prop' then return end
+  if type(slot_id) ~= 'number' or slot_id < 0 or slot_id > 255 then return end
+
+  local cid = characterOf(src)
+  if not cid then return end
+
+  local items = Owned.list(cid, kind, slot_id)
+  local out = {}
+  for _, item in ipairs(items) do
+    out[#out + 1] = {
+      kind       = item.kind,
+      slot_id    = item.slot_id,
+      collection = item.collection,
+      drawable   = item.drawable,
+      texture    = item.texture,
+      name       = Price.labelOf(item.kind, item.slot_id, item.collection,
+                                  item.drawable, item.texture)
+                  or ('Drawable ' .. tostring(item.drawable)),
+      source     = item.source,
+    }
+  end
+
+  TriggerClientEvent('nifty:client:wardrobeListForSlot', src, {
+    kind  = kind,
+    slot  = slot_id,
+    items = out,
+  })
+end)
+
+-- ----------------------------------------------------------------------------
 -- Outfits
 -- ----------------------------------------------------------------------------
 
