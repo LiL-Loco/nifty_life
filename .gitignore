@@ -28,6 +28,11 @@ database/.credentials.local
 
 # ---- FiveM runtime ----
 cache/
+
+# Lua language server's local type-info cache. Key/value store
+# rebuilt on every LSP start; tracking it in git means every clone
+# ships a stale database that disagrees with the source.
+local-database/
 server-cache/
 *.log
 logs/
