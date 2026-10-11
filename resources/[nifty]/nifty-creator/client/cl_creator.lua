@@ -1556,21 +1556,14 @@ buildSlotMenu = function(kind, id)
   local isProp = (kind == 'props')
   local current = slotOf(kind, id)
 
-  -- Where the player currently stands, resolved against the CURRENT options. A
-  -- stored collection this ped does not have - a DLC that is not installed, a
-  -- model swap - falls back to the first option rather than to nothing.
-  local index = 1
-  for i, option in ipairs(options) do
-    if current and current.collection == option.name then
-      index = i
-      break
-    end
-  end
-
-  local option = options[index]
+  -- Use the first collection that has data. The Kollektion list is gone
+  -- (lbg-char pattern: just Modell and Ausführung, no DLC picker), and
+  -- the engine accepts any drawable/texture index in [0, count) regardless
+  -- of which collection it nominally belongs to. A drawable past the
+  -- first collection's count is still a valid integer to the engine.
+  local option = options[1]
   local drawable = (current and tonumber(current.drawable)) or 0
   local texture = (current and tonumber(current.texture)) or 0
-
   if drawable >= option.drawables then drawable = option.drawables - 1 end
   if drawable < 0 then drawable = 0 end
   if texture >= option.textures then texture = option.textures - 1 end
@@ -1580,90 +1573,54 @@ buildSlotMenu = function(kind, id)
     and (PROP_LABELS[id] or ('Prop ' .. id))
     or  (COMPONENT_LABELS[id] or ('Slot ' .. id))
 
-  -- The real item name, if this slot and this ped have one. Slots 0, 9, 10 and 12
-  -- never do - those are not items the game ever sold - and a component the data
-  -- has no table for must show a number rather than an empty menu row.
-  local kind = isProp and 'props' or 'components'
   local function nameFor(drawableId, textureId)
     return GameData.itemName(isProp, id, option.name, drawableId, textureId, option.drawables)
   end
 
-  local currentName = nameFor(drawable, texture)
-  local currentTags = GameData.itemTags(isProp, id, option.name, drawable, texture, option.drawables)
-
   local menu = Menu.menu({
-    title = currentName and ('%s - %s'):format(label, currentName) or label,
-    subtitle = #currentTags > 0 and ('Merkmale: ' .. table.concat(currentTags, ', ')) or nil,
-    -- Section bar updates to the slot name (e.g. "Brow 1 / 11") so the
-    -- player knows which submenu they are in. The exact "1" is a
-    -- placeholder for the slot index in the creator's order, not
-    -- the slot id; tracking the precise index is polish.
+    title = label,
+    -- Section bar updates to the slot name. 11 is the number of
+    -- populated component slots the engine has; 12 is the placeholder.
     section = { name = label, current = 1, total = 11 },
     dock = 'right',
   })
 
-  local labels = {}
-  for i, opt in ipairs(options) do
-    labels[i] = (opt.name == '') and 'Standard' or opt.name
+  -- Modell: one list item per drawable. Entry labels are the item
+  -- names from the data; the few slots that have no names fall back
+  -- to a numbered placeholder so the list is never blank.
+  local modelLabels = {}
+  for d = 0, option.drawables - 1 do
+    local n = nameFor(d, texture)
+    modelLabels[d + 1] = n or ('Modell %d'):format(d)
   end
-
-  Menu.select(menu, 'Kollektion', {
-    items       = labels,
-    index       = index,
-    description = 'Gibt an, welche DLC die Kleidung liefert.',
-    onChange    = function(chosen)
-      local picked = options[chosen]
-      if not picked then return end
-
-      -- Changing the collection invalidates drawable AND texture: both counts are
-      -- per collection, so a drawable that is index 12 in one DLC can be index 3
-      -- in the next. Keeping the old numbers would store a combination that never
-      -- existed - and the server would accept it, because both are in range.
-      local live = slotOf(kind, id) or {}
-      setSlot(kind, id, {
-        collection = picked.name,
-        drawable   = math.min(tonumber(live.drawable) or 0, picked.drawables - 1),
-        texture    = math.min(tonumber(live.texture) or 0, picked.textures - 1),
-      })
-
-      -- Re-present with the new bounds. Without it the two sliders keep the old
-      -- maximum and a drawable past the end of the new collection is reachable.
-      Menu.pushMenu(RESOURCE, buildSlotMenu(kind, id))
-    end,
-  })
-
-  Menu.slider(menu, 'Modell', {
-    min = 0, max = option.drawables - 1, step = 1, value = drawable,
-    format = function(value)
-      -- The name of the item under the cursor, not the number it happens to have.
-      -- A slider that says "Brown Leather Fur Jacket" and one that says "311" are
-      -- the same control, and only one of them tells a player what they picked.
-      return nameFor(value, texture) or ('%d / %d'):format(value, option.drawables - 1)
-    end,
-    onChange = function(value)
+  Menu.select(menu, 'Modell', {
+    items = modelLabels,
+    index = drawable + 1,
+    onChange = function(i)
       local live = slotOf(kind, id) or {}
       setSlot(kind, id, {
         collection = option.name,
-        drawable   = value,
+        drawable   = i - 1,
         texture    = tonumber(live.texture) or 0,
       })
     end,
   })
 
-  Menu.slider(menu, 'Textur', {
-    min = 0, max = option.textures - 1, step = 1, value = texture,
-    format = function(value)
-      -- The texture is a COLOUR VARIATION, not a fabric index - "Tan" against
-      -- "Brown". So the name of the exact variation is the useful label here, not
-      -- on the drawable row above.
-      return nameFor(drawable, value) or ('%d / %d'):format(value, option.textures - 1)
-    end,
-    onChange = function(value)
+  -- Ausführung: one list item per texture. Same naming convention.
+  local texLabels = {}
+  for t = 0, option.textures - 1 do
+    local n = nameFor(drawable, t)
+    texLabels[t + 1] = n or ('Ausfuehrung %d'):format(t)
+  end
+  Menu.select(menu, 'Ausführung', {
+    items = texLabels,
+    index = texture + 1,
+    onChange = function(i)
       local live = slotOf(kind, id) or {}
       setSlot(kind, id, {
         collection = option.name,
         drawable   = tonumber(live.drawable) or 0,
-        texture    = value,
+        texture    = i - 1,
       })
     end,
   })
