@@ -517,16 +517,28 @@ RegisterNetEvent('nifty:server:wardrobeListForSlot', function(payload)
   local items = Owned.list(cid, kind, slot_id)
   local out = {}
   for _, item in ipairs(items) do
+    local baseName = Price.labelOf(item.kind, item.slot_id, item.collection,
+                                   item.drawable, item.texture)
+                    or ('Drawable ' .. tostring(item.drawable))
+
+    -- Compose the display name. Received items show their giver in parens
+    -- so the wardrobe reads as "T-Shirt #4 (von Max)" rather than
+    -- the catalogue name alone.
+    local displayName = baseName
+    if item.acquired_from and item.acquired_from ~= '' then
+      displayName = baseName .. ' (von ' .. item.acquired_from .. ')'
+    end
+
     out[#out + 1] = {
-      kind       = item.kind,
-      slot_id    = item.slot_id,
-      collection = item.collection,
-      drawable   = item.drawable,
-      texture    = item.texture,
-      name       = Price.labelOf(item.kind, item.slot_id, item.collection,
-                                  item.drawable, item.texture)
-                  or ('Drawable ' .. tostring(item.drawable)),
-      source     = item.source,
+      kind          = item.kind,
+      slot_id       = item.slot_id,
+      collection    = item.collection,
+      drawable      = item.drawable,
+      texture       = item.texture,
+      name          = displayName,
+      base_name     = baseName,
+      source        = item.source,
+      acquired_from = item.acquired_from,
     }
   end
 
@@ -674,6 +686,198 @@ RegisterNetEvent('nifty:server:equippedDrop', function(payload)
   TriggerClientEvent('nifty:client:equippedDrop', src, {
     ok = true, kind = kind, slot_id = slot_id,
   })
+end)
+
+-- ----------------------------------------------------------------------------
+-- Inventory -> wardrobe: save a received clothing item into the wardrobe.
+--
+-- When a player receives an accessory (clothing_hat etc.) or an outfit
+-- (clothing_outfit) item from another player and chooses to keep it, this
+-- endpoint:
+--   1. Reads the inventory row's code + metadata.
+--   2. For accessory codes: grants the piece into character_clothing
+--      with source='received'. The giver name comes from the metadata
+--      when the transfer path populated it; falls through to a fallback
+--      render otherwise.
+--   3. For clothing_outfit: copies the donor's outfit into a new
+--      character_outfits row owned by the receiver (the receiver must
+--      not see the donor's owned table; the donor's outfit id is a
+--      foreign key into a row they may delete).
+--   4. Decrements the inventory row.
+-- ----------------------------------------------------------------------------
+
+local function donorNameFromMetadata(meta)
+  -- Trade / give paths that exist today write `giver_name` (free-form
+  -- string) and sometimes `giver_character_id`. The fallback chain here is
+  -- giver_name first, otherwise NULL - the wardrobe renders the suffix
+  -- only when the column is non-empty.
+  if type(meta) ~= 'table' then return nil end
+  local n = meta.giver_name
+  if type(n) == 'string' and #n > 0 then return n end
+  return nil
+end
+
+local function donorOutfitPieces(donorOutfitId)
+  -- Read an outfit by id alone (no character check). Outfits are
+  -- scoped to a character, but a cross-character copy is the only way a
+  -- "save outfit from inventory" path can work: the receiver references
+  -- the donor's id through the item's metadata and we have to be able to
+  -- read it. The donor could revoke or rename the source afterwards; the
+  -- transaction below reads first and only writes if the read succeeds.
+  local root = Db.one([[
+    SELECT id, name, character_id FROM character_outfits WHERE id = ? LIMIT 1
+  ]], { donorOutfitId }, 'owned:cross:read')
+  if not root or not root.id then return nil end
+
+  local pieces = Db.all([[
+    SELECT kind, slot_id, collection, drawable, texture
+      FROM character_outfit_pieces
+     WHERE outfit_id = ?
+  ]], { donorOutfitId }, 'owned:cross:read:pieces') or {}
+
+  return {
+    name    = root.name,
+    pieces  = pieces,
+    donor_id = root.character_id,
+  }
+end
+
+RegisterNetEvent('nifty:server:clothingSaveInventoryItem', function(payload)
+  local src = source
+  if type(payload) ~= 'table' or type(payload.itemId) ~= 'string' then return end
+  if not allowBurst(src) then return end
+
+  local cid = characterOf(src)
+  if not cid then return end
+
+  local view = Inventory.view(cid) or { items = {} }
+  local row = nil
+  for _, it in ipairs(view.items or {}) do
+    if it.id == payload.itemId then row = it break end
+  end
+  if not row then
+    TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                       { ok = false, reason = 'not found' })
+    return
+  end
+
+  local code = row.code
+  local meta = row.metadata
+  local giverName = donorNameFromMetadata(meta)
+
+  if code == 'clothing_outfit' then
+    if type(meta) ~= 'table' or type(meta.outfit_id) ~= 'string' then
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = 'no outfit_id' })
+      return
+    end
+
+    local donor = donorOutfitPieces(meta.outfit_id)
+    if not donor or not donor.pieces or #donor.pieces == 0 then
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = 'donor outfit missing' })
+      return
+    end
+
+    -- Build an appearance-like table from the pieces so Owned.saveOutfit
+    -- can re-use the same validate + grant path the wardrobe already
+    -- trusts.
+    local components = {}
+    local props = {}
+    for _, p in ipairs(donor.pieces) do
+      local sid = tonumber(p.slot_id)
+      if not sid then
+        -- skip malformed piece
+      elseif p.kind == 'component' then
+        components[tostring(sid)] = {
+          collection = p.collection,
+          drawable   = tonumber(p.drawable),
+          texture    = tonumber(p.texture),
+        }
+      elseif p.kind == 'prop' then
+        props[tostring(sid)] = {
+          collection = p.collection,
+          drawable   = tonumber(p.drawable),
+          texture    = tonumber(p.texture),
+        }
+      end
+    end
+
+    -- The donor outfit was an outfit SOMEONE saved. Receiving it is not
+    -- the same as saving your own: the new outfit's pieces still have
+    -- to come from the donor's table (already done above). The receiver
+    -- gets a NEW row keyed by their character_id with the donor's name
+    -- (suffixed with "(von X)" when a giver is known).
+    local newName = donor.name
+    if giverName and giverName ~= '' then
+      newName = newName .. ' (von ' .. giverName .. ')'
+    end
+
+    local ok, ridOrErr = Owned.saveOutfit(cid, newName, {
+      components = components,
+      props      = props,
+    })
+    if not ok then
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = tostring(ridOrErr) })
+      return
+    end
+
+    -- The receiver now owns the outfit. The inventory item was a packet;
+    -- the rest of the cleanup is on the donor side (their item was
+    -- decremented at transfer time, not at receive time).
+    TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                       { ok = true, kind = 'outfit', outfitId = ridOrErr })
+
+  elseif code == 'clothing_mask'
+      or code == 'clothing_hat'
+      or code == 'clothing_glasses'
+      or code == 'clothing_earring'
+      or code == 'clothing_ring'
+      or code == 'clothing_watch'
+  then
+    -- Accessory item. The metadata records the (kind, slot, collection,
+    -- drawable, texture) of the piece; re-grant it as 'received'.
+    if type(meta) ~= 'table' then
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = 'no metadata' })
+      return
+    end
+
+    local kind = meta.kind
+    local sid = tonumber(meta.slot_id)
+    local drawable = tonumber(meta.drawable)
+    local texture = tonumber(meta.texture)
+    local collection = meta.collection
+    if (kind ~= 'component' and kind ~= 'prop')
+      or not sid or not drawable or not texture
+      or type(collection) ~= 'string'
+    then
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = 'bad metadata' })
+      return
+    end
+
+    Owned.grant(cid, kind, sid, collection, drawable, texture, 'received',
+                giverName)
+
+    -- The matching inventory row goes away. max_stack=1 means a single
+    -- decrement deletes the row.
+    if accessoryCodeFor(kind, sid) == code then
+      Inventory.remove(cid, code, 1, payload.itemId)
+    else
+      TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                         { ok = false, reason = 'code mismatch' })
+      return
+    end
+
+    TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                       { ok = true, kind = 'accessory',
+                         slot_kind = kind, slot_id = sid })
+  else
+    TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
+                       { ok = false, reason = 'not a clothing item' })
+  end
 end)
 
 -- Use-handler trigger. The client calls use() on the inventory row when

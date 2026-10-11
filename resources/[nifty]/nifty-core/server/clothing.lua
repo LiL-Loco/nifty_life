@@ -20,7 +20,7 @@ Owned = {}
 -- DB primitives
 -- ----------------------------------------------------------------------------
 
-local function grantOne(characterId, kind, slotId, collection, drawable, texture, source)
+local function grantOne(characterId, kind, slotId, collection, drawable, texture, source, acquiredFrom)
   if type(characterId) ~= 'string' or characterId == '' then return end
   if kind ~= 'component' and kind ~= 'prop' then return end
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return end
@@ -28,23 +28,44 @@ local function grantOne(characterId, kind, slotId, collection, drawable, texture
   if type(drawable) ~= 'number' or drawable < 0 then return end
   if type(texture) ~= 'number' or texture < 0 then return end
 
+  -- Trim acquired_from to the column size; the column is VARCHAR(128) and
+  -- a runaway display name is a small annoyance worth preventing here.
+  local fromField = nil
+  if type(acquiredFrom) == 'string' and #acquiredFrom > 0 then
+    fromField = #acquiredFrom > 128 and acquiredFrom:sub(1, 128) or acquiredFrom
+  end
+
   -- Re-validating against the same rules Validate.appearance uses would be
-  -- belt-and-suspenders. Skipping today because Owned.grant is reached from
-  -- two places only: the creator finish path (server-validated already) and
-  -- the purchase path (server-validated already). If a third caller appears,
-  -- route it through Validate.appearance first.
-  Db.update([[
-    INSERT IGNORE INTO character_clothing
-      (character_id, kind, slot_id, collection, drawable, texture, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  ]], {
-    characterId, kind, slotId, collection,
-    tostring(drawable), tostring(texture), source,
-  }, 'owned:grant')
+  -- belt-and-suspenders. Skipped today because Owned.grant is reached from
+  -- three paths: creator finish (server-validated), purchase path
+  -- (server-validated), inventory-to-wardrobe save (item code + metadata
+  -- validated by the caller). If a fourth appears, route it through
+  -- Validate.appearance first.
+  if fromField ~= nil then
+    Db.update([[
+      INSERT IGNORE INTO character_clothing
+        (character_id, kind, slot_id, collection, drawable, texture, source, acquired_from)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ]], {
+      characterId, kind, slotId, collection,
+      tostring(drawable), tostring(texture), source,
+      fromField,
+    }, 'owned:grant')
+  else
+    Db.update([[
+      INSERT IGNORE INTO character_clothing
+        (character_id, kind, slot_id, collection, drawable, texture, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    ]], {
+      characterId, kind, slotId, collection,
+      tostring(drawable), tostring(texture), source,
+    }, 'owned:grant')
+  end
 end
 
-function Owned.grant(characterId, kind, slotId, collection, drawable, texture, source)
-  grantOne(characterId, kind, slotId, collection, drawable, texture, source or 'seed')
+function Owned.grant(characterId, kind, slotId, collection, drawable, texture, source, acquiredFrom)
+  grantOne(characterId, kind, slotId, collection, drawable, texture,
+           source or 'seed', acquiredFrom)
 end
 
 function Owned.has(characterId, kind, slotId, collection, drawable, texture)
@@ -75,13 +96,17 @@ end
 ---
 --- `kind` and `slotId` are optional filters. No filter = whole inventory.
 --- Order is stable: kind, slot_id, collection, drawable, texture.
+---
+--- `acquired_from` is included so the wardrobe can render
+--- "T-Shirt #4 (von Max)" on items that came from another character.
+--- NULL otherwise.
 function Owned.list(characterId, kind, slotId)
   if type(characterId) ~= 'string' or characterId == '' then return {} end
 
   local sql, params
   if kind and slotId then
     sql = [[
-      SELECT kind, slot_id, collection, drawable, texture, source, acquired_at
+      SELECT kind, slot_id, collection, drawable, texture, source, acquired_from, acquired_at
         FROM character_clothing
        WHERE character_id = ? AND kind = ? AND slot_id = ?
        ORDER BY collection, drawable, texture
@@ -89,7 +114,7 @@ function Owned.list(characterId, kind, slotId)
     params = { characterId, kind, tostring(slotId) }
   elseif kind then
     sql = [[
-      SELECT kind, slot_id, collection, drawable, texture, source, acquired_at
+      SELECT kind, slot_id, collection, drawable, texture, source, acquired_from, acquired_at
         FROM character_clothing
        WHERE character_id = ? AND kind = ?
        ORDER BY slot_id, collection, drawable, texture
@@ -97,7 +122,7 @@ function Owned.list(characterId, kind, slotId)
     params = { characterId, kind }
   elseif slotId then
     sql = [[
-      SELECT kind, slot_id, collection, drawable, texture, source, acquired_at
+      SELECT kind, slot_id, collection, drawable, texture, source, acquired_from, acquired_at
         FROM character_clothing
        WHERE character_id = ? AND slot_id = ?
        ORDER BY kind, collection, drawable, texture
