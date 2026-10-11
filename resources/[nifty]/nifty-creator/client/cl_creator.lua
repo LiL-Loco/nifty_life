@@ -1413,7 +1413,7 @@ end
 -- ---------------------------------------------------------------- actions
 
 local function openRoot()
-  if Menu.openMenu(RESOURCE, buildRootMenu()) then return end
+  if exports['nifty-core']:openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework

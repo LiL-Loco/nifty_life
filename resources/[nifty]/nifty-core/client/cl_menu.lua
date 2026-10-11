@@ -399,12 +399,10 @@ end)
 
 exports('isOpen', function(...)
   return Current ~= nil
-  return Current ~= nil
 end)
 
 exports('holder', function(...)
-  return Holder
-  return Current
+  return Current and Current.owner or nil
 end)
 
 -- ---------------------------------------------------------------------------
