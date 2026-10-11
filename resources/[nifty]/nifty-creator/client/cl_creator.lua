@@ -2115,6 +2115,17 @@ Citizen.CreateThread(function()
   while true do
     _pool:ProcessMenus()
 
+    -- Q and E close the active menu by default: NativeUI's
+    -- ControlDisablingEnabled only blocks a hardcoded list of
+    -- menu actions, and 47/38 (CONTEXT_SECONDARY / CONTEXT) are
+    -- not in it. Disable them while a menu is open so the camera
+    -- Q / E handler in the same thread is the only thing those
+    -- keys do.
+    if Menu.isOpen() then
+      DisableControlAction(0, 47, true)  -- Q
+      DisableControlAction(0, 38, true)  -- E
+    end
+
     if creatorCam then
       -- Q / E yaw turn in 1-degree steps per keypress. Q is
       -- INPUT_CONTEXT_SECONDARY (control 47), E is INPUT_CONTEXT (38).
