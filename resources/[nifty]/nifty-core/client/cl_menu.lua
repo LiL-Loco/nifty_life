@@ -125,18 +125,20 @@ end)
 --- A row that is drawn and does nothing. Used to break a long menu into readable
 --- groups; it carries no state and no callback.
 exports('separator', function(...)
-  print(('[nifty-core] separator: n_args=%d'):format(select('#', ...)))
-  local menu, label = stripSelf(...)
-  print(('[nifty-core] separator: menu=%s (%s), label=%s (%s)'):format(
-    tostring(menu), type(menu), tostring(label), type(label)))
-  if type(menu) ~= 'table' then
-    print(('[nifty-core] separator: ERROR menu is not a table, returning nil'):format())
-    return nil
-  end
-  local ok, result = pcall(push, menu, { kind = 'separator', label = label or '' })
+  local ok, result = pcall(function(...)
+    local n = select('#', ...)
+    print(('[nifty-core] separator: n_args=%d'):format(n))
+    local menu, label = stripSelf(...)
+    print(('[nifty-core] separator: menu=%s (%s), label=%s (%s)'):format(
+      tostring(menu), type(menu), tostring(label), type(label)))
+    if type(menu) ~= 'table' then
+      error(('separator: menu is not a table, type=%s'):format(type(menu)))
+    end
+    return push(menu, { kind = 'separator', label = label or '' })
+  end, ...)
   if not ok then
-    print(('[nifty-core] separator: push FAILED err=%s'):format(tostring(result)))
-    return menu
+    print(('[nifty-core] separator: FATAL %s'):format(tostring(result)))
+    return nil
   end
   return result
 end)
