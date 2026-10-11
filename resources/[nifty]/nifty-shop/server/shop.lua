@@ -22,7 +22,7 @@ local GetSetting = Nifty.GetSetting
 local Economy = exports['nifty-economy']
 local Inventory = exports['nifty-inventory']
 
-Shop = {}
+local Shop = {}
 
 --- What the shop sells. Built from the item catalogue crossed with settings,
 --- so adding an item to `item_defs` plus a price row is the whole of adding it

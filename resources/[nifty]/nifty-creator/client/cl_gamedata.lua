@@ -144,8 +144,10 @@ local function mapCollection(ped, kind, id, collection, count)
   -- portable `GetPedComponentVariation` across builds, and the caller knows
   -- exactly what it set. Without a restore the ped would be left wearing the last
   -- item of the last collection we walked, and the player is looking at it.
-  local savedCollection, savedDrawable, savedTexture =
-    GameData.savedSlot and GameData.savedSlot(kind, id)
+  -- GameData.savedSlot returns ONE value (the collection number); drawable and
+  -- texture are not part of "which collection was I in" and are reset to 0 here
+  -- for the same reason the loop above passes 0,0.
+  local savedCollection = GameData.savedSlot and GameData.savedSlot(kind, id)
 
   for drawable = 0, count - 1 do
     if kind == 'components' then
@@ -158,9 +160,9 @@ local function mapCollection(ped, kind, id, collection, count)
 
   if savedCollection then
     if kind == 'components' then
-      SetPedCollectionComponentVariation(ped, id, savedCollection, savedDrawable, savedTexture, 0)
+      SetPedCollectionComponentVariation(ped, id, savedCollection, 0, 0, 0)
     else
-      SetPedCollectionPropIndex(ped, id, savedCollection, savedDrawable, savedTexture, false)
+      SetPedCollectionPropIndex(ped, id, savedCollection, 0, 0, false)
     end
   end
 
