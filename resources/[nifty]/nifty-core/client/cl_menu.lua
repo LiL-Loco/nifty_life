@@ -50,6 +50,15 @@ local Self = exports['nifty-core']
 --- Strip the leading `self` arg if it is the namespace. FiveM adds it on
 --- every call; an in-resource direct call does not. After the strip the
 --- returned values are exactly the user-passed args, in order.
+---
+--- The check is `args[1] == Self`, which is true when the leading arg is
+--- THE SAME userdata as `Self`. FiveM normally re-uses the same userdata
+--- for every call, so this works for the standard case. If a build of
+--- FiveM hands out a fresh userdata per call, the comparison would fail
+--- and the helper would return the user args as-is - no strip - and the
+--- caller would see the namespace as its first arg. None of the call
+--- paths we exercise do that today; this is the place to look if a
+--- build ever starts doing it.
 local function stripSelf(...)
   local args = table.pack(...)
   if args.n >= 1 and args[1] == Self then
@@ -126,13 +135,26 @@ end)
 --- groups; it carries no state and no callback.
 exports('separator', function(...)
   local ok, result = pcall(function(...)
-    local n = select('#', ...)
-    print(('[nifty-core] separator: n_args=%d'):format(n))
-    local menu, label = stripSelf(...)
-    print(('[nifty-core] separator: menu=%s (%s), label=%s (%s)'):format(
+    local args = table.pack(...)
+    print(('[nifty-core] separator: n_args=%d, raw[1]=%s (%s)'):format(
+      args.n, tostring(args[1]), type(args[1])))
+    -- The proxy may be passing fewer args than the dot-syntax call site
+    -- supplies. Whatever the count, treat the first TABLE arg as the menu
+    -- and the first STRING arg as the label; if neither is present, the
+    -- call is unrecoverable.
+    local menu, label
+    for i = 1, args.n do
+      local v = args[i]
+      if type(v) == 'table' and menu == nil then
+        menu = v
+      elseif type(v) == 'string' and label == nil then
+        label = v
+      end
+    end
+    print(('[nifty-core] separator: resolved menu=%s (%s), label=%s (%s)'):format(
       tostring(menu), type(menu), tostring(label), type(label)))
     if type(menu) ~= 'table' then
-      error(('separator: menu is not a table, type=%s'):format(type(menu)))
+      error(('separator: no menu table in args, got menu=%s label=%s'):format(tostring(menu), tostring(label)))
     end
     return push(menu, { kind = 'separator', label = label or '' })
   end, ...)
