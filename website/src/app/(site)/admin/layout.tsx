@@ -46,8 +46,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ) : null}
         </p>
         <p className="text-sm text-muted-foreground">
-          Wenn das nicht stimmt: Lass dir im Discord die Teamrolle geben, warte
-          einen Moment — der Bot synchronisiert sie sofort — und lade die Seite neu.
+          Wenn das nicht stimmt: Lass dir im Discord die Teamrolle geben und lade
+          die Seite neu. Der Bot synchronisiert sie sofort.
         </p>
         <p className="flex flex-wrap gap-3">
           <Link className={buttonVariants({ variant: 'secondary' })} href="/account">

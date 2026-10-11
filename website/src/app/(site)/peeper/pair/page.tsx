@@ -78,7 +78,7 @@ export default async function PairPage({
       {params.sent ? (
         <Alert className={SUCCESS_CLASS}>
           Anfrage gesendet. Der Spielserver bestätigt sie, solange die Welt offen
-          ist - Freitag 19:00 bis Sonntag 22:00. Codes laufen nach 15 Minuten ab.
+          ist — Freitag 19:00 bis Sonntag 22:00. Codes laufen nach 15 Minuten ab.
         </Alert>
       ) : null}
 
@@ -86,7 +86,7 @@ export default async function PairPage({
         <Alert className={SUCCESS_CLASS}>
           Bereits mit dem Charakter{' '}
           <span className="text-xs">{link.characterId}</span> verknüpft. Ein Konto,
-          ein Charakter - für einen Wechsel bitte in Discord melden.
+          ein Charakter — für einen Wechsel bitte in Discord melden.
         </Alert>
       ) : (
         <Card>
@@ -110,10 +110,9 @@ export default async function PairPage({
             </form>
 
             <p className="mb-0 mt-4 text-sm text-muted-foreground">
-              Diese Seite reicht den Code ein und kann ihn nicht selbst bestätigen.
-              Diese Bestätigung gehört dem Spielserver - deshalb besitzt der
-              Datenbankzugang hier auf keiner Tabelle ein UPDATE-Recht. Er könnte
-              sich sonst selbst mit jedem Charakter verknüpfen.
+              Diese Seite schickt den Code weiter, bestätigen muss ihn der
+              Spielserver. Du siehst die Verknüpfung also erst, wenn du wieder
+              im Spiel bist.
             </p>
           </CardContent>
         </Card>

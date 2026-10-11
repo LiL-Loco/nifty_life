@@ -78,7 +78,7 @@ export default async function StatusPage({
         <Alert variant="destructive" role="alert">
           <strong>Auf diesem Konto ist ein aktives Ban hinterlegt.</strong>
           <br />
-          {ban.reason ? <span>{ban.reason} - </span> : null}
+          {ban.reason ? <span>{ban.reason} — </span> : null}
           {ban.expires_at ? `Läuft ab am ${ban.expires_at}.` : 'Ohne Ablaufdatum.'}
         </Alert>
       ) : null}
@@ -143,9 +143,8 @@ export default async function StatusPage({
 
       <h2 className="px-5 sm:px-6">Was diese Seite nicht kann</h2>
       <p className="px-5 text-sm text-muted-foreground sm:px-6">
-        Hier gibt es keinen Knopf, um eine Bewerbung freizugeben - der
-        Datenbankzugang dieser Seite besitzt auf keinerlei Tabelle ein UPDATE-Recht.
-        Das ist eine Eigenschaft der Rechtevergabe, nicht dieser Oberfläche.
+        Freigeben und Ablehnen passieren in Discord, nicht auf dieser Seite.
+        Hier siehst du nur, wo du stehst.
       </p>
     </>
   );

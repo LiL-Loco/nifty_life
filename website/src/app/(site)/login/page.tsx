@@ -21,7 +21,7 @@ const ERRORS: Record<string, string> = {
   'link-needs-account':
     'Zum Verknüpfen eines Discord-Kontos musst du angemeldet sein.',
   'no-account-for-discord':
-    'Für dieses Discord-Konto ist kein Portal-Konto hinterlegt. Registriere dich zuerst und verknüpfe Discord dann auf /account.',
+    'Für dieses Discord-Konto ist kein Portal-Konto hinterlegt. Registriere dich zuerst und verknüpfe Discord dann in deinem Konto.',
 };
 
 /**
@@ -72,7 +72,7 @@ export default async function LoginPage({
               Mit Discord anmelden
             </Link>
             <p className="text-muted-foreground mt-2 text-center text-xs">
-              Nur für Konten, die Discord bereits auf /account verknüpft haben.
+              Nur für Konten, die Discord bereits im Konto verknüpft haben.
             </p>
           </div>
         ) : null}

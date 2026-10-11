@@ -53,19 +53,19 @@ export default async function RegisterDonePage() {
                 <>
                   Auf diesem Server ist gerade kein E-Mail-Versand
                   eingerichtet. Ohne Bestätigung kannst du dich nicht
-                  bewerben; sobald der Versand läuft, fordere auf /account
+                  bewerben; sobald der Versand läuft, fordere im Konto
                   einen neuen Bestätigungslink an.
                 </>
               )}
             </li>
             <li>
               <strong>Verknüpfe dein Discord-Konto.</strong>{' '}
-              Die Bewerbung läuft unter einer Discord-Kennung. Auf /account
+              Die Bewerbung läuft unter einer Discord-Kennung. Im Konto
               findest du den Knopf dafür.
             </li>
             <li>
-              <strong>Bewirb dich.</strong> Sobald beides erledigt ist, schaltet
-              /apply die Bewerbung frei.
+              <strong>Bewirb dich.</strong> Sobald beides erledigt ist, kannst du
+              das Formular ausfüllen.
             </li>
           </ol>
 

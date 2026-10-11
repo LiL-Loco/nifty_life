@@ -135,7 +135,7 @@ export function Footer() {
 
           <div>
             <h3 className="text-sm font-semibold tracking-tight text-foreground">
-              Mehr
+              Sitzung
             </h3>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
