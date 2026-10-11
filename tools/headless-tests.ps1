@@ -30,11 +30,42 @@ $ErrorActionPreference = 'Continue'
 
 Write-Host 'Starting throwaway MariaDB...' -ForegroundColor Cyan
 
+# The user migration 016 grants to must EXIST before the migrations run.
+#
+# Migration 016 ends with
+#     GRANT EXECUTE ON PROCEDURE nifty_life.confirm_portal_email TO 'nifty_website'@'localhost';
+# and MariaDB aborts the whole init script on an unknown grantee (ERROR 1133, "Can't
+# find any matching row in the user table"). The real server has that user; this
+# throwaway container has only root. So migrations 017-019 never ran, the table count
+# never reached the expected 27, and the harness failed at "migrations never
+# completed" — which reads like broken SQL and is really a missing account.
+#
+# The user is created HERE, in the harness, and NOT in a migration. Putting
+# `CREATE USER IF NOT EXISTS 'nifty_website' IDENTIFIED BY '...'` into the migration
+# folder would mean committing a known password for a real account, and on the
+# production MariaDB it would silently create that account with it if it were ever
+# missing. A test fixture belongs to the test.
+#
+# The migrations are COPIED next to the fixture and that copy is what gets mounted.
+# The alternative — overriding `--entrypoint` to copy the fixture in first — does not
+# work: mariadb:11's entrypoint is a shell script, and replacing it with another
+# command means the database never initialises at all ("container did not start").
+$fixtureDir = Join-Path ([System.IO.Path]::GetTempPath()) 'nifty-headless-fixture'
+if (Test-Path -LiteralPath $fixtureDir) { Get-ChildItem -LiteralPath $fixtureDir -File | ForEach-Object { rm -- $_.FullName } }
+New-Item -ItemType Directory -Force -Path $fixtureDir | Out-Null
+
+@'
+-- Harness fixture, NOT a project migration. See tools/headless-tests.ps1.
+CREATE USER IF NOT EXISTS 'nifty_website'@'localhost' IDENTIFIED BY 'fixture-only';
+'@ | Set-Content -LiteralPath (Join-Path $fixtureDir '000_fixture_users.sql') -Encoding utf8
+
+Copy-Item -Path "${PWD}/database/migrations/*.sql" -Destination $fixtureDir
+
 docker rm -f $ContainerName 2>&1 | Out-Null
 docker run --name $ContainerName `
     -e MARIADB_ROOT_PASSWORD=test `
     -e MARIADB_DATABASE=nifty_life `
-    -v "${PWD}/database/migrations:/docker-entrypoint-initdb.d:ro" `
+    -v "${fixtureDir}:/docker-entrypoint-initdb.d:ro" `
     -d $Image 2>&1 | Out-Null
 
 if ($LASTEXITCODE -ne 0) {
@@ -44,21 +75,34 @@ if ($LASTEXITCODE -ne 0) {
 
 # Same lesson as verify.ps1: the entrypoint runs init scripts against a TEMPORARY
 # server, so readiness must be the expected table count, not `SELECT 1`.
-$expectedTables = 27
+#
+# 31, not the 27 this used to assert. Migrations 016-019 added `portal_users`,
+# `portal_email_tokens`, the confirmation routine and the chat settings, and the
+# number was never updated — so the harness sat in its readiness loop for five
+# minutes and then reported "migrations never completed", which reads like broken
+# SQL while the migrations had in fact all succeeded.
+#
+# The actual count is printed on failure, because a stale constant that only says
+# "never completed" is exactly the failure mode this check was written to prevent.
+$expectedTables = 31
 $ready = $false
+$lastSeen = '0'
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3
     $probe = docker exec $ContainerName mariadb -uroot -ptest nifty_life -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nifty_life';" 2>&1
     $value = ($probe -join "`n").Trim()
-    if ($LASTEXITCODE -eq 0 -and $value -match "\n$expectedTables$") {
-        $ready = $true
-        break
+    if ($LASTEXITCODE -eq 0 -and $value -match "\n(\d+)$") {
+        $lastSeen = $Matches[1]
+        if ($lastSeen -eq "$expectedTables") {
+            $ready = $true
+            break
+        }
     }
 }
 
 if (-not $ready) {
-    Write-Host "  FAIL  migrations never completed ($expectedTables tables expected)" -ForegroundColor Red
-    docker logs $ContainerName 2>&1 | Select-Object -Last 30
+    Write-Host "  FAIL  migrations never completed ($expectedTables tables expected, $lastSeen present)" -ForegroundColor Red
+    docker logs $ContainerName 2>&1 | Select-String -Pattern 'ERROR' | Select-Object -Last 10
     exit 1
 }
 Write-Host "  PASS  schema ready ($expectedTables tables)" -ForegroundColor Green

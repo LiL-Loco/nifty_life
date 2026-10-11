@@ -490,10 +490,17 @@ _G.MySQL = setmetatable({
   end,
 })
 
--- FiveM's `exports` is both indexable and callable — the modules register their
--- own exports with `exports('name', fn)`. An earlier version was a plain table
--- and identity.lua crashed on load. That mismatch is exactly the class of bug
--- this harness exists to find.
+-- FiveM's `exports` is indexable and callable, and after the resource split it is
+-- indexable BY RESOURCE NAME: `exports['nifty-economy']:round(x)` calls the `round`
+-- export of the nifty-economy resource.
+--
+-- An earlier version was a plain table and identity.lua crashed on load. That
+-- mismatch is exactly the class of bug this harness exists to find. This version
+-- records every registered export under `<resource>/<name>`, and `__index` resolves
+-- a resource name to a proxy that dispatches into it — so a system calling
+-- `exports['nifty-economy']:round` gets the REAL function, not a stub. A shim that
+-- returned true here would make every cross-resource call pass while the real
+-- server ran something else.
 local registeredExports = {}
 
 _G.exports = setmetatable({
@@ -502,7 +509,49 @@ _G.exports = setmetatable({
   __call = function(_, name, fn)
     registeredExports[name] = fn
   end,
+  __index = function(_, resource)
+    local proxy = setmetatable({}, {
+      __index = function(_, name)
+        local key = resource .. '/' .. name
+        local fn = registeredExports[key]
+        if not fn then
+          error(("no export '%s' registered (tried '%s')"):format(tostring(name), key), 2)
+        end
+
+        -- The self-stripping wrapper is the whole point of this block.
+        --
+        -- `exports['nifty-economy']:round(w)` is Lua sugar for
+        -- `exports['nifty-economy'].round(exports['nifty-economy'], w)` — the
+        -- resource object arrives as the FIRST argument. FiveM's own export
+        -- bindings tolerate that; a plain `return fn` here would hand every
+        -- exported function the proxy table as its first parameter, which is how
+        -- `Economy.round(proxy, 12.5)` ends up as "attempt to compare number with
+        -- table" deep inside the money code — a failure that looks like a rounding
+        -- bug and is actually a broken test double.
+        return function(...)
+          local first = ...
+          if first == proxy then
+            return fn(select(2, ...))
+          end
+          return fn(...)
+        end
+      end,
+    })
+    return proxy
+  end,
 })
+
+--- Register a module's exports the way FXServer would, i.e. under a resource name.
+--- Called after each system module is loaded.
+local function bindResourceExports(resource, modules)
+  for moduleName, module in pairs(modules) do
+    for fnName, fn in pairs(module) do
+      if type(fn) == 'function' then
+        registeredExports[resource .. '/' .. fnName] = fn
+      end
+    end
+  end
+end
 
 _G.registeredExports = registeredExports
 
@@ -521,29 +570,104 @@ local function load(path)
   return chunk()
 end
 
-local RES = RESOURCE_ROOT .. '/resources/[nifty]/nifty-core'
+-- The base first, then the systems, in dependency order.
+--
+-- This mirrors what FXServer does at boot, which is the point: the harness used to
+-- load ONE file list for a single-resource project, and after the split the order
+-- IS the architecture. Loading the systems before nifty-core, or economy before
+-- inventory, would produce a failure that looks like a bug in the module under test.
+--
+-- Each resource's `shared/core.lua` is skipped on purpose. It calls
+-- `exports['nifty-core']:facade()`, and the harness has no resource boundaries — so
+-- the facade is injected below instead, which is the honest equivalent.
+local BASE = RESOURCE_ROOT .. '/resources/[nifty]/nifty-core'
 
-load(RES .. '/shared/constants.lua')
-load(RES .. '/shared/appearance_config.lua')
-load(RES .. '/server/db.lua')
-load(RES .. '/server/settings.lua')
-load(RES .. '/server/validate.lua')
-load(RES .. '/server/sv_session_guard.lua')
-load(RES .. '/server/identity.lua')
-load(RES .. '/server/economy.lua')
-load(RES .. '/server/stuetze.lua')
-load(RES .. '/server/inventory.lua')
-load(RES .. '/server/ownership.lua')
-load(RES .. '/server/jobs.lua')
-load(RES .. '/server/shop.lua')
-load(RES .. '/server/phone.lua')
-load(RES .. '/server/peeper.lua')
+load(BASE .. '/shared/constants.lua')
+load(BASE .. '/shared/appearance_config.lua')
+load(BASE .. '/server/db.lua')
+load(BASE .. '/server/settings.lua')
+load(BASE .. '/server/validate.lua')
+load(BASE .. '/server/sv_session_guard.lua')
+load(BASE .. '/server/identity.lua')
 
--- Fire `onResourceStart` exactly as FiveM would. This is what loads the settings
--- cache and the item catalogue; skipping it leaves the modules loaded but their
--- world empty, and every subsequent failure points at the wrong thing.
-for _, handler in ipairs(registeredHandlers['onResourceStart'] or {}) do
-  handler('nifty-core')
+--- The facade, injected where `shared/core.lua` would have fetched it. This is the
+--- harness proving the BASE contract: every system resource reads Db, GetSetting
+--- and Identity through exactly these names, so if the base stops exporting one of
+--- them, every system breaks at load and the harness fails in the same place the
+--- server would.
+Nifty.core = {
+  Db = Db,
+  GetSetting = GetSetting,
+  Identity = Identity,
+  Nifty = Nifty,
+  SessionGuard = SessionGuard,
+  Validate = Validate,
+}
+
+--- And the three flat names `shared/core.lua` derives from it. Set explicitly
+--- rather than read back off `Nifty.core`: the harness must exercise the same
+--- attribute names the real bridge sets, or it would pass while every system
+--- resource failed to boot on a nil.
+Nifty.Db = Db
+Nifty.GetSetting = GetSetting
+Nifty.Identity = Identity
+Nifty.SessionGuard = SessionGuard
+Nifty.Validate = Validate
+
+local N = RESOURCE_ROOT .. '/resources/[nifty]/'
+
+load(N .. 'nifty-economy/server/economy.lua')
+load(N .. 'nifty-economy/server/stuetze.lua')
+load(N .. 'nifty-inventory/server/inventory.lua')
+load(N .. 'nifty-housing/server/ownership.lua')
+load(N .. 'nifty-jobs/server/jobs.lua')
+load(N .. 'nifty-shop/server/shop.lua')
+load(N .. 'nifty-phone/server/phone.lua')
+load(N .. 'nifty-peeper/server/sv_peeper.lua')
+
+-- Register each system's exports under its RESOURCE name, AFTER the modules are
+-- loaded — reflecting over a table that does not exist yet registers nothing, and
+-- the failure then shows up as a nil index inside whichever system called it first.
+--
+-- In FiveM a module's `exports('add', fn)` inside nifty-inventory becomes
+-- `exports['nifty-inventory']:add(...)` from anywhere else. The harness does the
+-- same by reflecting over the module tables, which is safer than hand-listing
+-- export names: a name added in the module and forgotten here fails the test instead
+-- of silently vanishing.
+bindResourceExports('nifty-economy', { Economy = Economy, Stuetze = Stuetze })
+bindResourceExports('nifty-inventory', { Inventory = Inventory })
+bindResourceExports('nifty-jobs', { Jobs = Jobs })
+bindResourceExports('nifty-shop', { Shop = Shop })
+bindResourceExports('nifty-phone', { Phone = Phone })
+bindResourceExports('nifty-housing', { Ownership = Ownership })
+bindResourceExports('nifty-peeper', { Peeper = Peeper })
+
+-- Fire `onResourceStart` exactly as FiveM would — ONCE PER RESOURCE.
+--
+-- This used to fire a single time with 'nifty-core', which was correct when there
+-- was one resource. After the split it is not: several systems load their world in
+-- their own handler (the item catalogue, the job definitions), and firing only for
+-- the base leaves those modules loaded but empty, so every subsequent failure points
+-- at the wrong file.
+--
+-- The order is the boot order, and it matters: the base first because everything
+-- reads its settings, then the systems in the order FXServer would start them.
+local BOOT_ORDER = {
+  'nifty-core',
+  'nifty-economy',
+  'nifty-inventory',
+  'nifty-jobs',
+  'nifty-shop',
+  'nifty-phone',
+  'nifty-housing',
+  'nifty-peeper',
+  'nifty-world',
+}
+
+for _, name in ipairs(BOOT_ORDER) do
+  for _, handler in ipairs(registeredHandlers['onResourceStart'] or {}) do
+    handler(name)
+  end
 end
 
 -- ============================================================================
