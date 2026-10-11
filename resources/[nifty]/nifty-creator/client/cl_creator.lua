@@ -353,19 +353,26 @@ local slots = { components = {}, props = {} }
 --- DISPLAY ONLY. The id is the truth; these strings are what the player reads, and a
 --- wrong label here is a cosmetic bug, never a stored value. They exist because the
 --- alternative is a menu that says "Slot 3" and leaves the player guessing.
+-- GTA component IDs (PV_COMP_*). 0..4 are obvious; 5..11 are the ones
+-- that get confused. The mapping is fixed by the engine, so a wrong
+-- index addresses the wrong component - the label can move, the
+-- index cannot. 5 hand=backpack, 6 feet=shoes, 7 teef=parachute,
+-- 8 accs=accessories, 9 task=armor, 10 decl=emblems, 11 jbib=jacket.
+-- Slot 12 is never populated by the engine; placeholder so the menu
+-- does not show a missing index.
 local COMPONENT_LABELS = {
   [0]  = 'Kopf',
   [1]  = 'Gesicht',
   [2]  = 'Haare',
   [3]  = 'Oberteil',
   [4]  = 'Hose',
-  [5]  = 'Schuhe',
-  [6]  = 'Handschuhe',
-  [7]  = 'Accessoires',
-  [8]  = 'Unterhemd',
-  [9]  = 'Jacke',
-  [10] = 'Shirt',
-  [11] = 'Tasche',
+  [5]  = 'Tasche',
+  [6]  = 'Schuhe',
+  [7]  = 'Fallschirm',
+  [8]  = 'Accessoires',
+  [9]  = 'Ruestung',
+  [10] = 'Abzeichen',
+  [11] = 'Jacke',
   [12] = 'Hose (2)',
 }
 
