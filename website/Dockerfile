@@ -33,6 +33,19 @@ COPY . .
 # even if someone runs it by hand with a bare `next build`. See config.ts: a
 # missing runtime variable must not abort a build.
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# The build step died on the deploy host with exit 255 and no output at all,
+# right after "Creating an optimized production build ...". A process that
+# vanishes without a line of diagnostics was killed, not refused: the build ran
+# out of memory and the kernel took it. A V8 heap limit turns that silent kill
+# into a build that either completes or says exactly why it could not.
+#
+# Set this to roughly 60% of the RAM actually free on the host WHILE the build
+# runs. Too high and the kernel kills it again; too low and this build fails
+# with "JavaScript heap out of memory", which is at least an answer.
+ARG NODE_BUILD_MEMORY_MB=2048
+ENV NODE_OPTIONS=--max-old-space-size=${NODE_BUILD_MEMORY_MB}
+
 RUN npm run build
 
 # ---- runner -----------------------------------------------------------------
