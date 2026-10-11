@@ -2092,11 +2092,11 @@ end)
 -- it through the module-level creatorCam global so the thread sees
 -- the right cam without a separate tracking variable.
 -- Turn and zoom state for the working camera. Yaw is the heading the
--- player is looking at (degrees, GTA's right-handed convention). Zoom
--- is the FOV; smaller = closer, larger = further. Both clamped.
+-- player is looking at (degrees, GTA's right-handed convention); each Q
+-- or E press adds or subtracts exactly one degree. Zoom is the FOV;
+-- smaller = closer, larger = further. Both clamped.
 local camYaw = 0.0
 local camFov = 50.0
-local CAM_YAW_RATE   = 90.0  -- degrees per second when Q / E is held
 local CAM_FOV_MIN   = 15.0
 local CAM_FOV_MAX   = 75.0
 local CAM_FOV_STEP  = 12.0  -- FOV delta per arrow press
@@ -2111,23 +2111,21 @@ Citizen.CreateThread(function()
     _pool:ProcessMenus()
 
     if creatorCam then
-      local dt = GetFrameTime()
-
-      -- Q / E yaw turn. Q is INPUT_CONTEXT_SECONDARY (control 47), E
-      -- is INPUT_CONTEXT (38). NativeUI's ControlDisablingEnabled
-      -- blocks the engine's normal Q / E / arrow handling, so we read
-      -- IsDisabledControlPressed ourselves.
-      local turn = 0.0
-      if IsDisabledControlPressed(0, 47) then turn = turn - 1 end  -- Q
-      if IsDisabledControlPressed(0, 38) then turn = turn + 1 end  -- E
-      if turn ~= 0.0 then
-        camYaw = camYaw + turn * CAM_YAW_RATE * dt
+      -- Q / E yaw turn in 1-degree steps per keypress. Q is
+      -- INPUT_CONTEXT_SECONDARY (control 47), E is INPUT_CONTEXT (38).
+      -- NativeUI's ControlDisablingEnabled blocks the engine's own Q / E
+      -- handling, so we read IsDisabledControlJustPressed ourselves -
+      -- one-shot per press, not the held-state IsPressed. A held Q used
+      -- to spin at 90 deg/s; the user wanted 1-degree steps so a single
+      -- tap = exactly 1 degree of rotation.
+      if IsDisabledControlJustPressed(0, 47) then camYaw = camYaw - 1.0 end  -- Q
+      if IsDisabledControlJustPressed(0, 38) then camYaw = camYaw + 1.0 end  -- E
+      if IsDisabledControlJustPressed(0, 47) or IsDisabledControlJustPressed(0, 38) then
         local cx, cy, cz = GetCamCoord(creatorCam)
-        local dist = 1.0
         local rad = math.rad(camYaw)
         SetCamCoord(creatorCam,
-          cx + math.sin(rad) * dist,
-          cy + math.cos(rad) * dist,
+          cx + math.sin(rad) * 1.0,
+          cy + math.cos(rad) * 1.0,
           cz)
         PointCamAtCoord(creatorCam, cx, cy, cz)
       end
