@@ -27,7 +27,18 @@ Nifty = Nifty or {}
 ---
 --- The random stream is now advanced continuously across calls, which is what
 --- makes consecutive UUIDs independent rather than a pure function of the clock.
-math.randomseed(os.time() + math.floor((tonumber(os.clock()) or 0) * 1000000))
+---
+--- The standard `os.time() + os.clock()` is sandboxed out in the cerulean
+--- runtime, so fall back to the Cfx `GetGameTimer()` (a server native) when
+--- `os` is missing. GetGameTimer returns milliseconds since FXServer start, which
+--- is plenty of entropy for a UUID seed.
+local function seedSource()
+  if os and os.time then
+    return os.time() + math.floor((tonumber(os.clock()) or 0) * 1000000)
+  end
+  return GetGameTimer()
+end
+math.randomseed(seedSource())
 
 function Nifty.newUuid()
   local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
