@@ -1263,6 +1263,7 @@ end
 
 --- The root menu: one row per available slot, then the actions.
 buildRootMenu = function()
+  print('[nifty-creator] buildRootMenu: enter')
   local menu = Menu:menu({
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
@@ -1405,6 +1406,7 @@ buildRootMenu = function()
     onSelect = function() cancel() end,
   })
 
+  print(('[nifty-creator] buildRootMenu: exit, items=%d'):format(#menu.items))
   return menu
 end
 
