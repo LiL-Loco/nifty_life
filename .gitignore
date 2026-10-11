@@ -97,10 +97,20 @@ desktop.ini
 #   fxproject.json             the generated project descriptor
 #   Test/                      its scratch directory
 #   resources/fxproject.json   ditto, one level down
-#   resources/[system]/        baseevents, basic-gamemode, map-skater, mapmanager,
-#                              playernames, spawnmanager — Cfx's defaults, not ours
+#   resources/[system]/        Cfx's group directory for the default pack
 #
-# `/resources/[nifty]` is OUR code and stays tracked.
+# It deploys its default pack FLAT into resources/, not only under [system] — so
+# these arrive as top-level folders and are Cfx's, not ours:
+#
+#   baseevents  basic-gamemode  map-skater  playernames
+#   artifact    hardcap         webpack     yarn
+#
+# `artifact`, `hardcap`, `webpack` and `yarn` arrive EMPTY and make the resource
+# scan warn on every boot ("does not have a resource manifest"). The four with
+# content load a stock gamemode nobody asked for.
+#
+# `/resources/[nifty]` is OUR code and stays tracked. `mapmanager`, `spawnmanager`,
+# `oxmysql`, `bob74_ipl*` and `chat` are handled by the download rules above.
 #
 # The brackets in `/resources/[system]/` need ESCAPING. gitignore reads `[...]` as
 # a character class, so the unescaped rule matches `resources/s/`, `resources/y/`
@@ -116,3 +126,11 @@ desktop.ini
 /fxproject.json
 /resources/fxproject.json
 /resources/\[system\]/
+/resources/baseevents/
+/resources/basic-gamemode/
+/resources/map-skater/
+/resources/playernames/
+/resources/artifact/
+/resources/hardcap/
+/resources/webpack/
+/resources/yarn/
