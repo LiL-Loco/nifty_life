@@ -39,12 +39,12 @@ export default async function PairPage({
         </p>
         <p className="flex flex-wrap gap-3">
           {discordConfigured ? (
-            <Link
+            <a
               className={buttonVariants()}
               href="/auth/discord/connect?next=/peeper/pair"
             >
               Discord-Konto verknüpfen
-            </Link>
+            </a>
           ) : null}
           <Link className={buttonVariants({ variant: 'secondary' })} href="/account">
             Zur Kontoseite

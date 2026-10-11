@@ -61,12 +61,12 @@ export default async function SettingsPage() {
                 </div>
               </>
             ) : discordConfigured ? (
-              <Link
+              <a
                 className={buttonVariants({ size: 'sm' })}
                 href="/auth/discord/connect?next=/account/settings"
               >
                 Discord-Konto verknüpfen
-              </Link>
+              </a>
             ) : (
               <span className="text-muted-foreground">
                 Auf diesem Server ist keine Discord-Anwendung eingerichtet.

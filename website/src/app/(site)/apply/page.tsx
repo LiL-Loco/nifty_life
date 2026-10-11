@@ -50,9 +50,9 @@ export default async function ApplyPage() {
           nicht ohne Discord-Konto einreichen.
         </p>
         <p className="flex flex-wrap gap-3">
-          <Link className={buttonVariants()} href="/auth/discord/connect?next=/apply">
+          <a className={buttonVariants()} href="/auth/discord/connect?next=/apply">
             Discord-Konto verknüpfen
-          </Link>
+          </a>
           <Link className={buttonVariants({ variant: 'secondary' })} href="/account">
             Zur Kontoseite
           </Link>

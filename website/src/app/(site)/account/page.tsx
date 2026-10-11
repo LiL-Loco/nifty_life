@@ -104,12 +104,12 @@ export default async function AccountPage({
                 </div>
                 <div className="mt-3">
                   {discordConfigured ? (
-                    <Link
+                    <a
                       className={buttonVariants()}
                       href="/auth/discord/connect?next=/account"
                     >
                       Discord-Konto verknüpfen
-                    </Link>
+                    </a>
                   ) : (
                     <span className="text-sm text-muted-foreground">
                       Auf diesem Server ist keine Discord-Anwendung eingerichtet.

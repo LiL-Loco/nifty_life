@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
@@ -64,13 +63,13 @@ export default async function LoginPage({
             <p className="text-muted-foreground mb-2 text-center text-xs uppercase tracking-[0.06em]">
               oder
             </p>
-            <Link
+            <a
               href="/auth/discord/login"
               className={buttonVariants({ variant: 'outline', size: 'default' }) + ' w-full justify-center'}
             >
               <DiscordMark />
               Mit Discord anmelden
-            </Link>
+            </a>
             <p className="text-muted-foreground mt-2 text-center text-xs">
               Nur für Konten, die Discord bereits im Konto verknüpft haben.
             </p>
