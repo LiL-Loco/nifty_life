@@ -370,18 +370,15 @@ exports('isOpen', function(...)
 end)
 
 -- Read-only helper: returns the number of items currently in the
--- menu the caller passed in. The handle the caller holds is a
--- proxy-deep-copy of the real UIMenu (FiveM's export proxy copies
--- on return), so reading `#handle.Items` would always be 0 - the
--- copy's Items table is empty. The handle carries the real menu's
--- `_id` as a scalar, so we use it to look up the live menu and
--- count its real Items.
+-- most recently built menu. Same proxy quirk as the builders -
+-- the export proxy drops the first user arg, so the caller's
+-- `Menu.itemsCount(menu)` lands at the shim with no handle. The
+-- shim reports on LastBuiltMenu instead, which is the right value
+-- for the "build then check at the end of the build function"
+-- pattern (cl_creator.lua:1413).
 exports('itemsCount', function(...)
-  local handle = ...
-  if type(handle) ~= 'table' then return 0 end
-  local real = _menuById[handle._id]
-  if not real or not real.Items then return 0 end
-  return #real.Items
+  if not LastBuiltMenu or not LastBuiltMenu.Items then return 0 end
+  return #LastBuiltMenu.Items
 end)
 
 exports('holder', function(...)
