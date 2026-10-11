@@ -220,12 +220,22 @@ GRANT SELECT, INSERT ON nifty_life.portal_email_tokens TO 'nifty_website'@'local
 -- database error cannot orphan a link and leave an application unattributable.
 GRANT SELECT, INSERT, UPDATE ON nifty_life.portal_user_discord TO 'nifty_website'@'localhost';
 
--- Verification, alongside the ones below:
---   INSERT INTO applications (...)                    -- denied: no INSERT
---   UPDATE applications SET answers='{}'             -- denied: column not granted
---   UPDATE applications SET discord_id='1'           -- denied: column not granted
---   UPDATE applications SET reviewed_by_discord_id=x  -- PERMITTED: this is the decision
---   DELETE FROM applications WHERE id='x'            -- denied: no DELETE
+-- Verification, alongside the ones below.
+--
+-- Which pool matters here, and this list used not to say so. `nifty_website`
+-- SUBMITS applications and `nifty_admin` DECIDES them; each is denied exactly
+-- the column the other one owns. An earlier version of this block claimed the
+-- INSERT was denied without a grant to either account, which has been false
+-- since line 37 -- see database/verify.ps1, which asserts the opposite.
+--   INSERT INTO applications (...)                    -- PERMITTED for nifty_website (submitting
+--                                                       -- is its job, ADR-0007); DENIED for
+--                                                       -- nifty_admin, which has SELECT only
+--   UPDATE applications SET answers='{}'             -- denied on both: column not granted
+--   UPDATE applications SET discord_id='1'           -- denied on both: column not granted
+--   UPDATE applications SET reviewed_by_discord_id=x  -- PERMITTED for nifty_admin (the decision);
+--                                                       -- denied for nifty_website, which has no
+--                                                       -- UPDATE on applications at all
+--   DELETE FROM applications WHERE id='x'            -- denied on both: no DELETE
 --   UPDATE peeper_posts SET deleted_at=NOW           -- denied: no grant at all
 --   SELECT * FROM wallets                            -- denied: no grant at all
 --   INSERT INTO staff (...)                          -- denied: no INSERT on either web account
