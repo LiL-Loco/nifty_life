@@ -1411,7 +1411,10 @@ end
 -- ---------------------------------------------------------------- actions
 
 local function openRoot()
-  if Menu:openMenu(RESOURCE, buildRootMenu()) then return end
+  local menu = buildRootMenu()
+  local items = type(menu) == 'table' and #menu.items or -1
+  print(('[%s] openRoot: items=%s, title=%s'):format(RESOURCE, tostring(items), type(menu) == 'table' and tostring(menu.title) or 'nil'))
+  if Menu:openMenu(RESOURCE, menu) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework
@@ -1419,7 +1422,7 @@ local function openRoot()
   -- the actual two states so the next log is unambiguous.
   local holder = exports['nifty-core']:holder() or 'nil'
   local current = Menu:isOpen() and 'a menu is open' or 'no menu open'
-  print(('[%s] could not open the creator menu - holder=%s, %s'):format(RESOURCE, holder, current))
+  print(('[%s] could not open the creator menu - holder=%s, %s, items=%s'):format(RESOURCE, holder, current, tostring(items)))
   TriggerServerEvent('nifty:server:cancelCreator')
 end
 
