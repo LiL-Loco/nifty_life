@@ -271,7 +271,7 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
   -- appearance then only has to dress that body. Calling the model-setting
   -- `applyAppearance` here as well would reset the ped a second time and throw
   -- away everything the spawn just did.
-  exports['nifty-world']:spawnPlayer({
+  exports['nifty-spawn']:spawnPlayer({
     x = data.spawn.x,
     y = data.spawn.y,
     z = data.spawn.z,
@@ -286,7 +286,7 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
   -- Autospawn is armed AFTER the spawn, never before. During the creator the
   -- player is standing at the creation point and must stay there; arming it
   -- earlier would let the death monitor move them out from under the menu.
-  exports['nifty-world']:setAutoSpawn(true)
+  exports['nifty-spawn']:setAutoSpawn(true)
 
   print(('[nifty-world] entered world as %s %s'):format(
     data.character.firstName, data.character.lastName or ''))
