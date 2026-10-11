@@ -130,6 +130,14 @@ export function Footer() {
                   Regelwerk
                 </a>
               </li>
+              <li>
+                <Link
+                  href="/help"
+                  className="text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Hilfe
+                </Link>
+              </li>
             </ul>
           </div>
 
