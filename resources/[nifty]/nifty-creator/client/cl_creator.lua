@@ -1367,9 +1367,15 @@ local function openRoot()
   -- the next boot log tells us which one is wrong.
   local holder = exports['nifty-core']:holder() or 'nil'
   local current = Menu:isOpen() and 'a menu is open' or 'no menu open'
-  local menu = buildRootMenu()
-  local menu_kind = (not menu or #menu.items == 0) and 'empty menu' or 'menu has ' .. #menu.items .. ' items'
-  print(('[%s] could not open the creator menu - holder=%s, %s, %s'):format(RESOURCE, holder, current, menu_kind))
+  local probe = buildRootMenu()
+  local menu_kind = (not probe or #probe.items == 0) and 'empty menu' or 'menu has ' .. #probe.items .. ' items'
+  -- And the underlying state, so the next log tells us which side of
+  -- the if/else is at fault.
+  local component_ids = {}
+  for id in pairs(slots.components or {}) do component_ids[#component_ids + 1] = id end
+  table.sort(component_ids)
+  print(('[%s] could not open the creator menu - holder=%s, %s, %s, component IDs in slots={%s}, COMPONENT_ORDER={%s}'):format(
+    RESOURCE, holder, current, menu_kind, table.concat(component_ids, ','), table.concat(COMPONENT_ORDER, ',')))
   TriggerServerEvent('nifty:server:cancelCreator')
 end
 
