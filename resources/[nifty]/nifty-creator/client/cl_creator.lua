@@ -1412,7 +1412,7 @@ end
 
 -- ---------------------------------------------------------------- actions
 
-local function openRoot()
+openRoot = function()
   if exports['nifty-core']:openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
