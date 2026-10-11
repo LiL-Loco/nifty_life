@@ -39,6 +39,8 @@ local submit
 local cancel
 local buildRootMenu
 local closeCreator
+local refresh
+local applyHairOverlay
 
 local creatorOpen = false
 local currentModel = 'mp_m_freemode_01'
@@ -221,11 +223,17 @@ local function respawnModel()
   return PlayerPedId()
 end
 
---- Store a pick and show it on the ped immediately. One slot at a time, so the
---- preloaded drawable swaps instead of rebuilding the whole ped.
+--- Store a pick and show it on the ped immediately.
 local function setSlot(kind, id, slot)
   selection[kind][tostring(id)] = slot
-  applySlot(PlayerPedId(), kind, id, slot)
+  refresh()
+
+  -- A hair overlay rides ON TOP of a hairstyle, so changing the hair moves the
+  -- surface it was painted on. Re-applying it here means the overlay follows the
+  -- hair automatically instead of the player finding that it vanished.
+  if kind == 'components' and tonumber(id) == 2 then
+    applyHairOverlay()
+  end
 end
 
 --- The current pick for a slot, or nil.
@@ -311,7 +319,423 @@ CreateThread(function()
   end
 end)
 
+--- German labels for the thirteen head overlays, in the game's own order.
+---
+--- The ids come from the engine, not from here - these are what the player reads.
+local OVERLAY_LABELS = {
+  [0]  = 'Pickel',
+  [1]  = 'Bart',
+  [2]  = 'Augenbrauen',
+  [3]  = 'Alterung',
+  [4]  = 'Make-up',
+  [5]  = 'Röte',
+  [6]  = 'Teint',
+  [7]  = 'Sonnenschaden',
+  [8]  = 'Lippenstift',
+  [9]  = 'Muttermale',
+  [10] = 'Brustbehaarung',
+  [11] = 'Koerperpickel',
+  [12] = 'Koerperpickel (additiv)',
+}
+
+--- Face sliders 0..19. The engine gives them no names worth shipping; the player
+--- sees a number, which is what every creator shows anyway.
+local FEATURE_SLIDER_MIN = -1.0
+local FEATURE_SLIDER_MAX = 1.0
+
+--- Face sliders, head overlays, hair colour and the hair overlay decoration.
+local face = {
+  features = {},
+  overlays = {},
+  hairColour = { primary = 0, highlight = 0 },
+  hairOverlay = nil,
+}
+
+--- The whole appearance as the creator currently sees it.
+local function appearanceNow()
+  return {
+    model        = currentModel,
+    components   = selection.components,
+    props        = selection.props,
+    faceFeatures = face.features,
+    overlays     = face.overlays,
+    hairColour   = face.hairColour,
+    hairOverlay  = face.hairOverlay,
+  }
+end
+
+--- Push everything except the model onto the ped.
+---
+--- Goes through nifty-world rather than setting natives here, because nifty-world
+--- owns the single implementation and, more importantly, the single answer to which
+--- spelling of a native this client has. A second probe in this resource could
+--- resolve differently and the creator would fight the world.
+---
+--- Assigned, not `local function`: `setSlot` above calls this, and a `local`
+--- function declared further down is a DIFFERENT variable as far as setSlot is
+--- concerned - the call would go to a global nil.
+refresh = function()
+  exports['nifty-world']:applyAppearanceParts(PlayerPedId(), appearanceNow())
+end
+
+--- ------------------------------------------------------------- hair overlays
+
+--- The face natives, resolved once by nifty-world. Fetched at use, not at load:
+--- an export called while the other resource is still starting returns nil, and
+--- indexing nil at load time would take this whole file down.
+local function natives()
+  return exports['nifty-world']:faceNatives() or {}
+end
+
+--- 'unchecked' | 'available' | 'unavailable:<reason>'
+local hairOverlayState = 'unchecked'
+
+--- preset hash -> collection hash, for every tattoo-shop item in the
+--- `hairOverlay` update group.
+local hairOverlayMap = nil
+
+--- The overlay presets, in a stable order, so the menu rows do not move between
+--- sessions.
+local hairOverlayPresets = nil
+
+--- Build the preset -> collection map from the tattoo shop.
+---
+--- THE UNCERTAIN PART, and the reason this is behind a probe. GTA exposes the
+--- tattoo shop items through `GET_TATTOO_SHOP_DLC_ITEM_DATA`, whose third argument
+--- is a POINTER to a three-field struct. Lua cannot build that pointer. FiveM ships
+--- a C# helper, `GetTattooCollectionData`, that wraps it - but nothing in the
+--- documentation says whether that helper is reachable from Lua, and calling a
+--- name that turns out not to exist is a nil-call error at runtime rather than a
+--- compile error.
+---
+--- So: probe, and if the map cannot be built, say so in the log and leave the menu
+--- row out. A feature that is missing and a feature that is silently broken look
+--- identical to a player, and only the first is acceptable.
+local function probeHairOverlays()
+  if hairOverlayState ~= 'unchecked' then return hairOverlayState end
+
+  local n = natives()
+  local function missing(reason)
+    hairOverlayState = 'unavailable:' .. reason
+    print(('[%s] hair overlays unavailable - %s'):format(RESOURCE, reason))
+    return hairOverlayState
+  end
+
+  if type(n.numTattooShopDlcItems) ~= 'function' then
+    return missing('GetNumTattooShopDlcItems is not available in this runtime')
+  end
+  if type(n.tattooCollectionData) ~= 'function' then
+    return missing('GetTattooCollectionData is not callable from Lua here')
+  end
+
+  -- Character index 3 is male, 4 is female. Not our own numbering.
+  local characterIndex = (currentModel == 'mp_f_freemode_01') and 4 or 3
+
+  local ok, count = pcall(n.numTattooShopDlcItems, characterIndex)
+  if not ok or type(count) ~= 'number' then
+    return missing('the tattoo shop item count did not come back as a number')
+  end
+  if count <= 0 then
+    return missing(('the tattoo shop reports %d items'):format(count))
+  end
+
+  local map = {}
+  local groupHash = joaat('hairOverlay')
+
+  for i = 0, count - 1 do
+    local got, data = pcall(n.tattooCollectionData, characterIndex, i)
+    if got and type(data) == 'table' and data.preset and data.collection then
+      -- `updateGroup` is a uint in some builds and a string in others. Both are
+      -- accepted, because whichever this build hands back is the one it uses to
+      -- group the shop.
+      local group = data.updateGroup
+      if group == groupHash or group == 'hairOverlay' or tostring(group) == 'hairOverlay' then
+        map[data.preset] = data.collection
+      end
+    end
+  end
+
+  local presets = {}
+  for preset in pairs(map) do presets[#presets + 1] = preset end
+  if #presets == 0 then
+    return missing(('none of the %d shop items belong to the hairOverlay group'):format(count))
+  end
+  table.sort(presets)
+
+  hairOverlayMap = map
+  hairOverlayPresets = presets
+  hairOverlayState = 'available'
+
+  print(('[%s] hair overlays: %d presets across %d shop items'):format(
+    RESOURCE, #presets, count))
+
+  return hairOverlayState
+end
+
+--- The decal preset the game ties to the hairstyle currently on the ped.
+---
+--- The hairstyle is read back with `GetPedDrawableVariation`, which reports the
+--- GLOBAL index the engine actually applied. Going through
+--- `GET_HASH_NAME_FOR_COMPONENT` with that is deliberate: the creator stores
+--- collection-local drawables, and passing one of those to a native that expects
+--- a global one would silently ask about a different hairstyle.
+local function presetForCurrentHair(ped)
+  local n = natives()
+  if type(n.hashNameForComponent) ~= 'function' then return nil end
+  if type(n.forcedComponentCount) ~= 'function' then return nil end
+  if type(n.getForcedComponent) ~= 'function' then return nil end
+
+  local okHash, hash = pcall(n.hashNameForComponent, ped, 2, GetPedDrawableVariation(ped, 2), 0)
+  if not okHash or type(hash) ~= 'number' or hash == 0 then return nil end
+
+  local okCount, count = pcall(n.forcedComponentCount, hash)
+  if not okCount or type(count) ~= 'number' then return nil end
+
+  for i = 0, count - 1 do
+    -- Out-pointer parameters in FiveM Lua are the least documented corner of the
+    -- runtime, so the call is wrapped and its return values read. If this build
+    -- hands them back as arguments instead, the probe below finds nothing and the
+    -- feature degrades to "no overlay" rather than to an error.
+    local ok, fHash, fIndex, fType = pcall(n.getForcedComponent, hash, i, 0, 0, 0)
+    if ok and type(fHash) == 'number' and fHash ~= 0 then
+      -- Type 10 is the decal component, which is what carries hair overlays.
+      if fType == 10 or (fType == nil and hairOverlayMap and hairOverlayMap[fHash]) then
+        return fHash
+      end
+    end
+  end
+
+  return nil
+end
+
+--- Clear first: the game keeps facial decorations, so a second overlay would
+--- stack on the first instead of replacing it.
+--- Assigned rather than `local function` - `setSlot` calls this, and it is
+--- declared below that caller.
+applyHairOverlay = function()
+  local n = natives()
+  local ped = PlayerPedId()
+
+  if n.clearPedDecorations then n.clearPedDecorations(ped) end
+
+  local chosen = face.hairOverlay
+  if not chosen then return end
+
+  local map = hairOverlayMap or {}
+  local preset = chosen.preset or presetForCurrentHair(ped)
+
+  if not preset or not map[preset] then
+    print(('[%s] hair overlay preset %s has no collection in the shop map - not applying'):format(
+      RESOURCE, tostring(preset)))
+    return
+  end
+
+  if not n.setFacialDecoration then
+    print(('[%s] _SetPedFacialDecoration is missing - no overlay applied'):format(RESOURCE))
+    return
+  end
+
+  -- Clear first: the game keeps facial decorations, so a second overlay would
+  -- stack on the first instead of replacing it.
+  if n.clearFacialDecorations then n.clearFacialDecorations(ped) end
+  n.setFacialDecoration(ped, map[preset], preset)
+end
+
 -- ------------------------------------------------------------------ menus
+
+--- How many styles an overlay has, bounded.
+---
+--- `GetNumHeadOverlayValues` is the real count. It is clamped to the configured
+--- bound anyway, because the engine count is per-ped and the stored value will be
+--- validated against the bound on the server - offering a slider the server would
+--- refuse is worse than offering a slightly shorter one.
+local function overlayStyleCount(id)
+  local n = natives()
+  if type(n.numHeadOverlayValues) ~= 'function' then return 1 end
+
+  local ok, count = pcall(n.numHeadOverlayValues, id)
+  if not ok or type(count) ~= 'number' or count <= 0 then return 1 end
+
+  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
+end
+
+--- How many colours a palette holds, bounded. 1 = hair palette, 2 = makeup.
+local function colourCount(colourType)
+  local n = natives()
+  local fn = (colourType == 2) and n.numMakeupColors or n.numHairColors
+  if type(fn) ~= 'function' then return AppearanceConfig.MAX_OVERLAY_COLOUR + 1 end
+
+  local ok, count = pcall(fn)
+  if not ok or type(count) ~= 'number' or count <= 0 then
+    return AppearanceConfig.MAX_OVERLAY_COLOUR + 1
+  end
+
+  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_COLOUR)
+end
+
+--- One overlay: style, opacity, and its two colours.
+local function buildOverlayMenu(id)
+  local label = OVERLAY_LABELS[id] or ('Overlay ' .. id)
+  local current = face.overlays[tostring(id)] or {
+    style = 0, opacity = 1.0, colourType = 1, colour = 0, secondColour = 0,
+  }
+
+  local maxStyle = overlayStyleCount(id)
+  local menu = Menu:menu({ title = label, dock = 'right' })
+
+  Menu:slider(menu, 'Stil', {
+    min = 0, max = maxStyle, step = 1, value = math.min(current.style, maxStyle),
+    format = function(value) return ('%d / %d'):format(value, maxStyle) end,
+    onChange = function(value)
+      face.overlays[tostring(id)] = {
+        style = value,
+        opacity = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].opacity) or 1.0,
+        colourType = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].colourType) or 1,
+        colour = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].colour) or 0,
+        secondColour = tonumber(face.overlays[tostring(id)] and face.overlays[tostring(id)].secondColour) or 0,
+      }
+      refresh()
+    end,
+  })
+
+  -- Opacity in percent, because the native takes 0.0..1.0 and a slider that shows
+  -- "0.42" for a beard reads as a fault rather than as a setting.
+  Menu:slider(menu, 'Deckkraft', {
+    min = 0, max = 100, step = 1, value = math.floor((current.opacity or 1.0) * 100 + 0.5),
+    format = function(value) return ('%d %%'):format(value) end,
+    onChange = function(value)
+      local live = face.overlays[tostring(id)] or {}
+      face.overlays[tostring(id)] = {
+        style = live.style or 0,
+        opacity = value / 100,
+        colourType = live.colourType or 1,
+        colour = live.colour or 0,
+        secondColour = live.secondColour or 0,
+      }
+      refresh()
+    end,
+  })
+
+  Menu:separator(menu, 'Farbe')
+
+  -- Palette 0 is a fixed grey and has no indices to choose; only 1 and 2 do.
+  for _, entry in ipairs({ { 1, 'Haarfarben' }, { 2, 'Make-up-Farben' } }) do
+    local colourType = entry[1]
+    local max = colourCount(colourType)
+    local value = (current.colourType == colourType) and current.colour or 0
+
+    Menu:slider(menu, entry[2], {
+      min = 0, max = max, step = 1, value = math.min(value, max),
+      format = function(v) return ('%d / %d'):format(v, max) end,
+      onChange = function(v)
+        local live = face.overlays[tostring(id)] or {}
+        face.overlays[tostring(id)] = {
+          style = live.style or 0,
+          opacity = live.opacity or 1.0,
+          colourType = colourType,
+          colour = v,
+          secondColour = live.secondColour or 0,
+        }
+        refresh()
+      end,
+    })
+  end
+
+  return menu
+end
+
+--- Face features: twenty sliders, each -1.0..1.0.
+local function buildFaceMenu()
+  local menu = Menu:menu({
+    title = 'Gesichtsform',
+    subtitle = 'Zwanzig Schieberegler.',
+    dock = 'right',
+  })
+
+  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
+    local value = face.features[tostring(id)] or 0.0
+
+    Menu:slider(menu, ('Merkmal %d'):format(id), {
+      min = FEATURE_SLIDER_MIN, max = FEATURE_SLIDER_MAX, step = 0.05, value = value,
+      format = function(v) return ('%+.2f'):format(v) end,
+      onChange = function(v)
+        -- Sparse: an untouched slider is not stored. A ped whose stored face is
+        -- full of zeros and a ped whose stored face has no entries are the same
+        -- ped, but only one of them round-trips through the database identically.
+        if math.abs(v) < 0.001 then
+          face.features[tostring(id)] = nil
+        else
+          face.features[tostring(id)] = v
+        end
+        refresh()
+      end,
+    })
+  end
+
+  return menu
+end
+
+--- Hair colour: primary and highlight, both from the hair palette.
+local function buildHairColourMenu()
+  local menu = Menu:menu({ title = 'Haarfarbe', dock = 'right' })
+  local max = colourCount(1)
+
+  Menu:slider(menu, 'Hauptfarbe', {
+    min = 0, max = max, step = 1, value = math.min(face.hairColour.primary, max),
+    format = function(v) return ('%d / %d'):format(v, max) end,
+    onChange = function(v)
+      face.hairColour.primary = v
+      refresh()
+    end,
+  })
+
+  Menu:slider(menu, 'Strähnen', {
+    min = 0, max = max, step = 1, value = math.min(face.hairColour.highlight, max),
+    format = function(v) return ('%d / %d'):format(v, max) end,
+    onChange = function(v)
+      face.hairColour.highlight = v
+      refresh()
+    end,
+  })
+
+  return menu
+end
+
+--- The hair overlay, behind the probe.
+---
+--- The row is only added when `probeHairOverlays` found presets. A player should
+--- never see a menu entry that silently does nothing - and if the map could not be
+--- built, the log says exactly why.
+local function buildHairOverlayMenu()
+  local menu = Menu:menu({
+    title = 'Hair Overlay',
+    subtitle = 'Legt eine Gesichtstatoo-Schicht ueber die Frisur.',
+    dock = 'right',
+  })
+
+  Menu:button(menu, 'Keins', {
+    description = 'Overlay entfernen.',
+    onSelect = function()
+      face.hairOverlay = nil
+      applyHairOverlay()
+      Menu:pushMenu(RESOURCE, buildRootMenu())
+    end,
+  })
+
+  for i, preset in ipairs(hairOverlayPresets) do
+    local chosen = preset
+    Menu:button(menu, ('Overlay %d'):format(i), {
+      description = ('Collection %s'):format(tostring(hairOverlayMap[chosen])),
+      onSelect = function()
+        face.hairOverlay = { preset = chosen }
+        applyHairOverlay()
+        Menu:pushMenu(RESOURCE, buildRootMenu())
+      end,
+    })
+  end
+
+  return menu
+end
 
 --- The submenu for one slot: which collection, which drawable, which texture.
 buildSlotMenu = function(kind, id)
@@ -466,6 +890,33 @@ buildRootMenu = function()
     end
   end
 
+  Menu:separator(menu, 'Gesicht')
+  for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
+    Menu:submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
+      description = 'Stil, Deckkraft und Farbe.',
+      build = function() return buildOverlayMenu(id) end,
+    })
+  end
+
+  Menu:submenu(menu, 'Haarfarbe', {
+    description = 'Hauptfarbe und Strähnen.',
+    build = buildHairColourMenu,
+  })
+
+  Menu:submenu(menu, 'Gesichtsform', {
+    description = 'Die zwanzig Gesichtsschieberegler.',
+    build = buildFaceMenu,
+  })
+
+  -- Added only when the probe found something. The player never sees a row that
+  -- cannot work, and the reason it is missing is in the log rather than nowhere.
+  if probeHairOverlays() == 'available' then
+    Menu:submenu(menu, 'Hair Overlay', {
+      description = 'Overlay ueber der Frisur.',
+      build = buildHairOverlayMenu,
+    })
+  end
+
   Menu:separator(menu, 'Aktionen')
 
   Menu:button(menu, 'Zufallsaufzug', {
@@ -534,6 +985,14 @@ end
 
 reset = function()
   selection = { components = {}, props = {} }
+  face.features = {}
+  face.overlays = {}
+  face.hairColour = { primary = 0, highlight = 0 }
+  face.hairOverlay = nil
+
+  local n = natives()
+  if n.clearPedDecorations then n.clearPedDecorations(PlayerPedId()) end
+
   respawnModel()
   discoverSlots()
 
@@ -545,13 +1004,7 @@ submit = function()
   -- derives it again and overwrites this value; sending a name, a date of birth or
   -- a gender here would be sending data that has no reader, and data with no reader
   -- is data that will eventually be trusted.
-  TriggerServerEvent('nifty:server:finishAppearance', {
-    appearance = {
-      model      = currentModel,
-      components = selection.components,
-      props      = selection.props,
-    },
-  })
+  TriggerServerEvent('nifty:server:finishAppearance', { appearance = appearanceNow() })
 end
 
 cancel = function()
@@ -582,6 +1035,17 @@ exports('openCreator', function(data)
   modelIsUndecided = (derived == nil)
   currentModel = derived or 'mp_m_freemode_01'
   selection = { components = {}, props = {} }
+  face.features = {}
+  face.overlays = {}
+  face.hairColour = { primary = 0, highlight = 0 }
+  face.hairOverlay = nil
+
+  -- The probe result is per model, so it is re-run when the model changes. A
+  -- female ped has its own tattoo shop, and a map built for the male one would
+  -- offer presets that do not exist here.
+  hairOverlayState = 'unchecked'
+  hairOverlayMap = nil
+  hairOverlayPresets = nil
 
   local scene = CreatorScene
   local ped = PlayerPedId()

@@ -65,6 +65,37 @@ AppearanceConfig = {
     mp_m_freemode_01 = 'male',
     mp_f_freemode_01 = 'female',
   },
+
+  --- Face sliders, head overlays and colours.
+  ---
+  --- The same problem as the drawable bounds above, one level worse: the engine
+  --- knows how many styles overlay 4 (makeup) has and how many overlay 2
+  --- (eyebrows) has, the server does not, and the numbers are per-ped. So these
+  --- are bounds, not counts - generous enough that nothing real is refused, tight
+  --- enough that a client cannot store an arbitrary integer.
+  ---
+  --- Overlays 0..12 are the game's own set (blemishes, facial hair, eyebrows,
+  --- ageing, makeup, blush, complexion, sun damage, lipstick, moles, chest hair,
+  --- body blemishes, and the additive body-blemish slot). Adding a thirteenth is
+  --- not possible; the game has exactly thirteen.
+  MIN_OVERLAY_ID     = 0,
+  MAX_OVERLAY_ID     = 12,
+
+  --- The engine treats style 255 as "disable this overlay". 255 is deliberately
+  --- OUT of range here: disabling in this project means opacity 0, which the
+  --- player can see and undo. A stored 255 would be invisible state.
+  MAX_OVERLAY_STYLE  = 100,
+
+  --- Colour indices. `_GetNumHairColors` and `_GetNumMakeupColors` both return far
+  --- fewer than this; the bound only exists so an index cannot be absurd.
+  MAX_OVERLAY_COLOUR = 80,
+
+  --- Colour type for `_SetPedHeadOverlayColor`: 0 fixed grey, 1 the hair palette,
+  --- 2 the makeup palette. Only 1 and 2 are selectable per overlay.
+  MAX_OVERLAY_COLOUR_TYPE = 2,
+
+  --- Face features are sliders 0..19, each -1.0..1.0. `SetPedFaceFeature`.
+  MAX_FACE_FEATURE = 19,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.
