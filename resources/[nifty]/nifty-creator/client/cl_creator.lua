@@ -1275,7 +1275,14 @@ local function buildParentsMenu()
   local halfStep = {}
   for i = 0, 200 do halfStep[i + 1] = ('%.1f%%'):format(i * 0.5) end
   local function halfStepIndex(frac01)
-    return math.floor(math.clamp(frac01, 0, 1) * 200) + 1
+    -- explicit if/else instead of math.clamp: FiveM's runtime Lua
+    -- accepts vectors in math.clamp and raises 'number or vector
+    -- expected' on a type mismatch, which we hit when frac01 is a
+    -- number but the call site accidentally promotes it through a
+    -- path that hands math.clamp a vector. Plain clamp here is safer.
+    if frac01 < 0 then frac01 = 0 end
+    if frac01 > 1 then frac01 = 1 end
+    return math.floor(frac01 * 200) + 1
   end
   local weightDefs = {
     { key = 'motherWeight', label = 'Mutter-Anteil' },
