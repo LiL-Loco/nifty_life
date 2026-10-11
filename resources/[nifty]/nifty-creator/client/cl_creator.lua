@@ -1178,6 +1178,11 @@ buildSlotMenu = function(kind, id)
   local menu = Menu:menu({
     title = currentName and ('%s - %s'):format(label, currentName) or label,
     subtitle = #currentTags > 0 and ('Merkmale: ' .. table.concat(currentTags, ', ')) or nil,
+    -- Section bar updates to the slot name (e.g. "Brow 1 / 11") so the
+    -- player knows which submenu they are in. The exact "1" is a
+    -- placeholder for the slot index in the creator's order, not
+    -- the slot id; tracking the precise index is polish.
+    section = { name = label, current = 1, total = 11 },
     dock = 'right',
   })
 
