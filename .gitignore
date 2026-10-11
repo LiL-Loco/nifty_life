@@ -8,6 +8,13 @@ secrets.lua
 server.cfg
 !server.cfg.example
 
+# Generated database passwords (2026-10-11). `database/grants.sql` keeps
+# CHANGE_ME placeholders on purpose; the real values live only in this file.
+# Committing it would put both database accounts' passwords into git history,
+# where they survive every later rotation.
+database/.credentials.local
+!/database/.credentials.local.example
+
 # ---- Database ----
 *.sql.gz
 *.dump
@@ -31,6 +38,10 @@ build/
 npm-debug.log*
 yarn-error.log*
 .pnpm-store/
+# Next.js build output. Without this, `.next/` alone is tens of megabytes of
+# generated code and would swamp every diff.
+.next/
+next-env.d.ts
 
 # ---- Editors / OS ----
 .vscode/

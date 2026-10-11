@@ -1,0 +1,251 @@
+/* Nifty Life 2.0 — no brand palette has been settled yet, so this is deliberately
+   neutral: a dark ground, one readable type scale, a single link colour. If a
+   look is chosen later it replaces this file and nothing else. */
+
+:root {
+  --ground: #0d0f11;
+  --surface: #14181c;
+  --line: #232a30;
+  --text: #e7ebee;
+  --muted: #97a2ab;
+  --accent: #6ea8fe;
+  --danger: #e5796b;
+  --ok: #6bbf8a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ground);
+  color: var(--text);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 5rem;
+}
+
+/* ---- Chrome -------------------------------------------------------------- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.site-header nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.wordmark {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.wordmark span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.site-footer {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* ---- Type ---------------------------------------------------------------- */
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 2.5rem 0 0.75rem;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+/* ---- Surfaces ------------------------------------------------------------ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.notice {
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.notice.error {
+  border-left-color: var(--danger);
+}
+
+.notice.ok {
+  border-left-color: var(--ok);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+/* ---- Forms --------------------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+input,
+textarea {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+}
+
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.field {
+  margin-bottom: 1.1rem;
+}
+
+button,
+.button {
+  display: inline-block;
+  padding: 0.6rem 1.1rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--accent);
+  color: #08111c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+button.secondary,
+.button.secondary {
+  background: transparent;
+  color: var(--text);
+}
+
+button:hover,
+.button:hover {
+  filter: brightness(1.08);
+}
+
+/* ---- Feed ---------------------------------------------------------------- */
+
+.post {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.85rem;
+}
+
+.post-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.875rem;
+  margin-bottom: 0.4rem;
+}
+
+.post-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.post-foot {
+  margin-top: 0.6rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  display: flex;
+  gap: 1rem;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.status-pill.approved {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.status-pill.rejected {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.status-pill.under_review {
+  color: var(--accent);
+  border-color: var(--accent);
+}
