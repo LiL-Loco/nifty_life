@@ -48,6 +48,10 @@ server_script 'server/economy/stuetze.lua'
 -- debits a payslip fee via Economy.debit; needs Economy already in scope.
 server_script 'server/jobs.lua'
 
+-- Owned module (per-character clothing pieces). Loads before the facade for
+-- the same reason Economy/Stuetze do: the facade publishes Owned by reference.
+server_script 'server/clothing.lua'
+
 -- LAST. It captures Db, GetSetting, Identity and the rest as they are at this
 -- moment, so loading it earlier would publish a facade containing nil.
 server_script 'server/sv_facade.lua'

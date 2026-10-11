@@ -41,3 +41,7 @@ Nifty.SessionGuard = Nifty.core.SessionGuard
 Nifty.Economy = Nifty.core.Economy
 Nifty.Stuetze = Nifty.core.Stuetze
 Nifty.Jobs    = Nifty.core.Jobs
+
+-- Owned follows the same pattern. The finishAppearance hook in sv_main.lua
+-- grants per-piece ownership after a creator save.
+Nifty.Owned    = Nifty.core.Owned

@@ -48,6 +48,12 @@ local Inventory = exports['nifty-inventory']
 local Stuetze   = Nifty.Stuetze
 local Phone     = exports['nifty-phone']
 
+-- Owned is the per-character clothing ownership table from the base. The
+-- finishAppearance hook below uses Owned.grant to convert the outfit chosen
+-- in the creator into per-piece owned rows, which the wardrobe and the
+-- store both read.
+local Owned     = Nifty.Owned
+
 -- How many times a client may ask for bootstrap before we treat it as hostile.
 local BootstrapAttempts = {}
 local MAX_BOOTSTRAP_ATTEMPTS = 10
@@ -289,6 +295,36 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
     Identity.endSession(src)
     return TriggerClientEvent('nifty:client:creatorError', src,
       'Das Aussehen konnte nicht gespeichert werden. Bitte erneut versuchen.')
+  end
+
+  -- Now that the save is in stone, treat every selected piece as owned. The
+  -- creator grants the outfit (per-drawable rows in `character_clothing`),
+  -- so the wardrobe can offer them back later and the store can skip them.
+  -- INSERT IGNORE inside Owned.grant makes this idempotent — re-completing
+  -- the creator would re-grant the same pieces, but `Identity.saveCharacter`
+  -- already returns early when appearance is non-null (line 251), so this
+  -- path runs exactly once per character.
+  if type(appearance.components) == 'table' then
+    for slotId, slot in pairs(appearance.components) do
+      if type(slot) == 'table' then
+        local sid = tonumber(slotId)
+        if sid and slot.collection and slot.drawable and slot.texture then
+          Owned.grant(character.id, 'component', sid,
+                      slot.collection, slot.drawable, slot.texture, 'creator')
+        end
+      end
+    end
+  end
+  if type(appearance.props) == 'table' then
+    for slotId, slot in pairs(appearance.props) do
+      if type(slot) == 'table' then
+        local sid = tonumber(slotId)
+        if sid and slot.collection and slot.drawable and slot.texture then
+          Owned.grant(character.id, 'prop', sid,
+                      slot.collection, slot.drawable, slot.texture, 'creator')
+        end
+      end
+    end
   end
 
   -- Re-read rather than reusing `character`: its `appearance` is still the NULL

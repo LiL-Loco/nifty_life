@@ -290,6 +290,16 @@ function Identity.saveCharacter(src, patch)
       print(('[%s] refused to save appearance for %s: %s'):format(RESOURCE, characterId, err))
       return false
     end
+    -- Every piece the loadout wears must be one this character owns.
+    -- checkEquipped is what stops a forged saveCharacter from sneaking
+    -- a drawable past — a client cannot claim they own a piece they did
+    -- not buy or pick in the creator.
+    local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
+    if not owned then
+      print(('[%s] refused to save appearance for %s: not owned (%s)'):format(
+        RESOURCE, characterId, tostring(ownedErr)))
+      return false
+    end
     sets[#sets + 1] = 'appearance = ?'
     params[#params + 1] = json.encode(appearance)
   end

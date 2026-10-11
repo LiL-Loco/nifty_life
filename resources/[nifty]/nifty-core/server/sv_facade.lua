@@ -43,6 +43,7 @@ exports('facade', function()
     Validate = Validate,
     Economy = Economy,
     Stuetze = Stuetze,
+    Owned = Owned,
   }
 end)
 
