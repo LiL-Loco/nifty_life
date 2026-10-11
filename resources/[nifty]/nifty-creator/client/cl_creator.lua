@@ -2137,13 +2137,20 @@ Citizen.CreateThread(function()
       if IsDisabledControlJustPressed(0, 47) then camYaw = camYaw - 1.0 end  -- Q
       if IsDisabledControlJustPressed(0, 38) then camYaw = camYaw + 1.0 end  -- E
       if IsDisabledControlJustPressed(0, 47) or IsDisabledControlJustPressed(0, 38) then
-        local cx, cy, cz = GetCamCoord(creatorCam)
-        local rad = math.rad(camYaw)
-        SetCamCoord(creatorCam,
-          cx + math.sin(rad) * 1.0,
-          cy + math.cos(rad) * 1.0,
-          cz)
-        PointCamAtCoord(creatorCam, cx, cy, cz)
+        local ok, cx, cy, cz = pcall(GetCamCoord, creatorCam)
+        if not ok or type(cx) ~= 'number' or type(cy) ~= 'number' or type(cz) ~= 'number' then
+          -- The camera handle is stale (creator was restarted, scene
+          -- camera destroyed, etc.). Drop the handle so the next loop
+          -- tick no-ops and the user opens a fresh camera via start.
+          creatorCam = nil
+        else
+          local rad = math.rad(camYaw)
+          SetCamCoord(creatorCam,
+            cx + math.sin(rad) * 1.0,
+            cy + math.cos(rad) * 1.0,
+            cz)
+          PointCamAtCoord(creatorCam, cx, cy, cz)
+        end
       end
 
       -- Up / down FOV zoom. One-shot per key press, not held; the player
