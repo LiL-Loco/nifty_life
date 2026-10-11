@@ -21,12 +21,12 @@ export async function GET(request: Request) {
 
   // A missing or mismatched state means the round trip did not start here.
   if (!code || !state || !expectedState || state !== expectedState) {
-    return NextResponse.redirect(new URL('/?error=login-failed', request.url));
+    return NextResponse.redirect(new URL('/login?error=login-failed', request.url));
   }
 
   const identity = await exchangeCode(code);
   if (!identity) {
-    return NextResponse.redirect(new URL('/?error=login-failed', request.url));
+    return NextResponse.redirect(new URL('/login?error=login-failed', request.url));
   }
 
   // Only same-site paths. An attacker-supplied absolute URL here would turn the

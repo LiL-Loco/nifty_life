@@ -70,9 +70,39 @@ export async function latestKnownName(
 }
 
 /**
+ * Is this Discord account a member of the moderation team?
+ *
+ * The flag lives on `characters` (migration 009), deliberately NOT derived from a
+ * job: an officer who could delete posts on a server with one moderator would be
+ * a second moderator nobody appointed.
+ *
+ * So staff is a property of the CHARACTER, and the character is reached through
+ * the same `web_links` binding everything else uses. Staff must therefore link
+ * their character like anyone else before the admin area opens for them — which
+ * is a small price for not having two independent notions of who you are.
+ *
+ * This runs on the PUBLIC connection on purpose. Deciding whether to trust the
+ * admin connection cannot itself depend on the admin connection.
+ */
+export async function isStaff(discordId: string): Promise<boolean> {
+  if (!discordId) return false;
+
+  const row = await one<{ is_staff: number }>(
+    `SELECT c.is_staff
+       FROM web_links w
+       JOIN characters c ON c.id = w.character_id
+      WHERE w.discord_id = ?
+      LIMIT 1`,
+    [discordId],
+  );
+
+  return row?.is_staff === 1;
+}
+
+/**
  * Submit a pairing request.
  *
- * The code was generated in game and typed here. We store it and nothing else -
+ * The code was generated in game and typed here. We store it and nothing else —
  * there is no follow-up write, because we have no UPDATE. The game server picks
  * the request up when it runs and proves the code by hashing it.
  *

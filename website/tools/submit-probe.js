@@ -39,6 +39,7 @@ for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
 
 const { validateAnswers, submitApplication } = require('../.tmp-test/applications.js');
 const { query } = require('../.tmp-test/db.js');
+const { RULEBOOK_QUESTIONS } = require('../.tmp-test/rulebook.js');
 
 const PROBE_DISCORD_ID = '999000999000999999';
 let probeId = null;
@@ -57,15 +58,13 @@ function check(name, condition, detail) {
 
 function probeForm() {
   const form = new FormData();
-  form.set('age', '31');
-  form.set('timezone', 'Europe/Berlin');
-  form.set('experience', 'Submit-Probe. Wird nach dem Test wieder gelöscht.');
-  form.set('motivation', 'Prüft, ob die Kette bis zum INSERT funktioniert.');
   form.set('rulebook_read', 'on');
-  form.append('rulebook_ack', 'noSexRp');
-  form.append('rulebook_ack', 'noHateSpeech');
-  form.append('rulebook_ack', 'noMetaGaming');
-  form.append('rulebook_ack', 'noAccountOrCurrencyTrade');
+  RULEBOOK_QUESTIONS.forEach((question, index) => {
+    form.set(
+      `answer_${question.id}`,
+      `Submit-Probe Antwort ${index + 1} auf ${question.ref}. Wird nach dem Test wieder gelöscht.`,
+    );
+  });
   return form;
 }
 
@@ -93,14 +92,42 @@ function probeForm() {
     const stored = typeof raw === 'string' ? JSON.parse(raw) : raw;
     check('the stored answers carry the rulebook acknowledgement',
       stored.rulebook && stored.rulebook.read === true);
-    check('all four acknowledgements were stored',
-      stored.rulebook && stored.rulebook.accepted && stored.rulebook.accepted.length === 4);
+    check('all twenty answers were stored',
+      stored.answers && stored.answers.length === 20,
+      'got ' + (stored.answers && stored.answers.length));
+    check('the answers were stored in rulebook order',
+      stored.answers && stored.answers.every((a, i) => a.id === RULEBOOK_QUESTIONS[i].id));
+    check('each answer was stored together with its question',
+      stored.answers && stored.answers.every((a) => typeof a.question === 'string' && a.question.length > 10));
     check('the server stamped the acknowledgement time',
       stored.rulebook && !Number.isNaN(Date.parse(stored.rulebook.at)));
     check('the acknowledgement carries a rulebook version',
       stored.rulebook && typeof stored.rulebook.version === 'string');
     check('it lands as "submitted", not approved',
       rows[0] && rows[0].status === 'submitted');
+
+    // ---- One application per person, ever (migration 010) ------------------
+    // The rule is a UNIQUE index. The pre-check inside submitApplication is only
+    // a courtesy that produces a readable message, so the thing worth proving is
+    // the raw constraint: a second row for the same Discord ID must be refused by
+    // the database even when nothing in the application layer is consulted.
+    let secondInsert = 'allowed';
+    try {
+      await query(
+        'INSERT INTO applications (id, discord_id, answers) VALUES (?, ?, ?)',
+        [newProbeUuid(), PROBE_DISCORD_ID, JSON.stringify({ probe: true })],
+      );
+    } catch (error) {
+      secondInsert = error.errno === 1062 ? 'refused' : `error:${error.code}`;
+    }
+    check('the unique index refuses a second application for the same person',
+      secondInsert === 'refused', 'got ' + secondInsert);
+
+    // And the application-level refusal is readable, not a driver message.
+    const second = await submitApplication(PROBE_DISCORD_ID, answers);
+    check('a second submit through the app is refused with a sentence',
+      !second.ok && second.error.includes('bereits'),
+      'got ' + JSON.stringify(second));
 
     // The whole point of ADR-0007, exercised rather than asserted.
     let couldApprove = false;
@@ -127,6 +154,10 @@ function probeForm() {
     finish();
   }
 })();
+
+function newProbeUuid() {
+  return require('crypto').randomUUID();
+}
 
 /**
  * Cleanup through the GAME account, which has full privileges on the schema.

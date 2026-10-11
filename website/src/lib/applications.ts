@@ -12,21 +12,29 @@
 import 'server-only';
 
 import { insert, one, query, newUuid } from './db';
-import { RULEBOOK_KEYS } from './rulebook';
+import { RULEBOOK_QUESTIONS } from './rulebook';
 
 export type ApplicationStatus = 'submitted' | 'under_review' | 'approved' | 'rejected';
 
 /** Bumped whenever the rulebook text changes, so an acknowledgement can be dated. */
 export const RULEBOOK_VERSION = '2026-10-11';
 
-export interface ApplicationAnswers {
-  age: string;
-  timezone: string;
-  experience: string;
-  motivation: string;
+export interface StoredAnswer {
+  /** Stable id from RULEBOOK_QUESTIONS. */
+  id: string;
+  /** The question AS ASKED, stored alongside the answer.
+   *
+   *  Same reasoning as `author_name` on a Peeper post (ADR-0022): if the
+   *  rulebook is reworded next year, an application from this year must still
+   *  show the question the applicant actually answered. Without the snapshot the
+   *  answers become unreadable. */
+  question: string;
+  answer: string;
+}
 
+export interface ApplicationAnswers {
   /**
-   * What the applicant agreed to, recorded as facts rather than a checkbox.
+   * That the rulebook was read.
    *
    * `at` and `version` are stamped by the SERVER when the row is written, never
    * by the client. A ticked box proves only that someone ticked a box; what a
@@ -34,10 +42,12 @@ export interface ApplicationAnswers {
    */
   rulebook: {
     read: boolean;
-    accepted: string[];
     at: string;
     version: string;
   };
+
+  /** Exactly the questions in RULEBOOK_QUESTIONS, in order. */
+  answers: StoredAnswer[];
 }
 
 export interface Application {
@@ -53,10 +63,11 @@ export interface Application {
 export type SubmitResult = { ok: true; id: string } | { ok: false; error: string };
 
 const LIMITS = {
-  age: 32,
-  timezone: 64,
-  experience: 2000,
-  motivation: 2000,
+  /** Shortest answer that is not a single word. A permanent-ban rule answered in
+   *  four words is not an answer, it is a reflex — the point of the questions is
+   *  to make the applicant think, so a floor is part of the rule. */
+  answerMin: 25,
+  answerMax: 2000,
 } as const;
 
 /**
@@ -89,48 +100,51 @@ function clean(value: FormDataEntryValue | null, max: number): string | null {
  * This runs on the server against a FormData the client controls entirely, so
  * every rule here is the real rule - the client-side step wizard is a
  * convenience, never the check.
+ *
+ * The twenty questions are asked once, in free text. There is no age, no
+ * timezone, no experience field and no motivation field: nothing is asked that
+ * the rulebook does not answer, and every question is answerable only from the
+ * rulebook. That is the whole selection test - if the applicant could answer it
+ * without opening the document, it is not a rulebook question.
  */
 export function validateAnswers(form: FormData): ApplicationAnswers | string {
-  const age = clean(form.get('age'), LIMITS.age);
-  const timezone = clean(form.get('timezone'), LIMITS.timezone);
-  const experience = clean(form.get('experience'), LIMITS.experience);
-  const motivation = clean(form.get('motivation'), LIMITS.motivation);
-
-  if (!age) return 'Bitte gib dein Alter an.';
-  if (!/^\d{1,2}$/.test(age) || Number(age) < 18 || Number(age) > 99) {
-    return 'Das Alter muss eine Zahl zwischen 18 und 99 sein.';
-  }
-  if (!timezone) return 'Bitte gib deine Zeitzone an.';
-  if (!experience) return 'Erzähl uns kurz, was du vorher gespielt hast.';
-  if (!motivation) return 'Sag uns, warum du hier spielen willst.';
-
-  // Rulebook: the "I have read it" box.
+  // The "I have read it" box. It is kept as a separate tick rather than implied
+  // by the twenty answers: it is the one thing that is a declaration rather than
+  // a demonstration.
   if (form.get('rulebook_read') !== 'on') {
     return 'Du musst bestätigen, dass du das Regelwerk gelesen hast.';
   }
 
-  // And every individual permanent-ban acknowledgement. A single "read" box is
-  // satisfied by muscle memory; these four are the ones a reviewer will be asked
-  // to enforce later, so each is confirmed on its own.
-  const accepted = form.getAll('rulebook_ack');
-  for (const key of RULEBOOK_KEYS) {
-    if (!accepted.includes(key)) {
-      return 'Bitte bestätige alle Punkte mit dauerhaftem Ban.';
+  const answers: StoredAnswer[] = [];
+
+  for (const item of RULEBOOK_QUESTIONS) {
+    const answer = clean(form.get(`answer_${item.id}`), LIMITS.answerMax);
+
+    if (!answer) {
+      return `Bitte beantworte Frage ${answers.length + 1} von ${RULEBOOK_QUESTIONS.length}.`;
     }
+
+    if (answer.length < LIMITS.answerMin) {
+      return `Bitte antworte auf Frage ${answers.length + 1} ausführlicher. Ein Satz in eigenen Worten reicht.`;
+    }
+
+    answers.push({
+      id: item.id,
+      // The question as asked TODAY is stored with the answer, so a reworded
+      // question next year cannot orphan this application's answers.
+      question: `${item.ref} ${item.question}`,
+      answer,
+    });
   }
 
   return {
-    age,
-    timezone,
-    experience,
-    motivation,
     rulebook: {
       read: true,
-      accepted: RULEBOOK_KEYS.slice(),
       // Stamped here, not taken from the request.
       at: new Date().toISOString(),
       version: RULEBOOK_VERSION,
     },
+    answers,
   };
 }
 
@@ -139,6 +153,12 @@ export function validateAnswers(form: FormData): ApplicationAnswers | string {
  *
  * `discordId` comes from the signed session and from nowhere else. A form field
  * named `discord_id` would be ignored even if it were present.
+ *
+ * One application per person, ever. The rule is a UNIQUE index
+ * (`uq_applications_discord`, migration 010), so the check below is a courtesy
+ * that produces a readable message and the duplicate-key catch is what actually
+ * enforces it. Both exist because the pre-check loses races — two tabs, a double
+ * click, a client retry — and the constraint does not.
  */
 export async function submitApplication(
   discordId: string,
@@ -146,6 +166,18 @@ export async function submitApplication(
 ): Promise<SubmitResult> {
   if (!/^\d{5,32}$/.test(discordId)) {
     return { ok: false, error: 'Deine Sitzung ist ungültig. Bitte melde dich erneut an.' };
+  }
+
+  const existing = await one<{ id: string; status: ApplicationStatus }>(
+    'SELECT id, status FROM applications WHERE discord_id = ? LIMIT 1',
+    [discordId],
+  );
+
+  if (existing) {
+    return {
+      ok: false,
+      error: ALREADY_APPLIED_MESSAGE(existing.status),
+    };
   }
 
   const id = newUuid();
@@ -156,7 +188,21 @@ export async function submitApplication(
       discordId,
       JSON.stringify(answers),
     ]);
-  } catch {
+  } catch (error) {
+    // ER_DUP_ENTRY. Somebody got in between the check above and this INSERT —
+    // two tabs, or a retry. The unique index caught it, and the applicant is
+    // told the same thing either way.
+    if (isDuplicateKey(error)) {
+      const current = await one<{ status: ApplicationStatus }>(
+        'SELECT status FROM applications WHERE discord_id = ? LIMIT 1',
+        [discordId],
+      );
+      return {
+        ok: false,
+        error: ALREADY_APPLIED_MESSAGE(current?.status ?? 'submitted'),
+      };
+    }
+
     // Never surface the driver's message: it would name tables and columns to a
     // stranger, and a failed insert is an operational problem, not theirs.
     return {
@@ -170,10 +216,40 @@ export async function submitApplication(
 }
 
 /**
- * This account's newest application.
+ * The refusal, worded for the state they are actually in.
  *
- * A player may apply more than once - a rejection is not a permanent verdict -
- * so the status page shows the most recent one and the history below it.
+ * "You already applied" is not the same message for someone whose application is
+ * sitting unread and for someone who was rejected — the second needs to know that
+ * the door is a conversation, not a second form.
+ */
+function ALREADY_APPLIED_MESSAGE(status: ApplicationStatus): string {
+  if (status === 'rejected') {
+    return 'Du hast bereits beworben, und deine Bewerbung wurde abgelehnt. Eine zweite Bewerbung ist nicht möglich — schreib dich dazu direkt im Discord.';
+  }
+
+  if (status === 'approved') {
+    return 'Du bist bereits freigegeben. Eine erneute Bewerbung ist nicht möglich.';
+  }
+
+  return 'Du hast bereits eine Bewerbung eingereicht. Sie wird von einem Menschen gelesen — schau unter "Status" nach.';
+}
+
+/** MariaDB and MySQL both report a unique violation as 1062. */
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { errno?: number }).errno === 1062
+  );
+}
+
+/**
+ * This account's application.
+ *
+ * There is only ever one (`uq_applications_discord`, migration 010), so this is
+ * the application rather than the latest of several. The ORDER BY is kept as
+ * documentation rather than as logic: if the unique index were ever dropped,
+ * the page would silently start showing a different row.
  */
 export async function latestApplication(
   discordId: string,

@@ -3,21 +3,23 @@
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
-import {
-  RULEBOOK_ACKNOWLEDGEMENTS,
-  RULEBOOK_SECTIONS,
-  RULEBOOK_URL,
-} from '@/lib/rulebook';
+import { RULEBOOK_QUESTIONS, RULEBOOK_SECTIONS, RULEBOOK_URL } from '@/lib/rulebook';
 import { submit, type ApplyState } from './actions';
 
-type Field = 'age' | 'timezone' | 'experience' | 'motivation';
+/** Mirrors LIMITS.answerMin in src/lib/applications.ts. */
+const ANSWER_MIN = 25;
+const ANSWER_MAX = 2000;
+
+const TOTAL_STEPS = RULEBOOK_QUESTIONS.length + 2; // 20 questions + rulebook + review
+const RULEBOOK_STEP = RULEBOOK_QUESTIONS.length;
+const REVIEW_STEP = RULEBOOK_QUESTIONS.length + 1;
 
 /**
  * One screen per question.
  *
- * Four short screens with one question each is a materially different ask from
- * one long form: nobody abandons a page that asks for a single thing, and a
- * reviewer reading the stored JSON gets the same data either way.
+ * Twenty short screens is a materially different ask from one long form: nobody
+ * abandons a page that asks for a single thing, and the answers stay short
+ * because each one has a single question in front of it.
  *
  * The step guard is a convenience, never the check. `validateAnswers` runs the
  * same rules again on the server against a FormData the client fully controls.
@@ -25,50 +27,35 @@ type Field = 'age' | 'timezone' | 'experience' | 'motivation';
 export default function ApplicationWizard() {
   const [state, action] = useActionState<ApplyState, FormData>(submit, undefined);
   const [step, setStep] = useState(0);
-  const [values, setValues] = useState<Record<Field, string>>({
-    age: '',
-    timezone: '',
-    experience: '',
-    motivation: '',
-  });
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [rulebookRead, setRulebookRead] = useState(false);
-  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
   const [stepError, setStepError] = useState<string | null>(null);
 
-  const TOTAL_STEPS = 6; // 4 questions + rulebook + review
+  const question = RULEBOOK_QUESTIONS[step];
 
-  function set(field: Field, value: string) {
-    setValues((previous) => ({ ...previous, [field]: value }));
+  function setAnswer(id: string, value: string) {
+    setAnswers((previous) => ({ ...previous, [id]: value }));
     setStepError(null);
   }
 
   /** Can the current step be left? Mirrors the server rules, minus the wording. */
   function currentStepValid(): true | string {
-    switch (step) {
-      case 0: {
-        const age = values.age.trim();
-        if (!/^\d{1,2}$/.test(age) || Number(age) < 18 || Number(age) > 99) {
-          return 'Das Alter muss eine Zahl zwischen 18 und 99 sein.';
-        }
-        return true;
-      }
-      case 1:
-        return values.timezone.trim() ? true : 'Bitte gib deine Zeitzone an.';
-      case 2:
-        return values.experience.trim() ? true : 'Erzähl uns kurz, was du gespielt hast.';
-      case 3:
-        return values.motivation.trim() ? true : 'Sag uns, warum du hier spielen willst.';
-      case 4: {
-        if (!rulebookRead) return 'Bitte bestätige, dass du das Regelwerk gelesen hast.';
-        const missing = RULEBOOK_ACKNOWLEDGEMENTS.filter((a) => !accepted[a.key]);
-        if (missing.length > 0) {
-          return 'Bitte bestätige alle Punkte mit dauerhaftem Ban.';
-        }
-        return true;
-      }
-      default:
-        return true;
+    if (step >= REVIEW_STEP) return true;
+
+    if (step === RULEBOOK_STEP) {
+      if (!rulebookRead) return 'Bitte bestätige, dass du das Regelwerk gelesen hast.';
+      return true;
     }
+
+    const answer = (answers[question.id] ?? '').trim();
+    if (answer.length === 0) {
+      return 'Beantworte diese Frage in eigenen Worten.';
+    }
+    if (answer.length < ANSWER_MIN) {
+      return 'Ein bisschen ausführlicher bitte — ein Satz in eigenen Worten.';
+    }
+
+    return true;
   }
 
   function next() {
@@ -78,7 +65,7 @@ export default function ApplicationWizard() {
       return;
     }
     setStepError(null);
-    setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1));
+    setStep((s) => Math.min(s + 1, REVIEW_STEP));
   }
 
   function back() {
@@ -96,66 +83,30 @@ export default function ApplicationWizard() {
         {state?.error ? <div className="notice error">{state.error}</div> : null}
         {stepError ? <div className="notice error">{stepError}</div> : null}
 
-        {step === 0 ? (
-          <Step title="Wie alt bist du?" hint="Ab 18 Jahren.">
-            <input
-              id="age"
-              name="age"
-              inputMode="numeric"
-              maxLength={2}
-              value={values.age}
-              onChange={(e) => set('age', e.target.value)}
-              autoFocus
-            />
-          </Step>
-        ) : null}
-
-        {step === 1 ? (
-          <Step title="In welcher Zeitzone bist du?" hint="Damit wir wissen, wann du mitspielen kannst.">
-            <input
-              id="timezone"
-              name="timezone"
-              placeholder="Europe/Berlin"
-              maxLength={64}
-              value={values.timezone}
-              onChange={(e) => set('timezone', e.target.value)}
-              autoFocus
-            />
-          </Step>
-        ) : null}
-
-        {step === 2 ? (
-          <Step title="Was hast du vorher gespielt?" hint="Server, Mods, oder einfach fünfM Roleplay. Ein paar Sätze reichen.">
-            <textarea
-              id="experience"
-              name="experience"
-              maxLength={2000}
-              value={values.experience}
-              onChange={(e) => set('experience', e.target.value)}
-              autoFocus
-            />
-          </Step>
-        ) : null}
-
-        {step === 3 ? (
-          <Step title="Warum willst du hier spielen?" hint="Sehr ehrlich. Niemand erwartet einen gepflegten Aufsatz.">
-            <textarea
-              id="motivation"
-              name="motivation"
-              maxLength={2000}
-              value={values.motivation}
-              onChange={(e) => set('motivation', e.target.value)}
-              autoFocus
-            />
-          </Step>
-        ) : null}
-
-        {step === 4 ? (
+        {question ? (
           <Step
-            title="Regelwerk"
-            hint="Lies es im Link, und bestätige danach die Punkte mit dauerhaftem Ban."
+            title={question.question}
+            hint={`${question.ref} — antworte in eigenen Worten. Ein bis drei Sätze reichen.`}
             wide
           >
+            <textarea
+              id={`answer_${question.id}`}
+              name={`answer_${question.id}`}
+              maxLength={ANSWER_MAX}
+              rows={6}
+              value={answers[question.id] ?? ''}
+              onChange={(e) => setAnswer(question.id, e.target.value)}
+              autoFocus
+            />
+            <p className="small muted" style={{ marginTop: '0.5rem' }}>
+              Frage {step + 1} von {RULEBOOK_QUESTIONS.length} — beantworte sie aus dem
+              Regelwerk, nicht aus dem Internet.
+            </p>
+          </Step>
+        ) : null}
+
+        {step === RULEBOOK_STEP ? (
+          <Step title="Regelwerk" hint="Lies es einmal komplett, dann bestätige es." wide>
             <div className="card" style={{ background: 'var(--ground)' }}>
               <p className="small">
                 Das vollständige Regelwerk liegt als Google-Dokument vor:{' '}
@@ -174,7 +125,10 @@ export default function ApplicationWizard() {
                 ))}
               </ul>
 
-              <label className="small" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginTop: '1rem' }}>
+              <label
+                className="small"
+                style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginTop: '1rem' }}
+              >
                 <input
                   type="checkbox"
                   name="rulebook_read"
@@ -185,50 +139,24 @@ export default function ApplicationWizard() {
                 <span>Ich habe das vollständige Regelwerk gelesen und verstanden.</span>
               </label>
             </div>
-
-            <p className="small muted" style={{ marginTop: '1rem' }}>
-              Diese vier Punkte führen jeweils zu einem dauerhaften Ban. Bitte
-              bestätige sie einzeln:
-            </p>
-
-            {RULEBOOK_ACKNOWLEDGEMENTS.map((item) => (
-              <label
-                key={item.key}
-                className="small"
-                style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}
-              >
-                <input
-                  type="checkbox"
-                  name="rulebook_ack"
-                  value={item.key}
-                  style={{ width: 'auto', marginTop: '0.2rem' }}
-                  checked={Boolean(accepted[item.key])}
-                  onChange={(e) =>
-                    setAccepted((previous) => ({ ...previous, [item.key]: e.target.checked }))
-                  }
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
           </Step>
         ) : null}
 
-        {step === 5 ? (
-          <Step title="Prüfen und abschicken" hint="So wird deine Bewerbung gespeichert.">
+        {step === REVIEW_STEP ? (
+          <Step title="Prüfen und abschicken" hint="So wird deine Bewerbung gespeichert." wide>
             <dl className="small">
-              <Review label="Alter">{values.age}</Review>
-              <Review label="Zeitzone">{values.timezone}</Review>
-              <Review label="Gespielt">{values.experience}</Review>
-              <Review label="Motivation">{values.motivation}</Review>
-              <Review label="Regelwerk">
-                gelesen, alle vier Punkte mit Permaban bestätigt
-              </Review>
+              {RULEBOOK_QUESTIONS.map((item, index) => (
+                <Review key={item.id} label={`${item.ref} · Frage ${index + 1}`}>
+                  {answers[item.id] ?? ''}
+                </Review>
+              ))}
+              <Review label="Regelwerk">gelesen und bestätigt</Review>
             </dl>
 
             <p className="small muted">
-              Mit dem Absenden bestätigst du die Angaben. Diese Website kann dich
-              nicht freigeben und die Bewerbung danach nicht mehr ändern — das macht
-              ein Mensch in Discord.
+              Mit dem Absenden bestätigst du die Angaben. Eine Bewerbung kann nur
+              einmal eingereicht werden — danach entscheidet ein Mensch in Discord,
+              und zwar endgültig.
             </p>
           </Step>
         ) : null}
@@ -240,7 +168,7 @@ export default function ApplicationWizard() {
             </button>
           ) : null}
 
-          {step < TOTAL_STEPS - 1 ? (
+          {step < REVIEW_STEP ? (
             <button type="button" onClick={next}>
               Weiter
             </button>

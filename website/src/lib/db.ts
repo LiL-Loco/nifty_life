@@ -16,7 +16,9 @@ import mysql from 'mysql2/promise';
 import { config } from './config';
 
 let pool: mysql.Pool | null = null;
+let adminPool: mysql.Pool | null = null;
 
+/** The ordinary pool. Everything a visitor can reach runs on this. */
 export function db(): mysql.Pool {
   if (pool) return pool;
 
@@ -41,6 +43,103 @@ export function db(): mysql.Pool {
   });
 
   return pool;
+}
+
+/**
+ * The ADMIN pool. A second connection with separate credentials, used only by
+ * the /admin routes.
+ *
+ * This exists so the separation is a property of the DATABASE, not of a comment
+ * saying which module is careful. A bug in the public site runs on `db()` and
+ * cannot reach an UPDATE privilege even if it wants to; reaching it requires
+ * deliberately calling this function from a staff-gated route.
+ *
+ * It throws rather than falling back when the credentials are absent, because a
+ * silent fallback would turn "the admin area is unreachable" into "the admin
+ * area runs on the public account" — which is the exact failure the split
+ * prevents.
+ */
+export function adminDb(): mysql.Pool {
+  const user = process.env.DB_ADMIN_USER;
+  const password = process.env.DB_ADMIN_PASSWORD;
+
+  if (!user || !password) {
+    throw new Error(
+      'DB_ADMIN_USER / DB_ADMIN_PASSWORD are not set, so the admin area cannot ' +
+        'open its own connection. It deliberately does not fall back to the ' +
+        'public account: that account cannot UPDATE anything, and pretending ' +
+        'otherwise would hide the misconfiguration until an approval silently ' +
+        'stopped working.',
+    );
+  }
+
+  if (adminPool) return adminPool;
+
+  adminPool = mysql.createPool({
+    host: config.db.host,
+    port: config.db.port,
+    user,
+    password,
+    database: config.db.database,
+    waitForConnections: true,
+    connectionLimit: 2,
+    decimalNumbers: false,
+    dateStrings: true,
+    multipleStatements: false,
+  });
+
+  return adminPool;
+}
+
+/** Run a SELECT on the admin connection. */
+export async function adminQuery<T = Record<string, unknown>>(
+  sql: string,
+  params: any[] = [],
+): Promise<T[]> {
+  const [rows] = await adminDb().execute(sql, params);
+  return rows as T[];
+}
+
+/**
+ * Run a COLUMN-SCOPED UPDATE on the admin connection.
+ *
+ * `columns` is a whitelist, not a convenience: the caller cannot pass a column
+ * name derived from user input, and an accidental `SET answers = ?` cannot be
+ * typed here at all. The grant enforces the same list; this makes the mistake
+ * impossible before the database ever sees it.
+ */
+const ADMIN_WRITABLE_APPLICATION_COLUMNS = [
+  'status',
+  'reviewed_at',
+  'reviewed_by',
+  'decision_note',
+] as const;
+
+export async function adminUpdateApplication(
+  id: string,
+  values: Partial<Record<(typeof ADMIN_WRITABLE_APPLICATION_COLUMNS)[number], unknown>>,
+): Promise<number> {
+  const sets: string[] = [];
+  // `any[]`, not `unknown[]`: mysql2's execute() is typed against its own
+  // `ExecuteValues` union, which `unknown[]` does not satisfy even though every
+  // value pushed here is a plain string, null or number.
+  const params: any[] = [];
+
+  for (const column of ADMIN_WRITABLE_APPLICATION_COLUMNS) {
+    if (values[column] === undefined) continue;
+    sets.push(`${column} = ?`);
+    params.push(values[column]);
+  }
+
+  if (sets.length === 0) return 0;
+
+  params.push(id);
+  const [result] = await adminDb().execute(
+    `UPDATE applications SET ${sets.join(', ')} WHERE id = ?`,
+    params,
+  );
+
+  return (result as mysql.ResultSetHeader).affectedRows;
 }
 
 /** Run a SELECT and get rows back. */

@@ -73,6 +73,65 @@ GRANT SELECT, INSERT ON nifty_life.peeper_posts         TO 'nifty_website'@'loca
 GRANT SELECT, INSERT ON nifty_life.peeper_likes         TO 'nifty_website'@'localhost';
 GRANT SELECT, INSERT ON nifty_life.peeper_reports       TO 'nifty_website'@'localhost';
 
+-- ---------------------------------------------------------------------------
+-- Role resolution (2026-10-11).
+--
+-- The site distinguishes a player from an admin BEFORE it decides which
+-- connection to use, so the check has to be answerable by the ordinary website
+-- account. `is_staff` lives on `characters` (migration 009), and a column-level
+-- grant is enough to ask the question without handing over the roster:
+--
+--   GRANT SELECT (id, is_staff) ON characters
+--
+-- The owner chose FULL SELECT here instead, to keep staff lookups simple. That
+-- means a compromise of the public site exposes every character name and date
+-- of birth. It is a deliberate trade, not an oversight — recorded here so the
+-- next person to read this file knows it was a decision.
+-- ---------------------------------------------------------------------------
+GRANT SELECT ON nifty_life.characters TO 'nifty_website'@'localhost';
+
+FLUSH PRIVILEGES;
+
+-- ---------------------------------------------------------------------------
+-- Admin account (2026-10-11).
+--
+-- A THIRD account, used only by the /admin routes. It is a separate connection
+-- with separate credentials, so a bug in the public site runs on the restricted
+-- pool and never touches this one.
+--
+-- This reverses part of ADR-0007, which stated approving happens through the
+-- Discord staff bot and never from the web. The owner chose a web admin area
+-- because one person runs both, and the trade is recorded rather than quietly
+-- absorbed:
+--
+--   gained  approving and reviewing applications from one screen
+--   lost    a compromised website can now approve people, which was the single
+--           property ADR-0007 existed to guarantee
+--
+-- The UPDATE is column-scoped. `answers`, `discord_id` and `id` are NOT writable,
+-- so an admin account cannot rewrite an applicant's own words or reassign an
+-- application to someone else.
+--
+-- The account is deliberately NOT mentioned in the website's .env.example
+-- defaults: an instance that never opens /admin never needs the credential.
+-- ---------------------------------------------------------------------------
+CREATE USER IF NOT EXISTS 'nifty_admin'@'localhost' IDENTIFIED BY 'CHANGE_ME_ADMIN';
+
+GRANT SELECT ON nifty_life.applications TO 'nifty_admin'@'localhost';
+GRANT UPDATE (status, reviewed_at, reviewed_by, decision_note)
+  ON nifty_life.applications TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.characters TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.bans      TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.accounts  TO 'nifty_admin'@'localhost';
+
+-- Verification, alongside the ones below:
+--   INSERT INTO applications (...)          -- denied: no INSERT
+--   UPDATE applications SET answers='{}'   -- denied: column not granted
+--   UPDATE applications SET discord_id='1' -- denied: column not granted
+--   DELETE FROM applications WHERE id='x'  -- denied: no DELETE
+--   UPDATE peeper_posts SET deleted_at=NOW -- denied: no grant at all
+--   SELECT * FROM wallets                   -- denied: no grant at all
+
 FLUSH PRIVILEGES;
 
 -- ---------------------------------------------------------------------------

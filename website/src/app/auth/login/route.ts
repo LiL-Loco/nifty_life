@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const identity = devIdentity();
     if (!identity) {
       return NextResponse.redirect(
-        new URL('/?error=dev-auth-not-configured', request.url),
+        new URL('/login?error=dev-auth-not-configured', request.url),
       );
     }
 
@@ -48,5 +48,5 @@ export async function GET(request: Request) {
     return response;
   }
 
-  return NextResponse.redirect(new URL('/?error=login-unavailable', request.url));
+  return NextResponse.redirect(new URL('/login?error=login-unavailable', request.url));
 }
