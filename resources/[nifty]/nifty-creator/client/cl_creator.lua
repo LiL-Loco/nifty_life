@@ -358,8 +358,9 @@ local slots = { components = {}, props = {} }
 -- index addresses the wrong component - the label can move, the
 -- index cannot. 5 hand=backpack, 6 feet=shoes, 7 teef=parachute,
 -- 8 accs=accessories, 9 task=armor, 10 decl=emblems, 11 jbib=jacket.
--- Slot 12 is never populated by the engine; placeholder so the menu
--- does not show a missing index.
+-- GTA only has slots 0..11 (PV_COMP_MAX = 11). Anything above that
+-- would be the engine reading garbage; we trust the engine to never
+-- hand us one.
 local COMPONENT_LABELS = {
   [0]  = 'Kopf',
   [1]  = 'Gesicht',
@@ -373,7 +374,6 @@ local COMPONENT_LABELS = {
   [9]  = 'Ruestung',
   [10] = 'Abzeichen',
   [11] = 'Jacke',
-  [12] = 'Hose (2)',
 }
 
 local PROP_LABELS = {
