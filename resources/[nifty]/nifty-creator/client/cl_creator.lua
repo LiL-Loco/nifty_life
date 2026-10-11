@@ -269,7 +269,7 @@ local function respawnModel()
     return PlayerPedId()
   end
   if not IsModelInCdimage(hash) then
-    print(('[%s] respawnModel: model "%s" (0x%x) not in cdimage, skipping SetPlayerModel'):format(RESOURCE, currentModel, hash)))
+    print(('[%s] respawnModel: model "%s" (0x%x) not in cdimage, skipping SetPlayerModel'):format(RESOURCE, currentModel, hash))
     return PlayerPedId()
   end
   SetPlayerModel(PlayerId(), hash)
