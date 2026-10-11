@@ -143,7 +143,14 @@ exports('select', function(menu, label, spec)
 end)
 
 exports('separator', function(menu, label)
-  local item = NativeUI.CreateSeparatorItem(label or '', label or '')
+  -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
+  -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
+  -- New() function has a bug in the upstream library (Text and
+  -- Description are not function parameters but undef globals, so the
+  -- initial label is hardcoded "N/A"). We work around that by
+  -- setting the label after construction via UIMenuItem:Text().
+  local item = UIMenuSeparatorItem.New()
+  item:Text(label or '')
   menu:AddItem(item)
 end)
 
