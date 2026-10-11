@@ -294,7 +294,15 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- Re-read rather than reusing `character`: its `appearance` is still the NULL
   -- from before the save, and the client would then be told to spawn a ped with no
   -- clothing at all.
-  enterWorld(src, Identity.getCharacter(account.id), true)
+  local saved = Identity.getCharacter(account.id)
+  -- First-time creator completion plays the Concat plane cutscene (~26s)
+  -- before the world loads. The cutscene handler on the client calls
+  -- enterWorld itself when the cutscene ends, so we do NOT call it here
+  -- on the first run.
+  TriggerClientEvent('nifty:client:welcomeCutscene', src, {
+    gender = saved.gender,
+  })
+  enterWorld(src, saved, true)
 end)
 
 -- Leaving the creator on purpose.
