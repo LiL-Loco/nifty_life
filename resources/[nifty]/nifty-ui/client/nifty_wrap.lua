@@ -296,10 +296,21 @@ exports('submenu', function(...)
     end
     local sub = parent._submenu_cache[label]
     if sub and type(sub) == 'table' then
-      -- Bind if not already (idempotent - safe to re-call).
-      parent:BindMenuToItem(sub, item)
-      pool:Add(sub)
-      sub:Visible(true)
+      -- spec.build() is caller code that calls Menu.menu(...) to
+      -- construct the child. That call goes through the export
+      -- proxy, which deep-copies the returned UIMenu and drops the
+      -- metatable. UIMenu.lua:1060 calls `Menu()` to verify the
+      -- type via __call - that throws on a plain table copy.
+      --
+      -- The _id scalar survives the deep copy, so we can find the
+      -- real menu by id and pass *that* to the library. If _id is
+      -- missing (defensive - e.g. someone called spec.build
+      -- outside the shim) we fall back to the table as-is and let
+      -- the library complain.
+      local real = (sub._id and _menuById[sub._id]) or sub
+      parent:BindMenuToItem(real, item)
+      pool:Add(real)
+      real:Visible(true)
     end
   end
   parent:AddItem(item)
