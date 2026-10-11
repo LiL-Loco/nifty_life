@@ -10,15 +10,34 @@
 -- NativeUI uses GTA-natives (DrawSprite, DrawText, DrawRect) to draw
 -- the menu directly to the screen. There is no NUI, no CEF, and no
 -- focus to manage - the player can interact with the menu via keyboard
--- or mouse, but the rest of the game stays interactive behind it. This
--- is exactly the "native UI" behaviour the user asked for. The
+-- or mouse, but the rest of the game stays interactive behind it. The
 -- focus broker at nifty-core/client/cl_focus.lua stays unchanged
 -- because chat and phone still need it.
 --
--- Render thread: NativeUI menus need MenuPool:ProcessMenus / :ProcessControl
--- / :ProcessMouse / :Draw every frame. We run a single Citizen thread
--- that ticks the global pool. The shim stores the pool in a closure
--- so the menu state survives between calls.
+-- PROXY QUIRK - THE LAST BUILT MENU PATTERN
+--
+-- FiveM's exports proxy on this build drops the first user arg of every
+-- external call. nifty's call site is `Menu.button(handle, 'Label', spec)`
+-- (two user args: the handle and the label). The proxy drops the handle,
+-- so the registered function receives `('Label', spec)`. Same for every
+-- other builder. The shim keeps a file-local upvalue `LastBuiltMenu`
+-- that the `menu` export sets to the most recently created menu. The
+-- other builders add their rows to `LastBuiltMenu` instead of the
+-- dropped handle. The caller still receives the handle from `Menu.menu`,
+-- so callers that store the handle and use it later (e.g. pushMenu)
+-- continue to work - the same Lua table is referenced by both the
+-- caller's local and `LastBuiltMenu`.
+--
+-- This is the same pattern the original in-house framework used
+-- (LastBuiltMenu fallback - see the commit history). The earlier
+-- stripNamespace in the zUI-v2 shim was wrong for the same reason
+-- the earlier n_args=1 print shows: the proxy is dropping the handle,
+-- not prepending the namespace.
+--
+-- Render thread: NativeUI menus need MenuPool:ProcessMenus /
+-- :ProcessControl / :ProcessMouse / :Draw every frame. We run a single
+-- Citizen thread that ticks the global pool. The shim stores the pool
+-- in a closure so the menu state survives between calls.
 
 local RESOURCE = GetCurrentResourceName()
 
@@ -33,10 +52,15 @@ local pool = NativeUI.CreatePool()
 pool:MouseControlsEnabled(true)
 pool:ControlDisablingEnabled(true)
 
--- ----- Builder functions -----
--- Each builder appends an item to a UIMenu. Items are created via
--- NativeUI's factory functions (CreateItem, CreateCheckboxItem, etc.)
--- and configured with the nifty-style spec (description, onSelect, ...).
+-- The most recently created UIMenu. The `menu` export writes to this
+-- when it builds a new handle; the other builders read from it because
+-- the proxy drops the handle arg on every external call. The same
+-- value the caller's `local menu = Menu.menu(...)` captures is the same
+-- table LastBuiltMenu points to (Lua tables are by-reference), so
+-- items added via LastBuiltMenu:AddItem show up in the caller's menu.
+local LastBuiltMenu = nil
+
+-- ----- Helpers -----
 
 -- Map a nifty onSelect handler to NativeUI's OnActivated. The
 -- NativeUI callback receives (menu, item) - we ignore both and just
@@ -48,24 +72,12 @@ local function safeCall(fn, ...)
   end
 end
 
--- FiveM prepends the exports-namespace userdata as the first arg of
--- every external call. nifty's call site is `Menu.separator(menu, 'X')`
--- (dot or colon syntax - both pre-pend). Our shim body expects the
--- user args directly. stripNamespace drops the namespace if it is
--- arg[1], so the function bodies see the shape the in-house
--- framework's cl_menu.lua used to see. The same fix was applied to
--- the zUI-v2 port (commit 67d4753).
-local Self = exports[RESOURCE]
-local function stripNamespace(...)
-  local args = table.pack(...)
-  if args.n >= 1 and args[1] == Self then
-    return table.unpack(args, 2, args.n)
-  end
-  return table.unpack(args, 1, args.n)
-end
+-- ----- Builder functions -----
+-- Each builder adds an item to LastBuiltMenu. The label / spec / etc.
+-- are at args[1..] because the proxy dropped args[0] (the menu).
 
 exports('menu', function(...)
-  local spec = stripNamespace(...)
+  local spec = ...
   if type(spec) ~= 'table' then spec = {} end
   -- NativeUI's CreateMenu takes (Title, Subtitle, X, Y, TxtDictionary,
   -- TxtName, Heading, R, G, B, A). X=0, Y=0 - the menu renders at the
@@ -78,25 +90,22 @@ exports('menu', function(...)
     0,
     255, 255, 255, 255
   )
-  m._owner = nil
-  m._onClose = spec.onClose
-  m._section = spec.section
-  m._submenus = {}
+  LastBuiltMenu = m
   return m
 end)
 
 exports('button', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
   item.OnActivated = function() safeCall(spec.onSelect) end
   if spec.rightLabel then item:RightLabel(tostring(spec.rightLabel)) end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 exports('checkbox', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
   local initial = spec.checked == true
   local item = NativeUI.CreateCheckboxItem(label or '', initial, spec.description or '')
@@ -104,11 +113,11 @@ exports('checkbox', function(...)
   item.OnCheckedChanged = function(_, _item, checked)
     safeCall(spec.onChange, checked == true)
   end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 exports('slider', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
   local min = tonumber(spec.min) or 0
   local max = tonumber(spec.max) or 100
@@ -141,11 +150,11 @@ exports('slider', function(...)
     local newValue = values[newIndex] or value
     safeCall(spec.onSelect, newValue)
   end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 exports('select', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
   local items = spec.items or {}
   local index = tonumber(spec.index) or 1
@@ -160,17 +169,11 @@ exports('select', function(...)
   item.OnActivated = function(_, _item, newIndex)
     safeCall(spec.onSelect, newIndex, items[newIndex])
   end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 exports('separator', function(...)
-  local args = table.pack(...)
-  print(('[nifty-ui] separator: n_args=%d'):format(args.n))
-  for i = 1, args.n do
-    print(('[nifty-ui]   args[%d] = %s (%s)'):format(i, tostring(args[i]), type(args[i])))
-  end
-  local menu, label = stripNamespace(...)
-  print(('[nifty-ui]   stripped: menu=%s, label=%s'):format(tostring(menu), tostring(label)))
+  local label = ...
   -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
   -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
   -- New() function has a bug in the upstream library (Text and
@@ -179,29 +182,26 @@ exports('separator', function(...)
   -- setting the label after construction via UIMenuItem:Text().
   local item = UIMenuSeparatorItem.New()
   item:Text(label or '')
-  if not menu then
-    print('[nifty-ui] FATAL: menu is nil after stripNamespace')
-    return
-  end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 -- Text input. NativeUI has no text input widget, so we use FiveM's
 -- native on-screen keyboard (DisplayOnscreenKeyboard) when the user
--- activates the input item. The typed value updates a closure-bound
+-- activates the input row. The typed value updates a closure-bound
 -- variable on the menu, so the rest of the menu can read it via
 -- Menu.input's getValue pattern (callers read it at click time of
 -- the "save" button, not via a callback).
 exports('input', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
-  if menu._input_value == nil then
-    menu._input_value = tostring(spec.value or '')
+  if not LastBuiltMenu then return end
+  if LastBuiltMenu._input_value == nil then
+    LastBuiltMenu._input_value = tostring(spec.value or '')
   end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
   item.OnActivated = function()
-    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', menu._input_value or '', '', '', '', 64)
+    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', LastBuiltMenu._input_value or '', '', '', '', 64)
     -- Wait for the keyboard to be ready, then read the result.
     -- DisplayOnscreenKeyboard is asynchronous: UpdateOnscreenKeyboard
     -- returns 0 while the user is typing, 1 when done, 2 when cancelled.
@@ -210,27 +210,27 @@ exports('input', function(...)
       local status = UpdateOnscreenKeyboard()
       if status == 1 then
         local result = GetOnscreenKeyboardResult()
-        menu._input_value = tostring(result or '')
-        safeCall(spec.onChange, menu._input_value)
+        LastBuiltMenu._input_value = tostring(result or '')
+        safeCall(spec.onChange, LastBuiltMenu._input_value)
       end
     end)
   end
-  menu:AddItem(item)
+  LastBuiltMenu:AddItem(item)
 end)
 
 exports('list', function(...)
-  local menu, spec = stripNamespace(...)
+  local spec = ...
   if type(spec) ~= 'table' then spec = {} end
   -- nifty's "list" was an old API the codebase never used; emit a
   -- disabled button so callers that mistakenly use it see something
   -- instead of an empty row.
   local item = NativeUI.CreateItem('(list - not implemented)', '')
   item:Enabled(false)
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 exports('submenu', function(...)
-  local menu, label, spec = stripNamespace(...)
+  local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
   -- A submenu is a button that, when activated, builds and shows a
   -- child UIMenu. We lazily build the child the first time the button
@@ -239,19 +239,20 @@ exports('submenu', function(...)
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
   item.OnActivated = function()
-    if not menu._submenu_cache then
-      menu._submenu_cache = {}
+    if not LastBuiltMenu then return end
+    if not LastBuiltMenu._submenu_cache then
+      LastBuiltMenu._submenu_cache = {}
     end
-    if not menu._submenu_cache[label] then
-      menu._submenu_cache[label] = spec.build()
+    if not LastBuiltMenu._submenu_cache[label] then
+      LastBuiltMenu._submenu_cache[label] = spec.build()
     end
-    local sub = menu._submenu_cache[label]
+    local sub = LastBuiltMenu._submenu_cache[label]
     if sub and type(sub) == 'table' then
       pool:Add(sub)
       sub:Visible(true)
     end
   end
-  menu:AddItem(item)
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 -- ----- Visibility / pool control -----
@@ -274,13 +275,13 @@ local function presentHandle(menu)
 end
 
 exports('openMenu', function(...)
-  local _owner, menu = stripNamespace(...)
+  local _owner, menu = ...
   if not presentHandle(menu) then return false end
   return true
 end)
 
 exports('pushMenu', function(...)
-  local _owner, menu = stripNamespace(...)
+  local _owner, menu = ...
   -- pushMenu: caller has a new menu to show, replacing the current
   -- one. We close everything currently visible first to mirror the
   -- previous framework's "navigate to new menu" behaviour.
@@ -289,7 +290,7 @@ exports('pushMenu', function(...)
 end)
 
 exports('closeMenu', function(...)
-  local _owner, _reason = stripNamespace(...)
+  local _owner, _reason = ...
   -- Close whichever menu is currently visible. The OnMenuClose
   -- handler set up by presentHandle fires the user's onClose with the
   -- reason. NativeUI's close does not pass a reason, so we collapse
