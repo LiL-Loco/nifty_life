@@ -1220,11 +1220,13 @@ local function buildOverlayMenu(id)
     end,
   })
 
-  -- Opacity in percent, because the native takes 0.0..1.0 and a slider that shows
-  -- "0.42" for a beard reads as a fault rather than as a setting.
+  -- Opacity in percent. The native takes 0.0..1.0, so we store `value / 100`.
+  -- Half-percent step (0..100 step 0.5 = 200 positions) so the player can
+  -- fade a beard from 50.5 to 51.0 without it snapping. New overlays start
+  -- at 100% so the style is visible the moment the player opens the menu.
   Menu.slider(menu, 'Deckkraft', {
-    min = 0, max = 100, step = 1, value = math.floor((current.opacity or 1.0) * 100 + 0.5),
-    format = function(value) return ('%d %%'):format(value) end,
+    min = 0, max = 100, step = 0.5, value = (current.opacity or 1.0) * 100,
+    format = function(value) return ('%g %%'):format(value) end,
     onChange = function(value)
       local live = face.overlays[tostring(id)] or {}
       face.overlays[tostring(id)] = {
@@ -1380,9 +1382,13 @@ local function buildParentsMenu()
 
   for _, weight in ipairs(weights) do
     local key = weight.key
+    -- Half-percent step (0..100 step 0.5 = 200 positions). The engine
+    -- reads the ratio, so storing value/100 keeps the precision and
+    -- the on-screen label shows 1 decimal place when set (50.5),
+    -- integer when whole (50).
     Menu.slider(menu, weight.label, {
-      min = 0, max = 100, step = 1, value = math.floor((face.headBlend[key] or 0.0) * 100 + 0.5),
-      format = function(value) return ('%d'):format(value) end,
+      min = 0, max = 100, step = 0.5, value = (face.headBlend[key] or 0.0) * 100,
+      format = function(value) return ('%g'):format(value) end,
       onChange = function(value)
         face.headBlend[key] = value / 100
         refresh()
@@ -1394,8 +1400,8 @@ local function buildParentsMenu()
   Menu.separator(menu, 'Hautton')
 
   Menu.slider(menu, 'Hautton', {
-    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.5) * 100 + 0.5),
-    format = function(value) return ('%d %%'):format(value) end,
+    min = 0, max = 100, step = 0.5, value = (face.headBlend.skinTone or 0.5) * 100,
+    format = function(value) return ('%g %%'):format(value) end,
     onChange = function(value)
       face.headBlend.skinTone = value / 100
       refresh()
