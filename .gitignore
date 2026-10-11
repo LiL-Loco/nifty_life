@@ -4,6 +4,11 @@
 !.env.example
 *.pem
 *.key
+# Backups of `server.cfg` are not safe to track either: the live Cfx.re
+# license key ends up in them, and `.gitignore` ignores the file but not its
+# neighbours. Without this rule, a single stray `cp server.cfg server.cfg.bkp`
+# followed by `git add -A` would push the key to the remote.
+*.bkp
 secrets.lua
 server.cfg
 !server.cfg.example
