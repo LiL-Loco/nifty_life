@@ -216,16 +216,33 @@ end
 RegisterNetEvent('nifty:client:enterWorld', function(data)
   waitingForWorld = false
 
-  local ped = PlayerPedId()
-  SetEntityCoords(ped, data.spawn.x, data.spawn.y, data.spawn.z, false, false, false, false)
-  SetEntityHeading(ped, data.spawn.heading or 0.0)
+  local appearance = data.character.appearance
 
-  applyAppearance(ped, data.character.appearance)
+  -- Spawn THROUGH the spawn module, not with a bare SetEntityCoords.
+  --
+  -- Two reasons. The obvious one is that a player who died on a previous life is
+  -- still dead here, and moving a corpse does not resurrect it - so this is where
+  -- `NetworkResurrectLocalPlayer` has to happen. The subtler one is the model:
+  -- the spawn sets it, so the resurrect lands in the right body, and the
+  -- appearance then only has to dress that body. Calling the model-setting
+  -- `applyAppearance` here as well would reset the ped a second time and throw
+  -- away everything the spawn just did.
+  exports['nifty-world']:spawnPlayer({
+    x = data.spawn.x,
+    y = data.spawn.y,
+    z = data.spawn.z,
+    heading = data.spawn.heading or 0.0,
+    model = appearance and appearance.model,
+  }, function()
+    -- Dressing happens once the spawn's screen fade is in, so the player does not
+    -- watch their own clothes assemble while the screen is still black.
+    applyAppearanceParts(PlayerPedId(), appearance)
+  end)
 
-  -- The player is held frozen until their character exists, so nobody walks
-  -- around the city mid-creation.
-  FreezeEntityPosition(ped, false)
-  SetEntityVisible(ped, true)
+  -- Autospawn is armed AFTER the spawn, never before. During the creator the
+  -- player is standing at the creation point and must stay there; arming it
+  -- earlier would let the death monitor move them out from under the menu.
+  exports['nifty-world']:setAutoSpawn(true)
 
   print(('[nifty-world] entered world as %s %s'):format(
     data.character.firstName, data.character.lastName or ''))

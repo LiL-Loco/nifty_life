@@ -35,6 +35,10 @@ server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/sv_main.lua'
 server_script 'server/sv_actions.lua'
 
+-- Order is load order: the spawn module first, because cl_identity calls
+-- spawnPlayer the moment the server says the character is ready, and an export
+-- that does not exist yet is a silent nil rather than an error.
+client_script 'client/cl_spawn.lua'
 client_script 'client/cl_identity.lua'
 client_script 'client/cl_world.lua'
 
