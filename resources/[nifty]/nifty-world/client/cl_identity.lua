@@ -31,6 +31,8 @@ local currentAppearance = nil
 --- not a try/catch - and the result is logged, because "the beard did not change"
 --- and "the native does not exist" must not look the same from the outside.
 local Natives = {
+  setHeadBlendData  = SetPedHeadBlendData,
+  setEyeColor       = _SetPedEyeColor or SetPedEyeColor,
   setFaceFeature     = SetPedFaceFeature,
   setHeadOverlay     = SetPedHeadOverlay,
   numHeadOverlayValues = GetNumHeadOverlayValues,
@@ -68,6 +70,23 @@ end)
 --- would run `SetPlayerModel` on every slider nudge - which resets the ped and would
 --- throw away the clothing the player just picked, roughly forty times a second.
 local function applyFace(ped, appearance)
+  -- HEAD BLEND FIRST. It rebuilds the face the overlays are painted onto, so
+  -- applying overlays first and the blend afterwards throws them away. The
+  -- argument order looks wrong and is not: the native takes MOTHER before
+  -- FATHER, and the two shape/skin slots mirror the two id slots.
+  if appearance.headBlend and Natives.setHeadBlendData then
+    local blend = appearance.headBlend
+    Natives.setHeadBlendData(ped,
+      blend.mother, blend.father, 0,
+      blend.mother, blend.father, 0,
+      blend.resemblance or 0.0, blend.skinTone or 0.0, 0.0,
+      false)
+  end
+
+  if appearance.eyeColour and Natives.setEyeColor then
+    Natives.setEyeColor(ped, appearance.eyeColour)
+  end
+
   if type(appearance.faceFeatures) == 'table' and Natives.setFaceFeature then
     for id, value in pairs(appearance.faceFeatures) do
       Natives.setFaceFeature(ped, tonumber(id), value)

@@ -233,6 +233,29 @@ function Validate.hairOverlay(value)
   return nil
 end
 
+--- Eye colour index.
+function Validate.eyeColour(value)
+  local colour = boundedInt(value, 0, AppearanceConfig.MAX_EYE_COLOUR)
+  return colour or 0
+end
+
+--- Head blend: which mother, which father, and the two mixes.
+---
+--- `resemblance` is the SHAPE mix (0 = entirely the mother's shape, 1 = entirely
+--- the father's) and `skinTone` the skin mix. Both 0.0..1.0. They are stored as
+--- fractions rather than percentages because that is what the native takes, and a
+--- conversion in the middle would be one more place for the two to disagree.
+function Validate.headBlend(value)
+  if type(value) ~= 'table' then return nil end
+
+  return {
+    father     = boundedInt(value.father, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    mother     = boundedInt(value.mother, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    resemblance = boundedFloat(value.resemblance, 0.0, 1.0) or 0.0,
+    skinTone   = boundedFloat(value.skinTone, 0.0, 1.0) or 0.0,
+  }
+end
+
 --- Validate a whole appearance object (ADR-0017).
 ---
 --- Returns a *rebuilt* structure rather than the input: only known keys survive,
@@ -293,6 +316,8 @@ function Validate.appearance(value)
   result.overlays = Validate.headOverlays(value.overlays)
   result.hairColour = Validate.hairColour(value.hairColour)
   result.hairOverlay = Validate.hairOverlay(value.hairOverlay)
+  result.eyeColour = Validate.eyeColour(value.eyeColour)
+  result.headBlend = Validate.headBlend(value.headBlend)
 
   return result
 end

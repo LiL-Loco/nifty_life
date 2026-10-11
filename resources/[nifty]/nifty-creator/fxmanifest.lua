@@ -46,7 +46,19 @@ shared_scripts {
 -- creator. It exists for other menus — a shop search box, an admin rename — not
 -- because of this screen.
 
-client_script 'client/cl_creator.lua'
+-- The data folder is loaded BY THE SCRIPT, not by the manifest's shared_scripts.
+-- It is nearly 8 MB of item names, restriction tags and torso mappings, and
+-- decoding all of it at boot would cost every player who never opens a menu.
+-- `cl_gamedata.lua` reads each file the first time something actually needs it.
+files {
+  'data/*.json'
+}
+
+client_scripts {
+  'client/cl_labels.lua',
+  'client/cl_gamedata.lua',
+  'client/cl_creator.lua',
+}
 
 -- No server_script. Creating a character is now the website's job, through
 -- create_character_from_web (migration 021); what is left here is appearance,

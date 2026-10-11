@@ -28,6 +28,21 @@ local RESOURCE = GetCurrentResourceName()
 --- and takes the keyboard with it.
 local Menu = exports['nifty-ui']
 
+--- Our own German display labels, and the vendored item data.
+---
+--- Both are globals set by the two scripts listed above this one in the manifest.
+--- Load order is the whole reason they are two files and not one: cl_creator
+--- reads them, so they have to exist before it runs.
+local Labels = Labels
+local GameData = GameData
+
+--- The map builder needs to know what the ped is wearing so it can put it back.
+--- It cannot read that back from the engine portably, so it is told - by the only
+--- code that knows, which is this one.
+GameData.savedSlot = function(kind, id)
+  return slotOf(kind, id)
+end
+
 -- Forward declarations. The root menu's rows reference these by closure, and a
 -- `local function` is only visible FROM ITS OWN LINE ONWARD - declaring them after
 -- `buildRootMenu` would capture a global nil instead, and every row would fail the
@@ -41,6 +56,7 @@ local buildRootMenu
 local closeCreator
 local refresh
 local applyHairOverlay
+local slotOf
 
 local creatorOpen = false
 local currentModel = 'mp_m_freemode_01'
@@ -48,6 +64,11 @@ local currentModel = 'mp_m_freemode_01'
 --- True when the stored gender has no single freemode model attached to it
 --- (`nonbinary`). Then the player picks, because there is nothing to derive.
 local modelIsUndecided = false
+
+--- Which ped the current look belongs to. Set at open, read by the item data
+--- loader: every name table, tag table and torso map is split by gender, and so
+--- is the global index mapping.
+local characterGender = 'male'
 
 --- What the player has picked so far, in the exact shape the server validates:
 ---   { components = { ['3'] = { collection=, drawable=, texture= } }, props = {} }
@@ -223,9 +244,74 @@ local function respawnModel()
   return PlayerPedId()
 end
 
+--- Put the torso that fits under the current top on slot 3.
+---
+--- Without this a leather jacket is drawn over whatever torso happened to be there
+--- and the player watches their own character clip through itself while choosing a
+--- face. That is the single ugliest thing in a freemode creator.
+---
+--- The data speaks GLOBAL indices and this project stores collection-local ones
+--- (ADR-0017), so the global torso is looked back up in slot 3's own map and
+--- stored as the local coordinates the database uses. One storage format, not two.
+---
+--- A top with no torso data returns nil, and then slot 3 is left alone. Forcing a
+--- default there would quietly take away the player's own choice of shirt.
+local function applyBestTorso()
+  local top = slotOf('components', 11)
+  if not top then return end
+
+  -- The drawable count of the SELECTED collection, not of the first one. The
+  -- global index map is built a whole collection at a time, and building it with
+  -- the wrong count produces a map that only knows index 0 - which then looks
+  -- exactly like "this item has no name".
+  local count = 1
+  for _, option in ipairs(slots.components[11] or {}) do
+    if option.name == top.collection then count = option.drawables break end
+  end
+
+  local globalDrawable, globalTexture = GameData.bestTorso(
+    top.collection, top.drawable, top.texture, count)
+
+  if not globalDrawable then return end
+
+  local options = slots.components[3]
+  if not options then return end
+
+  local started = GetGameTimer()
+
+  for _, option in ipairs(options) do
+    local drawable = GameData.localForGlobal('components', 3, globalDrawable, option.name, option.drawables)
+    if drawable then
+      local texture = tonumber(globalTexture) or 0
+      if texture >= option.textures then texture = option.textures - 1 end
+      if texture < 0 then texture = 0 end
+
+      selection.components['3'] = {
+        collection = option.name,
+        drawable   = drawable,
+        texture    = texture,
+      }
+      print(('[%s] best torso %d -> slot 3 collection "%s" drawable %d (%d ms)'):format(
+        RESOURCE, globalDrawable, option.name, drawable, GetGameTimer() - started))
+      return
+    end
+  end
+
+  print(('[%s] best torso %d found no matching collection-local drawable on slot 3 - slot left alone'):format(
+    RESOURCE, globalDrawable))
+end
+
 --- Store a pick and show it on the ped immediately.
 local function setSlot(kind, id, slot)
   selection[kind][tostring(id)] = slot
+
+  -- A top drags its torso with it. Done BEFORE the refresh, so the torso and the
+  -- top arrive in the same frame instead of the player seeing the clipping for a
+  -- moment and then watching it fix itself.
+  if kind == 'components' and tonumber(id) == 11 then
+    applyBestTorso()
+  end
+
   refresh()
 
   -- A hair overlay rides ON TOP of a hairstyle, so changing the hair moves the
@@ -237,7 +323,7 @@ local function setSlot(kind, id, slot)
 end
 
 --- The current pick for a slot, or nil.
-local function slotOf(kind, id)
+slotOf = function(kind, id)
   return selection[kind][tostring(id)]
 end
 
@@ -349,6 +435,8 @@ local face = {
   overlays = {},
   hairColour = { primary = 0, highlight = 0 },
   hairOverlay = nil,
+  eyeColour = 0,
+  headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 },
 }
 
 --- The whole appearance as the creator currently sees it.
@@ -361,6 +449,8 @@ local function appearanceNow()
     overlays     = face.overlays,
     hairColour   = face.hairColour,
     hairOverlay  = face.hairOverlay,
+    eyeColour    = face.eyeColour,
+    headBlend    = face.headBlend,
   }
 end
 
@@ -583,9 +673,32 @@ local function buildOverlayMenu(id)
   local maxStyle = overlayStyleCount(id)
   local menu = Menu:menu({ title = label, dock = 'right' })
 
+  -- "Kein" as a button rather than as slider position 0.
+  --
+  -- The game switches an overlay off with style 255, and 255 is deliberately
+  -- outside the stored range here - a saved 255 would be state the player cannot
+  -- see or undo. Style 0 at zero opacity is the same result and is a real value
+  -- the sliders can express. This is why the label list below is read one entry
+  -- LATER than the native style: its first entry is that off-state, not style 0.
+  Menu:button(menu, 'Kein', {
+    description = 'Dieses Merkmal ausschalten.',
+    onSelect = function()
+      face.overlays[tostring(id)] = {
+        style = 0, opacity = 0.0, colourType = 1, colour = 0, secondColour = 0,
+      }
+      refresh()
+      Menu:pushMenu(RESOURCE, buildOverlayMenu(id))
+    end,
+  })
+
+  Menu:separator(menu, 'Stil')
+
   Menu:slider(menu, 'Stil', {
     min = 0, max = maxStyle, step = 1, value = math.min(current.style, maxStyle),
-    format = function(value) return ('%d / %d'):format(value, maxStyle) end,
+    format = function(value)
+      -- One entry later, because the list starts with the off-state.
+      return Labels.overlayStyle(id, value + 1)
+    end,
     onChange = function(value)
       face.overlays[tostring(id)] = {
         style = value,
@@ -644,6 +757,86 @@ local function buildOverlayMenu(id)
   return menu
 end
 
+--- Parents and the two blends (`SetPedHeadBlendData`).
+---
+--- The engine names these presets with numbers and nothing else. Third-party
+--- menus turn them into English first names, which tells a German player nothing
+--- and is not even true - two of the twenty-four "fathers" are the same face.
+--- "Vater 7" is honest about what it is.
+---
+--- Defaults are mother 21 / father 0 / both mixes 0.0, which is the freemode
+--- default the game itself starts from.
+local FATHER_COUNT = 21
+local MOTHER_COUNT = 22
+
+local function buildParentsMenu()
+  local menu = Menu:menu({
+    title = 'Eltern',
+    subtitle = 'Zwei Presets und zwei Mischungen.',
+    dock = 'right',
+  })
+
+  Menu:slider(menu, 'Vater', {
+    min = 0, max = FATHER_COUNT - 1, step = 1, value = face.headBlend.father,
+    format = function(value) return Labels.FATHER(value) end,
+    onChange = function(value)
+      face.headBlend.father = value
+      refresh()
+    end,
+  })
+
+  Menu:slider(menu, 'Mutter', {
+    min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
+    format = function(value) return Labels.MOTHER(value) end,
+    onChange = function(value)
+      face.headBlend.mother = value
+      refresh()
+    end,
+  })
+
+  Menu:separator(menu, 'Mischung')
+
+  -- Percent, because "0.35 Aehnlichkeit" is a fraction nobody reads at a glance,
+  -- and the native takes the fraction anyway.
+  Menu:slider(menu, 'Aehnlichkeit', {
+    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.resemblance or 0.0) * 100 + 0.5),
+    format = function(value) return ('%d %%'):format(value) end,
+    onChange = function(value)
+      face.headBlend.resemblance = value / 100
+      refresh()
+    end,
+  })
+
+  Menu:slider(menu, 'Hautton', {
+    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.0) * 100 + 0.5),
+    format = function(value) return ('%d %%'):format(value) end,
+    onChange = function(value)
+      face.headBlend.skinTone = value / 100
+      refresh()
+    end,
+  })
+
+  return menu
+end
+
+--- Eye colour: the game's thirty-two, in the engine's own order.
+local function buildEyeColourMenu()
+  local menu = Menu:menu({ title = 'Augenfarbe', dock = 'right' })
+
+  Menu:slider(menu, 'Farbe', {
+    min = 0, max = AppearanceConfig.MAX_EYE_COLOUR, step = 1, value = face.eyeColour or 0,
+    format = function(value)
+      return Labels.EYE_COLOURS[value + 1] or ('Farbe %d'):format(value)
+    end,
+    onChange = function(value)
+      face.eyeColour = value
+      refresh()
+    end,
+  })
+
+  return menu
+end
+
 --- Face features: twenty sliders, each -1.0..1.0.
 local function buildFaceMenu()
   local menu = Menu:menu({
@@ -655,7 +848,7 @@ local function buildFaceMenu()
   for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
     local value = face.features[tostring(id)] or 0.0
 
-    Menu:slider(menu, ('Merkmal %d'):format(id), {
+    Menu:slider(menu, Labels.FEATURES[id + 1] or ('Merkmal %d'):format(id), {
       min = FEATURE_SLIDER_MIN, max = FEATURE_SLIDER_MAX, step = 0.05, value = value,
       format = function(v) return ('%+.2f'):format(v) end,
       onChange = function(v)
@@ -769,7 +962,22 @@ buildSlotMenu = function(kind, id)
     and (PROP_LABELS[id] or ('Prop ' .. id))
     or  (COMPONENT_LABELS[id] or ('Slot ' .. id))
 
-  local menu = Menu:menu({ title = label, dock = 'right' })
+  -- The real item name, if this slot and this ped have one. Slots 0, 9, 10 and 12
+  -- never do - those are not items the game ever sold - and a component the data
+  -- has no table for must show a number rather than an empty menu row.
+  local kind = isProp and 'props' or 'components'
+  local function nameFor(drawableId, textureId)
+    return GameData.itemName(isProp, id, option.name, drawableId, textureId, option.drawables)
+  end
+
+  local currentName = nameFor(drawable, texture)
+  local currentTags = GameData.itemTags(isProp, id, option.name, drawable, texture, option.drawables)
+
+  local menu = Menu:menu({
+    title = currentName and ('%s - %s'):format(label, currentName) or label,
+    subtitle = #currentTags > 0 and ('Merkmale: ' .. table.concat(currentTags, ', ')) or nil,
+    dock = 'right',
+  })
 
   local labels = {}
   for i, opt in ipairs(options) do
@@ -803,7 +1011,12 @@ buildSlotMenu = function(kind, id)
 
   Menu:slider(menu, 'Modell', {
     min = 0, max = option.drawables - 1, step = 1, value = drawable,
-    format = function(value) return ('%d / %d'):format(value, option.drawables - 1) end,
+    format = function(value)
+      -- The name of the item under the cursor, not the number it happens to have.
+      -- A slider that says "Brown Leather Fur Jacket" and one that says "311" are
+      -- the same control, and only one of them tells a player what they picked.
+      return nameFor(value, texture) or ('%d / %d'):format(value, option.drawables - 1)
+    end,
     onChange = function(value)
       local live = slotOf(kind, id) or {}
       setSlot(kind, id, {
@@ -816,7 +1029,12 @@ buildSlotMenu = function(kind, id)
 
   Menu:slider(menu, 'Textur', {
     min = 0, max = option.textures - 1, step = 1, value = texture,
-    format = function(value) return ('%d / %d'):format(value, option.textures - 1) end,
+    format = function(value)
+      -- The texture is a COLOUR VARIATION, not a fabric index - "Tan" against
+      -- "Brown". So the name of the exact variation is the useful label here, not
+      -- on the drawable row above.
+      return nameFor(drawable, value) or ('%d / %d'):format(value, option.textures - 1)
+    end,
     onChange = function(value)
       local live = slotOf(kind, id) or {}
       setSlot(kind, id, {
@@ -860,6 +1078,11 @@ buildRootMenu = function()
         onSelect = function()
           currentModel = entry[1]
           modelIsUndecided = false
+          -- The item data follows the MODEL here, not the recorded gender: the
+          -- player chose a body, and a female ped on a "nonbinary" character still
+          -- wears the female tables.
+          characterGender = (entry[1] == 'mp_f_freemode_01') and 'female' or 'male'
+          GameData.setGender(characterGender)
           respawnModel()
           discoverSlots()
           Menu:pushMenu(RESOURCE, buildRootMenu())
@@ -891,6 +1114,18 @@ buildRootMenu = function()
   end
 
   Menu:separator(menu, 'Gesicht')
+  Menu:submenu(menu, 'Eltern', {
+    description = 'Vater, Mutter und die beiden Mischungen.',
+    build = buildParentsMenu,
+  })
+
+  Menu:submenu(menu, 'Augenfarbe', {
+    description = 'Eine von dreissigzwei.',
+    build = buildEyeColourMenu,
+  })
+
+  Menu:separator(menu, 'Merkmale')
+
   for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
     Menu:submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
       description = 'Stil, Deckkraft und Farbe.',
@@ -989,6 +1224,8 @@ reset = function()
   face.overlays = {}
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
+  face.eyeColour = 0
+  face.headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 }
 
   local n = natives()
   if n.clearPedDecorations then n.clearPedDecorations(PlayerPedId()) end
@@ -1030,15 +1267,24 @@ exports('openCreator', function(data)
   -- and offering a free choice here would be offering a choice the server silently
   -- overrides.
   local gender = (type(data) == 'table' and data.gender) or 'male'
+  characterGender = gender
   local derived = AppearanceConfig.PED_MODELS[gender]
 
   modelIsUndecided = (derived == nil)
   currentModel = derived or 'mp_m_freemode_01'
+
+  -- Which ped's items we are looking at. The name tables, the tags and the torso
+  -- mappings are all split by gender, and the global index map is per model, so
+  -- this has to happen before anything is looked up - not lazily on first use,
+  -- which would read a leather jacket's name out of the female table.
+  GameData.setGender(characterGender)
   selection = { components = {}, props = {} }
   face.features = {}
   face.overlays = {}
   face.hairColour = { primary = 0, highlight = 0 }
   face.hairOverlay = nil
+  face.eyeColour = 0
+  face.headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 }
 
   -- The probe result is per model, so it is re-run when the model changes. A
   -- female ped has its own tattoo shop, and a map built for the male one would

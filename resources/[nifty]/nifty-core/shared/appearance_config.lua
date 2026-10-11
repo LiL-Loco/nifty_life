@@ -96,6 +96,17 @@ AppearanceConfig = {
 
   --- Face features are sliders 0..19, each -1.0..1.0. `SetPedFaceFeature`.
   MAX_FACE_FEATURE = 19,
+
+  --- Eye colour: the game has exactly thirty-two. `SetPedEyeColor`.
+  MAX_EYE_COLOUR = 31,
+
+  --- Head blend presets (`SetPedHeadBlendData`). The engine identifies them as
+  --- plain indices, not as a name, and the twenty-four "father" entries in
+  --- third-party menus are English first names that mean nothing to a German
+  --- player - two of them are the same blend. Presets 0..20 are the fathers,
+  --- 21..45 the mothers; the upper bound is the whole range with room for the
+  --- next content update.
+  MAX_HEADBLEND_PRESET = 63,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.
