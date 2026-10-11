@@ -1212,7 +1212,13 @@ local function buildParentsMenu()
   local momItems, dadItems, thirdItems = {}, {}, {}
   for i = 0, MOTHER_COUNT - 1 do momItems[i + 1] = Labels.MOTHER(i) end
   for i = 0, FATHER_COUNT - 1 do dadItems[i + 1] = Labels.FATHER(i) end
-  for i = 0, AppearanceConfig.MAX_HEADBLEND_PRESET do thirdItems[i + 1] = ('Person %d'):format(i + 1) end
+  -- Third person: the engine accepts any of the 47 presets as the
+  -- third slot; lbg-char lifts the same name list the in-game creator
+  -- shows. We expose it through Labels.THIRDPERSON (1-based) and map
+  -- to the engine's 0-based index in OnListChanged.
+  for i = 1, math.min(#Labels.THIRDPERSON, AppearanceConfig.MAX_HEADBLEND_PRESET + 1) do
+    thirdItems[i] = Labels.THIRDPERSON[i]
+  end
 
   local momItem = NativeUI.CreateListItem('Mutter', momItems, (face.headBlend.mother or 0) + 1, 'Wähle die Mutter.')
   local dadItem = NativeUI.CreateListItem('Vater', dadItems, (face.headBlend.father or 0) + 1, 'Wähle den Vater.')
@@ -1357,57 +1363,53 @@ end
 --- horizontal panel. The cursor position is normalised 0..1; the onChange
 --- handler maps it to the engine's -1..1 range.
 local function buildFaceMenu()
-  -- lbg-char pattern: one CreateSliderItem per face feature, with a
-  -- shared 21-entry value list "-1.0..1.0 in 0.1 steps". The engine's
-  -- SetPedFaceFeature takes -1.0..1.0, the slider's 1-based index maps
-  -- to a fraction -1..1 via (index-11) / 10. Twenty features means twenty
-  -- slider items in one submenu; events wired on the submenu itself.
+  -- Grid panels instead of sliders. 2D features (a pair of related
+  -- features) get a full 4-direction panel; 1D features (a single
+  -- axis) get a horizontal panel. The cursor position is normalised
+  -- 0..1; the onChange handler maps it to the engine's -1..1 range.
   local menu = NativeUI.CreateMenu(
-    'Gesichtsform', 'Zwanzig Schieberegler, -1.0 bis 1.0.', 1300, 0,
+    'Gesichtsform', 'Ziehen, um das Gesicht zu formen.', 1300, 0,
     'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
   )
 
-  local FeatureList = {}
-  for i = 1, 21 do FeatureList[i] = ('%+.1f'):format((i - 11) / 10) end
-
-  -- Display label and engine index for each face feature. The order
-  -- matches lbg-char: nose (0..5), eyebrows (6..7), cheekbones (8..9),
-  -- cheeks (10), eyes (11), lips (12), jaw (13..14), chin (15..18), neck (19).
-  local FeatureLabels = {
-    'Nasenbreite',     'Nasenbeinhoehe', 'Nasenspitzenlaenge', 'Nasenknochenhoehe', 'Nasenspitze-Tiefe', 'Nasenknochen-Drehung',
-    'Augenbrauen-Tiefe', 'Augenbrauen-Hoehe',
-    'Wangenkochen-Hoehe', 'Wangenkochen-Breite',
-    'Wangen-Breite',
-    'Augenoeffnung',
-    'Lippendicke',
-    'Kieferkochen-Breite', 'Kieferkochen-Tiefe',
-    'Kinn-Hoehe', 'Kinn-Tiefe', 'Kinn-Breite', 'Kinn-Loch',
-    'Hals-Dicke',
-  }
-  local function featureIndex(value) return math.floor((value + 1) * 10) + 1 end
-  local function featureValue(index) return (index - 11) / 10 end
-
-  local FeatureItems = {}
-  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
-    local value = face.features[tostring(id)] or 0.0
-    local item = NativeUI.CreateSliderItem(FeatureLabels[id + 1], FeatureList,
-      featureIndex(value),
-      ('SetPedFaceFeature(' .. id .. ', ' .. ('%+.1f'):format(value) .. ')'),
-      true)
-    menu:AddItem(item)
-    FeatureItems[id] = item
+  local function setFeature(id, value)
+    -- Sparse: an untouched feature is not stored. A ped whose stored
+    -- face is full of zeros and a ped whose stored face has no entries
+    -- are the same ped, but only one of them round-trips through the
+    -- database identically.
+    if math.abs(value) < 0.001 then
+      face.features[tostring(id)] = nil
+    else
+      face.features[tostring(id)] = value
+    end
   end
 
-  menu.OnSliderChange = function(_sender, item, index)
-    -- Dispatch by item identity: the 20 sliders share one handler.
-    for id, stored in pairs(FeatureItems) do
-      if stored == item then
-        face.features[tostring(id)] = featureValue(index)
-        SetPedFaceFeature(PlayerPedId(), id, featureValue(index))
+  for _, g in ipairs(FACE_2D_GROUPS) do
+    local xv = face.features[tostring(g.xId)] or 0.0
+    local yv = face.features[tostring(g.yId)] or 0.0
+    Menu.gridPanel(menu, g.title, {
+      kind = 'grid',
+      top = g.top, bottom = g.bottom, left = g.left, right = g.right,
+      x = (xv + 1) / 2, y = (yv + 1) / 2,
+      onChange = function(pos)
+        setFeature(g.xId, (pos.X or 0.5) * 2 - 1)
+        setFeature(g.yId, (pos.Y or 0.5) * 2 - 1)
         refresh()
-        return
-      end
-    end
+      end,
+    })
+  end
+
+  for _, g in ipairs(FACE_1D_GROUPS) do
+    local v = face.features[tostring(g.id)] or 0.0
+    Menu.gridPanel(menu, g.title, {
+      kind = 'horizontal',
+      left = g.left, right = g.right,
+      x = (v + 1) / 2,
+      onChange = function(pos)
+        setFeature(g.id, (pos.X or 0.5) * 2 - 1)
+        refresh()
+      end,
+    })
   end
 
   return menu

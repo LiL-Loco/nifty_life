@@ -155,6 +155,22 @@ Labels.EYE_COLOURS = {
 Labels.FATHER = function(index) return ('Vater %d'):format(index + 1) end
 Labels.MOTHER = function(index) return ('Mutter %d'):format(index + 1) end
 
+-- Real parent names for the third-person pick. GTA's head_blend_data
+-- takes any of the 47 presets (the same presets that populate the
+-- mother and father lists, and 3 extras the engine does not assign to
+-- either gender). lbg-char carries a 47-entry list we lift here, with
+-- the gender-specific mother / father lists folded in. The list is
+-- "Benjamin, Daniel, ..., Misty" - the same names the official
+-- character creator shows.
+Labels.THIRDPERSON = {
+  'Benjamin', 'Daniel', 'Joshua', 'Noah', 'Andrew', 'Juan', 'Alex', 'Isaac', 'Evan', 'Ethan',
+  'Vincent', 'Angel', 'Diego', 'Adrian', 'Gabriel', 'Michael', 'Santiago', 'Kevin', 'Louis', 'Samuel',
+  'Anthony', 'Claude', 'Niko', 'John',
+  'Hannah', 'Audrey', 'Jasmine', 'Giselle', 'Amelia', 'Isabella', 'Zoe', 'Ava', 'Camila', 'Violet',
+  'Sophia', 'Evelyn', 'Nicole', 'Ashley', 'Grace', 'Brianna', 'Natalie', 'Olivia', 'Elizabeth', 'Charlotte',
+  'Emma', 'Misty',
+}
+
 --- Hair.
 ---
 --- No names here either, and the same reason. The engine reports hair styles as
