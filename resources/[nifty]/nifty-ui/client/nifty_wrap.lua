@@ -90,6 +90,14 @@ exports('menu', function(...)
     0,
     255, 255, 255, 255
   )
+  -- NativeUI's UIMenu stores the rows in 'Items' (capital I). The
+  -- in-house framework used 'items' (lowercase). Caller code in
+  -- nifty-creator/cl_creator.lua:1409 does
+  --   print(... '#menu.items')
+  -- so we need menu.items to work. NativeUI never reassigns self.Items
+  -- after New (it only does table.insert), so aliasing the two field
+  -- names to the same table is safe for the lifetime of the menu.
+  m.items = m.Items
   LastBuiltMenu = m
   return m
 end)
@@ -173,26 +181,16 @@ exports('select', function(...)
 end)
 
 exports('separator', function(...)
-  local n_args = select('#', ...)
-  print(('[nifty-ui] separator called, n_args=%d, LastBuiltMenu=%s'):format(n_args, tostring(LastBuiltMenu)))
   local label = ...
-  local ok, result = pcall(function()
-    print(('[nifty-ui]   label=%s'):format(tostring(label)))
-    local item = UIMenuSeparatorItem.New()
-    print(('[nifty-ui]   item created, type=%s'):format(type(item)))
-    item:Text(label or '')
-    print('[nifty-ui]   text set')
-    if LastBuiltMenu then
-      print(('[nifty-ui]   adding to LastBuiltMenu, type=%s'):format(type(LastBuiltMenu)))
-      LastBuiltMenu:AddItem(item)
-      print('[nifty-ui]   added')
-    else
-      print('[nifty-ui]   LastBuiltMenu is nil, skipping AddItem')
-    end
-  end)
-  if not ok then
-    print(('[nifty-ui] separator error: %s'):format(tostring(result)))
-  end
+  -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
+  -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
+  -- New() function has a bug in the upstream library (Text and
+  -- Description are not function parameters but undef globals, so the
+  -- initial label is hardcoded "N/A"). We work around that by
+  -- setting the label after construction via UIMenuItem:Text().
+  local item = UIMenuSeparatorItem.New()
+  item:Text(label or '')
+  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
 
 -- Text input. NativeUI has no text input widget, so we use FiveM's
