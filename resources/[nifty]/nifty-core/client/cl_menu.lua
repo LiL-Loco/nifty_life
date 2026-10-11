@@ -93,6 +93,20 @@ local MenuSerial = 0
 --- pushing items through this fallback puts them in the caller's menu.
 local LastBuiltMenu = nil
 
+--- The `onClose` callbacks for each menu, keyed by the menu table itself.
+---
+--- The menu's onClose handler is a Lua function, and a function value in a
+--- table returned from a FiveM export forces the proxy to deep-copy the
+--- table across the resource boundary - the caller's local then points at
+--- a different table than the one the menu export created. The builders
+--- push items into LastBuiltMenu (the original); the caller's local is the
+--- copy; the menu ends up with 0 items even though the items went somewhere.
+--- Storing the handler out-of-band and returning a function-free table lets
+--- the proxy pass the table by reference, so caller-local and LastBuiltMenu
+--- are the same table and items land where the caller expects them.
+--- openMenu / close look the handler up by menu identity before invoking.
+local MenuCloseHandlers = setmetatable({}, { __mode = 'k' })
+
 --- Pick the menu from the args the proxy sent, or fall back to the most
 --- recently built menu. The caller's local and this fallback are the same
 --- table, so adding items via either path lands in the caller's menu.
@@ -152,7 +166,8 @@ local function newMenu(spec)
     -- character creator needs so the player can watch the face change.
     dock = spec.dock or 'center',
     width = spec.width or nil,
-    onClose = spec.onClose or nil,
+    -- onClose is intentionally NOT in the returned table. See the
+    -- MenuCloseHandlers side-table for why and how it is invoked.
     items = {},
   }
 end
@@ -186,7 +201,13 @@ end
 
 exports('menu', function(...)
   local spec = stripSelf(...)
-  local m = newMenu(type(spec) == 'table' and spec or {})
+  if type(spec) ~= 'table' then spec = {} end
+  local m = newMenu(spec)
+  -- Side-table the close handler, do NOT leave it on the menu. See
+  -- MenuCloseHandlers for the reason.
+  if type(spec.onClose) == 'function' then
+    MenuCloseHandlers[m] = spec.onClose
+  end
   LastBuiltMenu = m
   return m
 end)
@@ -507,9 +528,14 @@ local function close(current, reason)
   SendNUIMessage({ action = 'menuClose', data = { id = current.id, reason = reason or 'closed' } })
   Focus:release(RESOURCE)
 
-  if type(current.onClose) == 'function' then
-    local ok, err = pcall(current.onClose, reason)
+  -- Look up the onClose handler from the side-table (see the
+  -- MenuCloseHandlers comment near the top of the file for why the
+  -- handler is not on the menu table itself).
+  local handler = MenuCloseHandlers[current]
+  if type(handler) == 'function' then
+    local ok, err = pcall(handler, reason)
     if not ok then print(('[%s] menu onClose failed: %s'):format(RESOURCE, tostring(err))) end
+    MenuCloseHandlers[current] = nil
   end
 
   return true
