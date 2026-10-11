@@ -44,6 +44,7 @@ exports('facade', function()
     Economy = Economy,
     Stuetze = Stuetze,
     Owned = Owned,
+    Price = Price,
   }
 end)
 

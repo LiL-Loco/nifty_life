@@ -45,3 +45,7 @@ Nifty.Jobs    = Nifty.core.Jobs
 -- Owned follows the same pattern. The finishAppearance hook in sv_main.lua
 -- grants per-piece ownership after a creator save.
 Nifty.Owned    = Nifty.core.Owned
+
+-- Price is the per-(drawable, texture) clothing pricebook. Same chain as
+-- Owned: Db-backed in nifty-core, exposed through the facade.
+Nifty.Price    = Nifty.core.Price

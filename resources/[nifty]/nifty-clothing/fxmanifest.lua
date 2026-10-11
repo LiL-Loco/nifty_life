@@ -4,28 +4,36 @@ lua54 'yes'
 
 name 'nifty-clothing'
 author 'Nifty Life 2.0'
-description 'Worn clothing on the ped: the hood up/down toggle (ported from root-cause/ragemp-hood-up, MIT).'
-version '0.1.0'
+description 'Clothing system: per-character owned pieces, wardrobe (property-only), three-store catalogue, outfit presets.'
+version '0.2.0'
 
--- Load order matters twice over.
+-- core.lua first: it loads the facade and exposes Identity / Owned / Economy
+-- on the `Nifty` global. Every file in this resource reads from there.
 --
--- appearance_config.lua first: shared/config.lua reads MAX_DRAWABLE out of it to
--- bound a variant drawable, and a `nil` there would compare as false and reject
--- every variant as implausible.
+-- appearance_config.lua + config.lua after: their slot constants and tag
+-- checks are referenced by both client and server files.
 --
--- shared/config.lua second: the client and the server both read Clothing.* at
--- load time, and a nil there is a silent no-op rather than an error.
+-- stores.lua + prices.lua last: pure data, no side effects.
 shared_scripts {
+  'shared/core.lua',
   '@nifty-core/shared/constants.lua',
   '@nifty-core/shared/appearance_config.lua',
   'shared/config.lua',
+  'shared/stores.lua',
+  'shared/prices.lua',
 }
 
 server_script 'server/sv_clothing.lua'
+server_script 'server/sv_owned.lua'
+
 client_script 'client/cl_hood.lua'
+client_script 'client/cl_targets.lua'
+client_script 'client/cl_wardrobe.lua'
+client_script 'client/cl_store.lua'
 
 dependencies {
   'nifty-core',
   'nifty-world',
   'nifty-chat',
+  'ox_target',
 }

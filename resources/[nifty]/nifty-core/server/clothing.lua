@@ -480,4 +480,91 @@ function Owned.renameOutfit(characterId, outfitId, newName)
   return true
 end
 
+-- ----------------------------------------------------------------------------
+-- Per-drawable, per-fabric variation pricing
+--
+-- The DB-backed pricebook. A row in `clothing_prices` overrides any Lua
+-- default for that exact (kind, slot_id, collection, drawable, texture). The
+-- Lua defaults live in nifty-clothing/shared/prices.lua (the curated
+-- fallback); this module's job is just to look the row up and let the
+-- caller chain a fallback.
+--
+-- The lookup is a synchronous read against `clothing_prices` (PK). The DB
+-- hit on a fresh row is one statement per piece - cheaper than re-parsing
+-- JSON - and the result is positive: a row exists, so the price applies
+-- verbatim, no fallback chain needed by callers.
+-- ----------------------------------------------------------------------------
+
+Price = Price or {}
+
+--- Look up a per-(drawable, texture) override. Returns the row's price, or
+--- nil when no row matches. nil signals "no DB opinion, fall back".
+function Price.fromDb(kind, slotId, collection, drawable, texture)
+  if kind ~= 'component' and kind ~= 'prop' then return nil end
+  if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return nil end
+  if type(drawable) ~= 'number' or drawable < 0 then return nil end
+  if type(texture) ~= 'number' or texture < 0 then return nil end
+  if type(collection) ~= 'string' or collection == '' then return nil end
+
+  local row = Db.one([[
+    SELECT price
+      FROM clothing_prices
+     WHERE kind = ? AND slot_id = ? AND collection = ? AND drawable = ? AND texture = ?
+     LIMIT 1
+  ]], {
+    kind, tostring(slotId), collection,
+    tostring(drawable), tostring(texture),
+  }, 'price:lookup')
+
+  if row == nil then return nil end
+  return tonumber(row.price)
+end
+
+--- Set a per-(drawable, texture) price. Used by admin tooling - not by
+--- gameplay code. Returns true on success, false when the row's price was
+--- not a non-negative integer.
+function Price.set(kind, slotId, collection, drawable, texture, price)
+  if kind ~= 'component' and kind ~= 'prop' then return false, 'bad kind' end
+  if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return false, 'bad slot' end
+  if type(drawable) ~= 'number' or drawable < 0 then return false, 'bad drawable' end
+  if type(texture) ~= 'number' or texture < 0 then return false, 'bad texture' end
+  if type(collection) ~= 'string' or collection == '' then return false, 'bad collection' end
+
+  price = math.floor(tonumber(price) or -1)
+  if price < 0 then return false, 'bad price' end
+
+  Db.update([[
+    INSERT INTO clothing_prices
+      (kind, slot_id, collection, drawable, texture, price)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE price = VALUES(price)
+  ]], {
+    kind, tostring(slotId), collection,
+    tostring(drawable), tostring(texture),
+    tostring(price),
+  }, 'price:set')
+
+  return true
+end
+
+--- Drop an override. Useful when the Lua default is "better than the row"
+--- and staff wants the file's number to win again.
+function Price.clear(kind, slotId, collection, drawable, texture)
+  if kind ~= 'component' and kind ~= 'prop' then return false end
+  if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return false end
+  if type(drawable) ~= 'number' or drawable < 0 then return false end
+  if type(texture) ~= 'number' or texture < 0 then return false end
+  if type(collection) ~= 'string' or collection == '' then return false end
+
+  Db.update([[
+    DELETE FROM clothing_prices
+     WHERE kind = ? AND slot_id = ? AND collection = ? AND drawable = ? AND texture = ?
+  ]], {
+    kind, tostring(slotId), collection,
+    tostring(drawable), tostring(texture),
+  }, 'price:clear')
+
+  return true
+end
+
 print(('[%s] owned module ready'):format(RESOURCE))
