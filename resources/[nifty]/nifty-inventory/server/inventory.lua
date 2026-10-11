@@ -158,10 +158,19 @@ end
 --- a free slot.
 ---
 --- @return number|nil slot, string|nil error, number existingQuantity
-local function findTargetSlot(characterId, def, quantity)
-  local rows = Db.all([[
-    SELECT slot, quantity FROM inventory_items WHERE character_id = ?
-  ]], { characterId }, 'inventory:slots')
+local function findTargetSlot(characterId, def, quantity, metadataKey)
+  local rows
+  if metadataKey ~= nil then
+    rows = Db.all([[
+      SELECT slot, quantity FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata = ?
+    ]], { characterId, def.code, metadataKey }, 'inventory:slots')
+  else
+    rows = Db.all([[
+      SELECT slot, quantity FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata IS NULL
+    ]], { characterId, def.code }, 'inventory:slots')
+  end
 
   local used = {}
 
@@ -190,8 +199,13 @@ end
 --- Give items to a character. Merges into existing stacks where the definition
 --- allows it, and refuses — rather than partially filling — when it does not.
 ---
+--- `metadata` is optional: when passed, the row carries a JSON blob identifying
+--- the specific item (for example a clothing_outfit whose outfitId varies).
+--- Stacks only merge when metadata matches exactly - a black hat and a red
+--- hat are different items even when they share an item code.
+---
 --- @return boolean ok, string|nil error
-function Inventory.add(characterId, code, quantity)
+function Inventory.add(characterId, code, quantity, metadata)
   quantity = math.floor(tonumber(quantity) or 0)
 
   if quantity <= 0 then return false, 'bad quantity' end
@@ -208,13 +222,24 @@ function Inventory.add(characterId, code, quantity)
     return false, 'not stackable'
   end
 
+  -- Metadata is encoded once. When present, it becomes part of the row
+  -- identity: merging a black hat with a red hat is not a stack, it's two
+  -- different items. The encoded form is also what `findTargetSlot` matches
+  -- against, so the keys are kept consistent.
+  local metadataKey = nil
+  if metadata ~= nil then
+    local ok, encoded = pcall(json.encode, metadata)
+    if not ok then return false, 'bad metadata' end
+    metadataKey = encoded
+  end
+
   local view = Inventory.view(characterId)
 
   if view.usedWeight + (def.weight * quantity) > weightLimit() then
     return false, 'too heavy'
   end
 
-  local slot, err, existing = findTargetSlot(characterId, def, quantity)
+  local slot, err, existing = findTargetSlot(characterId, def, quantity, metadataKey)
   if not slot then return false, err end
 
   -- A stack may never be created larger than its own max_stack. `findTargetSlot`
@@ -245,11 +270,19 @@ function Inventory.add(characterId, code, quantity)
       params = { quantity, characterId, slot },
     } }
   else
-    statements = { {
-      sql = [[INSERT INTO inventory_items (id, character_id, slot, item_code, quantity)
-              VALUES (?, ?, ?, ?, ?)]],
-      params = { Nifty.newUuid(), characterId, slot, def.code, quantity },
-    } }
+    if metadataKey ~= nil then
+      statements = { {
+        sql = [[INSERT INTO inventory_items (id, character_id, slot, item_code, quantity, metadata)
+                VALUES (?, ?, ?, ?, ?, ?)]],
+        params = { Nifty.newUuid(), characterId, slot, def.code, quantity, metadataKey },
+      } }
+    else
+      statements = { {
+        sql = [[INSERT INTO inventory_items (id, character_id, slot, item_code, quantity)
+                VALUES (?, ?, ?, ?, ?)]],
+        params = { Nifty.newUuid(), characterId, slot, def.code, quantity },
+      } }
+    end
   end
 
   if not Db.transaction(statements, 'inventory:add') then
@@ -266,18 +299,26 @@ end
 --- Take items away. Consumes from stacks in slot order, which keeps the result
 --- deterministic — two removals of the same quantity always leave the same
 --- inventory, so a bug reproduces instead of varying.
-function Inventory.remove(characterId, code, quantity)
+function Inventory.remove(characterId, code, quantity, itemId)
   quantity = math.floor(tonumber(quantity) or 0)
   if quantity <= 0 then return false, 'bad quantity' end
 
   local def = Inventory.getDefinition(code)
   if not def then return false, 'unknown item' end
 
-  local rows = Db.all([[
-    SELECT id, slot, quantity FROM inventory_items
-     WHERE character_id = ? AND item_code = ?
-     ORDER BY slot
-  ]], { characterId, def.code }, 'inventory:remove:candidates')
+  local rows
+  if itemId ~= nil then
+    rows = Db.all([[
+      SELECT id, slot, quantity FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND id = ?
+    ]], { characterId, def.code, tostring(itemId) }, 'inventory:remove:candidates')
+  else
+    rows = Db.all([[
+      SELECT id, slot, quantity FROM inventory_items
+       WHERE character_id = ? AND item_code = ?
+       ORDER BY slot
+    ]], { characterId, def.code }, 'inventory:remove:candidates')
+  end
 
   local held = 0
   for _, row in ipairs(rows) do held = held + (tonumber(row.quantity) or 0) end
@@ -385,12 +426,43 @@ function Inventory.move(characterId, fromSlot, toSlot)
   return true, nil
 end
 
+--- Per-code use handlers. Some items have side effects beyond a row decrement
+--- (a clothing outfit applies its pieces and removes the item; a hypothetical
+--- keycard would unlock a door). The handler for the code runs in place of
+--- the default remove-and-go behaviour.
+---
+--- The handler signature is `fn(characterId, code, itemId, quantity)` and is
+--- responsible for anything that has to happen on use. It returns
+--- `(ok, err)`. Inventory:use cleans up the row AFTER the handler returns
+--- `ok`, so a handler that fails leaves the item in place.
+local useHandlers = {}
+
+function Inventory.registerUseHandler(code, fn)
+  if type(code) ~= 'string' or code == '' then return end
+  if type(fn) ~= 'function' then return end
+  useHandlers[code] = fn
+end
+
+function Inventory.unregisterUseHandler(code)
+  useHandlers[code] = nil
+end
+
 --- Consume one of an item — eating, using a tool, opening a door. The single
 --- entry point for "the player used something", so that every use is charged
 --- against the same authoritative count.
-function Inventory.use(characterId, code, quantity)
-  local ok, err = Inventory.remove(characterId, code, quantity or 1)
-  return ok, err
+---
+--- When a use handler is registered for the code, that handler runs first;
+--- only if it succeeds does Inventory.remove the row. A handler that fails
+--- leaves the row untouched. `itemId` is optional and identifies a specific
+--- row in metadata-bearing stacks (outfit items, etc.).
+function Inventory.use(characterId, code, quantity, itemId)
+  local handler = useHandlers[code]
+  if handler then
+    local ok, err = handler(characterId, code, itemId, quantity or 1)
+    if not ok then return false, err end
+  end
+
+  return Inventory.remove(characterId, code, quantity or 1)
 end
 
 -- ---------------------------------------------------------------------------
@@ -428,3 +500,5 @@ exports('has', Inventory.has)
 exports('use', Inventory.use)
 exports('move', Inventory.move)
 exports('push', Inventory.push)
+exports('registerUseHandler', Inventory.registerUseHandler)
+exports('unregisterUseHandler', Inventory.unregisterUseHandler)

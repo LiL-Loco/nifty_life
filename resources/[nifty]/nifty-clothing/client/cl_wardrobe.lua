@@ -314,6 +314,23 @@ local function buildOutfitActionsMenu(outfit)
     end,
   })
 
+  Menu:button(menu, 'Einpacken', {
+    description = 'Outfit in das Inventar packen (ein Item, max 10 stapelbar).',
+    onSelect = function()
+      TriggerServerEvent('nifty:server:outfitPack', { outfitId = outfit.id })
+      local listener
+      listener = RegisterNetEvent('nifty:client:outfitPack', function(data)
+        RemoveEventHandler(listener)
+        if data and data.ok then
+          notify(('Eingepackt: ' .. outfit.name))
+          Menu:closeMenu(RESOURCE, 'outfit-packed')
+        else
+          notify(('Einpacken fehlgeschlagen: ' .. tostring(data and data.reason or 'unbekannt')))
+        end
+      end)
+    end,
+  })
+
   Menu:button(menu, 'Umbenennen', {
     onSelect = function()
       Menu:pushMenu(RESOURCE, openRenamePrompt(outfit))
