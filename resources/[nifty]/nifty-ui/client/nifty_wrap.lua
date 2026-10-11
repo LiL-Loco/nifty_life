@@ -99,6 +99,10 @@ exports('menu', function(...)
   -- names to the same table is safe for the lifetime of the menu.
   m.items = m.Items
   LastBuiltMenu = m
+  print(('[nifty-ui] menu: created, LastBuiltMenu.Items.id=%s, type=%s, items=#m=%d'):format(
+    tostring(m and m.id or 'nil'),
+    type(LastBuiltMenu),
+    m and m.items and #m.items or 0))
   return m
 end)
 
@@ -190,7 +194,12 @@ exports('separator', function(...)
   -- setting the label after construction via UIMenuItem:Text().
   local item = UIMenuSeparatorItem.New()
   item:Text(label or '')
-  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
+  if LastBuiltMenu then
+    LastBuiltMenu:AddItem(item)
+    print(('[nifty-ui] separator: added "%s", LastBuiltMenu.items=#%d'):format(tostring(label), #LastBuiltMenu.items))
+  else
+    print('[nifty-ui] separator: LastBuiltMenu is nil, skipping AddItem')
+  end
 end)
 
 -- Text input. NativeUI has no text input widget, so we use FiveM's
