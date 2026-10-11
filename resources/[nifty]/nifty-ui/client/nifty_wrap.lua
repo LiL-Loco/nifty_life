@@ -164,7 +164,13 @@ exports('select', function(...)
 end)
 
 exports('separator', function(...)
+  local args = table.pack(...)
+  print(('[nifty-ui] separator: n_args=%d'):format(args.n))
+  for i = 1, args.n do
+    print(('[nifty-ui]   args[%d] = %s (%s)'):format(i, tostring(args[i]), type(args[i])))
+  end
   local menu, label = stripNamespace(...)
+  print(('[nifty-ui]   stripped: menu=%s, label=%s'):format(tostring(menu), tostring(label)))
   -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
   -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
   -- New() function has a bug in the upstream library (Text and
@@ -173,6 +179,10 @@ exports('separator', function(...)
   -- setting the label after construction via UIMenuItem:Text().
   local item = UIMenuSeparatorItem.New()
   item:Text(label or '')
+  if not menu then
+    print('[nifty-ui] FATAL: menu is nil after stripNamespace')
+    return
+  end
   menu:AddItem(item)
 end)
 
