@@ -245,6 +245,18 @@ local function toWire(menu)
     items = {},
   }
 
+  -- Section bar data: a small dark strip under the gradient header that
+  -- shows where the player is in the creator (e.g. "Features 1 / 11").
+  -- Only sent when the menu spec set it. nil on most menus; a
+  -- truthy section.name flips the strip visible on the page.
+  if menu.section and menu.section.name then
+    wire.section = {
+      name = menu.section.name,
+      current = menu.section.current,
+      total = menu.section.total,
+    }
+  end
+
   for i, item in ipairs(menu.items) do
     local row = { kind = item.kind, label = item.label }
     for _, k in ipairs({ 'checked', 'min', 'max', 'step', 'value', 'items',

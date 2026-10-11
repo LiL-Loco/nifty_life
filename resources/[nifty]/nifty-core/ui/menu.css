@@ -1,4 +1,4 @@
-/* Nifty Life 2.0 — the menu framework.
+/* Nifty Life 2.0 - the menu framework.
  *
  * One stylesheet for every menu in the server. Loads the shared base first so the
  * colour variables and the button/field primitives are already defined.
@@ -8,6 +8,11 @@
  * the ped instead of a panel across it. */
 
 @import url('https://cfx-nui-nifty-core/ui/base.css');
+/* The script face for the page title - matches the in-game character creator. A
+ * web font is cleaner than packing a .ttf into the resource, and Google Fonts
+ * is reachable from a FiveM NUI. The fallback chain degrades to the system
+ * cursive on builds that block the request. */
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
 
 .menu-page { overflow: hidden; }
 
@@ -34,10 +39,6 @@
   overflow: hidden;
 }
 
-/* DOCKED — the creator's mode. The panel becomes a column on the right and the
- * rest of the screen is left alone, because the thing being edited is IN the
- * middle of the screen. A fullscreen panel here would hide the ped, and a
- * character creator whose subject you cannot see is not a character creator. */
 .menu[data-dock='right'] { justify-content: flex-end; padding-right: 24px; }
 
 .menu[data-dock='right'] .menu__panel {
@@ -45,8 +46,6 @@
   background: rgba(12, 12, 14, 0.90);
 }
 
-/* DOCKED LEFT — for the phone, if it ever becomes a menu. Kept now so the two
- * directions exist together and neither is added under pressure later. */
 .menu[data-dock='left'] { justify-content: flex-start; padding-left: 24px; }
 .menu[data-dock='left'] .menu__panel { width: 400px; }
 
@@ -54,21 +53,51 @@
 
 .menu__header {
   position: relative;
-  padding: 16px 18px 12px;
+  padding: 22px 24px 18px;
+  background: linear-gradient(180deg, #1f4d8a 0%, #173f6f 55%, #0f2a52 100%);
   border-bottom: 1px solid var(--border);
+  text-align: center;
 }
 
 .menu__header h1 {
-  font-size: 15px;
+  font-family: 'Pacifico', 'Brush Script MT', 'Lucida Handwriting', cursive;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: #f6f1e0;
+  letter-spacing: 0.005em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  margin: 0;
+}
+
+.menu__section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 18px;
+  background: #0c2546;
+  color: #cfd9e8;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.menu__section-name {
   font-weight: 600;
-  letter-spacing: 0.02em;
-  padding-right: 28px;
+  letter-spacing: 0.08em;
+  text-transform: capitalize;
+}
+
+.menu__section-progress {
+  color: #9fb0c4;
+  font-variant-numeric: tabular-nums;
 }
 
 .menu__subtitle {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--text-dim);
+  margin: 14px 18px 4px;
+  font-size: 14px;
+  font-style: italic;
+  color: #b8c4d4;
+  font-weight: 400;
 }
 
 .menu__close {
@@ -132,7 +161,6 @@
 
 .row__label { flex: 1; min-width: 0; }
 
-/* Long drawable names must not push the control off the panel. */
 .row__label > span {
   display: block;
   overflow: hidden;
@@ -157,6 +185,22 @@
 
 .row__chevron { color: var(--text-dim); font-size: 14px; }
 
+/* Changeable indicator: < value > around the active row's value, like the
+ * in-game creator. Pseudo-elements keep the value as a single text node. */
+.row.is-changeable .row__value::before { content: '< '; opacity: 0.55; }
+.row.is-changeable .row__value::after  { content: ' >'; opacity: 0.55; }
+
+.row__tag {
+  margin-left: 8px;
+  padding: 1px 5px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #1c1810;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
 /* --------------------------------------------------------------- separator */
 
 .row--separator {
@@ -172,8 +216,6 @@
 
 /* ---------------------------------------------------------------- checkbox */
 
-/* A square, not a rounded pill: a pill reads as "switch on/off" and this is a
- * tick or it is not. */
 .check {
   width: 16px;
   height: 16px;
@@ -233,8 +275,6 @@
   border-radius: 50%;
   background: var(--accent);
   transform: translateY(-50%);
-  /* The handle is the target, not the 3px track: a hairline hit area is a
-   * control nobody can grab without looking closely. */
   cursor: ew-resize;
 }
 
@@ -288,3 +328,4 @@
   color: var(--text-dim);
   font-style: italic;
 }
+

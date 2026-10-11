@@ -202,8 +202,16 @@ function listEl(item) {
 
 function buildRow(item, index) {
   const row = document.createElement('div');
-  row.className = 'row' + (index === rowIndex ? ' is-active' : '');
+  const active = (index === rowIndex);
+  row.className = 'row' + (active ? ' is-active' : '');
   if (item.disabled) row.classList.add('is-disabled');
+
+  // Angle brackets around the active row's value, matching the in-game
+  // creator. Only for rows whose value is a popup (select / submenu / list)
+  // - those are the ones the player is actually about to change.
+  if (active && (item.kind === 'select' || item.kind === 'submenu' || item.kind === 'list')) {
+    row.classList.add('is-changeable');
+  }
 
   if (item.kind === 'separator') {
     row.className = 'row row--separator';
@@ -296,6 +304,22 @@ function render() {
   const subtitle = $('menuSubtitle');
   subtitle.textContent = spec.subtitle || '';
   subtitle.classList.toggle('hidden', !spec.subtitle);
+
+  // Section bar: a small dark strip under the header that shows the current
+  // menu's role in the creator (e.g. "Features 1 / 11"). Lua sets `spec.section`
+  // to { name, current, total } on the creator's menus and leaves it nil
+  // everywhere else. Hidden by default.
+  const sectionEl = $('menuSection');
+  if (spec.section && spec.section.name) {
+    sectionEl.classList.remove('hidden');
+    $('menuSectionName').textContent = spec.section.name;
+    $('menuSectionProgress').textContent =
+      (spec.section.current != null && spec.section.total != null)
+        ? (spec.section.current + ' / ' + spec.section.total)
+        : '';
+  } else {
+    sectionEl.classList.add('hidden');
+  }
 
   body.innerHTML = '';
 

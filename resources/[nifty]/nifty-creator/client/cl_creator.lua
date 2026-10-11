@@ -1256,6 +1256,11 @@ buildRootMenu = function()
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
     dock     = 'right',
+    -- Section bar data: shown as "Features 1 / 11" in the dark strip
+    -- under the gradient header. The creator's top-level menu is step 1
+    -- of 11 (Features submenu, then the eleven submenus it opens).
+    -- Submenus carry their own section data; see buildSlotMenu.
+    section  = { name = 'Features', current = 1, total = 11 },
     onClose  = function(reason)
       -- Escape or Backspace at the root is the same event as pressing Abbrechen.
       -- Leaving the ped frozen with no menu and no way out is not a state anybody
