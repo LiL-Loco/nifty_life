@@ -26,456 +26,9 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- Local menu surface.
----
---- The menu draws directly to the screen with GTA natives (DrawSprite,
---- DrawText, DrawRect) and never touches NUI focus, so the focus broker
---- is irrelevant for it. We use the same NativeUI-Lua-Reloaded library
---- nifty-ui does, but loaded locally via @nifty-ui/... paths in the
---- manifest. Within this resource the export-proxy quirks (drop-first-arg,
---- deep-copy-return) do not apply, so the builders can use the menu
---- argument as-is and the menu can keep its metatable.
----
---- API shape matches the call sites below:
----   Menu.menu({title=, subtitle=, dock=, onClose=})  -> UIMenu
----   Menu.separator(menu, label)
----   Menu.button(menu, label, spec)
----   Menu.submenu(menu, label, {build=, description=, disabled=})
----   Menu.slider(menu, label, {min=, max=, step=, value=, onChange=, onSelect=, description=, disabled=})
----   Menu.select(menu, label, {items=, index=, onChange=, onSelect=, description=, disabled=})
----   Menu.input(menu, label, {value=, onChange=, placeholder=, maxLength=, description=})
----   Menu.openMenu(_RESOURCE_, menu)   - add to pool, show
----   Menu.pushMenu(_RESOURCE_, menu)   - close current, show new
----   Menu.closeMenu(_RESOURCE_, reason) - close the visible menu
----   Menu.isOpen()                     - any menu visible?
----   Menu.itemsCount(menu)             - #Items on the real menu
----
---- The first arg of openMenu / pushMenu / closeMenu is a resource name in
---- the cross-resource shim; here it is ignored, but accepting the shape
---- keeps the call sites identical.
-local _pool = NativeUI.CreatePool()
-_pool:MouseControlsEnabled(true)
-_pool:ControlDisablingEnabled(true)
-
-local Menu = {}
-
-function Menu.menu(spec)
-  spec = spec or {}
-  -- dock: 'right' pushes the panel to the right side of the screen so the
-  -- player's character stays visible in the middle. 'left' is the GTA
-  -- default at X=0. NativeUI's CreateMenu does not honour `dock`, so we
-  -- translate it to X.
-  local x = (spec.dock == 'right') and 1300 or 0
-  local m = NativeUI.CreateMenu(
-    spec.title or '',
-    spec.subtitle or '',
-    x, 0,
-    'commonmenu', 'interaction_bgd',
-    0,
-    255, 255, 255, 255
-  )
-  -- Disable the camera-rotation that NativeUI's MouseEdgeEnabled would
-  -- otherwise do when the cursor is near the screen edge (UIMenu.lua
-  -- lines 1249-1257). The player only uses the mouse for the menu;
-  -- the camera should not turn because the cursor is at the rim.
-  m.Settings.MouseEdgeEnabled = false
-  -- Disable the Back control. NativeUI binds Escape / Backspace to
-  -- UIMenu:GoBack via Controls.Back (UIMenu.lua line 662), and GoBack
-  -- closes the root menu. The creator is meant to be a deliberate
-  -- multi-step flow with a single 'Abbrechen' exit, not a menu that
-  -- Escape accidentally tears down. Submenus still navigate by their
-  -- own back/forward keys (UIMenu:BindMenuToItem / GoBack on the
-  -- child), so this only affects the top-level dismissal path.
-  m.Controls.Back.Enabled = false
-  if type(spec.onClose) == 'function' then
-    m.OnMenuClose = function(_) pcall(spec.onClose) end
-  end
-  return m
-end
-
-function Menu.separator(menu, label)
-  -- NativeUI exposes UIMenuSeparatorItem as a global. Its New() has a
-  -- bug in the upstream library where Text/Description are not
-  -- parameter names but undef globals, so the label is hardcoded
-  -- "N/A" until we set it via :Text().
-  local item = UIMenuSeparatorItem.New()
-  item:Text(label or '')
-  menu:AddItem(item)
-end
-
-function Menu.button(menu, label, spec)
-  spec = spec or {}
-  local item = NativeUI.CreateItem(label or '', spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  if spec.rightLabel then item:RightLabel(tostring(spec.rightLabel)) end
-  -- NativeUI's UIMenu:SelectItem fires the per-item Activated(menu, item)
-  -- for generic UIMenuItem rows (UIMenu.lua:1027).
-  item.Activated = function(_, _) pcall(spec.onSelect) end
-  menu:AddItem(item)
-end
-
-function Menu.submenu(menu, label, spec)
-  spec = spec or {}
-  -- We build a UIMenuItem trigger row whose Activated builds and shows
-  -- the child menu. The build function is caller code (no proxy in
-  -- this resource), so the menu it returns is a real UIMenu with
-  -- its metatable intact - we can bind it directly without the
-  -- metatable-via-id lookup the cross-resource shim needs.
-  local item = NativeUI.CreateItem(label or '', spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  item.Activated = function(_, _)
-    if not spec.build then return end
-    local child = spec.build()
-    if not child or type(child) ~= 'table' then return end
-    menu:BindMenuToItem(child, item)
-    _pool:Add(child)
-    child:Visible(true)
-  end
-  menu:AddItem(item)
-end
-
-function Menu.slider(menu, label, spec)
-  spec = spec or {}
-  local min = tonumber(spec.min) or 0
-  local max = tonumber(spec.max) or 100
-  local step = tonumber(spec.step) or 1
-  local value = math.floor(((tonumber(spec.value) or min) - min) / step + 0.5) * step + min
-  -- NativeUI's UIMenuSliderHeritageItem uses an indexed list, not a
-  -- numeric range. We build the synthetic index list of size
-  -- (max-min)/step+1 so OnSliderChanged delivers a numeric value.
-  local values = {}
-  for i = min, max, step do values[#values + 1] = i end
-  local index = math.floor((value - min) / step) + 1
-  if index < 1 then index = 1 end
-  if index > #values then index = #values end
-  local item = NativeUI.CreateSliderHeritageItem(
-    label or '',
-    index, #values,
-    spec.description or '',
-    { R = 57, G = 119, B = 200, A = 255 },
-    { R = 4,  G = 32,  B = 57,  A = 255 }
-  )
-  if spec.disabled then item:Enabled(false) end
-  -- spec.format(value) -> string. Rendered as the right-aligned label on
-  -- the row, so "Opacitaet" reads as "42 %" rather than as the raw 42.
-  -- Without a format, the raw value is shown.
-  if type(spec.format) == 'function' then
-    item:RightLabel(spec.format(value))
-  end
-  -- OnSliderChanged fires on every arrow-key nudge (the "live" path).
-  -- OnSliderSelected fires on Enter/click (the "confirm" path).
-  -- NativeUI's menu passes only the index to OnSliderSelected, not
-  -- (menu, item, index) - we look the value up in our values table.
-  item.OnSliderChanged = function(_, _, newIndex)
-    local v = values[newIndex] or value
-    if type(spec.format) == 'function' then
-      item:RightLabel(spec.format(v))
-    end
-    pcall(spec.onChange, v)
-  end
-  item.OnSliderSelected = function(newIndex)
-    pcall(spec.onSelect, values[newIndex] or value)
-  end
-  menu:AddItem(item)
-end
-
-function Menu.select(menu, label, spec)
-  spec = spec or {}
-  local items = spec.items or {}
-  local index = tonumber(spec.index) or 1
-  if index < 1 then index = 1 end
-  if index > #items then index = math.max(1, #items) end
-  local item = NativeUI.CreateListItem(label or '', items, index, spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  item.OnListChanged = function(_, _, newIndex)
-    pcall(spec.onChange, newIndex, items[newIndex])
-  end
-  item.OnListSelected = function(_, _, newIndex)
-    pcall(spec.onSelect, newIndex, items[newIndex])
-  end
-  menu:AddItem(item)
-end
-
-function Menu.input(menu, label, spec)
-  spec = spec or {}
-  -- Text input via FiveM's DisplayOnscreenKeyboard. NativeUI has no
-  -- text input widget of its own. The typed value is stored on the
-  -- menu as `_input_value`; the caller reads it on click of the
-  -- "save" button (closure pattern from promptOutfitName / similar).
-  if not menu._input_value then
-    menu._input_value = tostring(spec.value or '')
-  end
-  local item = NativeUI.CreateItem(label or '', spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  item.Activated = function(_, _)
-    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', menu._input_value or '', '', '', '', 64)
-    Citizen.CreateThread(function()
-      while UpdateOnscreenKeyboard() == 0 do Citizen.Wait(0) end
-      if UpdateOnscreenKeyboard() == 1 then
-        menu._input_value = tostring(GetOnscreenKeyboardResult() or '')
-        pcall(spec.onChange, menu._input_value)
-      end
-    end)
-  end
-  menu:AddItem(item)
-end
-
--- Visual colour picker. The row looks like a normal item; activating it
--- expands a `UIMenuColourPanel` underneath that shows the palette as
--- a strip of swatches with a cursor, plus left/right arrows. Clicking
--- a swatch or pressing left/right changes the selection and fires
--- onChange with the new 1-based index.
---
--- spec: {palette=table of {R,G,B,A}, value=initial 1-based index,
---        panelTitle=optional label inside the panel,
---        onChange=function(colour_1based), description=, disabled=}
-function Menu.colourPicker(menu, label, spec)
-  spec = spec or {}
-  local item = NativeUI.CreateItem(label or '', spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  if type(spec.palette) == 'table' and #spec.palette > 0 then
-    local panel = NativeUI.CreateColourPanel(spec.panelTitle or label or 'Farbe', spec.palette)
-    -- Set the initial selection WITHOUT firing onChange. The library's
-    -- CurrentSelection(value, PreventUpdate) skips UpdateParent when
-    -- PreventUpdate is truthy - that is what would otherwise fire the
-    -- parent's ActivatedPanel and run the caller's onChange during
-    -- construction.
-    local initial = tonumber(spec.value) or 1
-    if initial < 1 then initial = 1 end
-    if initial > #spec.palette then initial = #spec.palette end
-    panel:CurrentSelection(initial, true)
-    item:AddPanel(panel)
-    -- ActivatedPanel is the per-item callback the colour panel calls
-    -- on every change. The library passes (menu, item, panel, colour)
-    -- (UIMenuColourPanel.lua:167). We only need the colour.
-    item.ActivatedPanel = function(_, _, _, colour)
-      pcall(spec.onChange, colour)
-    end
-  end
-  menu:AddItem(item)
-end
-
--- Visual 1D/2D grid panel. The row looks like a normal item; activating
--- it expands a `UIMenuGridPanel` / `HorizontalOneLine` / `VerticalOneLine`
--- with a 2D / 1D-horizontal / 1D-vertical range indicator and a movable
--- cursor. Arrows or mouse drag move the cursor; every move fires
--- onChange with the new normalised position.
---
--- spec.kind: 'horizontal' (default) | 'vertical' | 'grid'
--- spec.x, spec.y: initial 0..1 cursor position (clamped)
--- spec.left, spec.right, spec.top, spec.bottom: panel direction labels
--- spec.onChange: function(position) - position is {X=0..1} (horizontal),
---                {Y=0..1} (vertical), or {X=0..1, Y=0..1} (grid).
---                The caller maps the 0..1 space to its own value range
---                (face features use -1..1, so onChange does pos.X*2-1).
-function Menu.gridPanel(menu, label, spec)
-  spec = spec or {}
-  local item = NativeUI.CreateItem(label or '', spec.description or '')
-  if spec.disabled then item:Enabled(false) end
-  local kind = spec.kind or 'horizontal'
-  local x = math.max(0, math.min(1, tonumber(spec.x) or 0.5))
-  local y = math.max(0, math.min(1, tonumber(spec.y) or 0.5))
-  local panel
-  if kind == 'grid' then
-    panel = NativeUI.CreateGridPanel(
-      spec.top or 'Hoch', spec.left or 'Schmal',
-      spec.right or 'Breit', spec.bottom or 'Niedrig',
-      x, y
-    )
-  elseif kind == 'vertical' then
-    panel = NativeUI.CreateVerticalGridPanel(
-      spec.top or 'Hoch', spec.bottom or 'Niedrig', y
-    )
-  else
-    panel = NativeUI.CreateHorizontalGridPanel(
-      spec.left or 'Schmal', spec.right or 'Breit', x
-    )
-  end
-  item:AddPanel(panel)
-  -- ActivatedPanel fires every time the cursor moves. The library passes
-  -- (menu, item, panel, position) where position is a table of {X=...,Y=...}
-  -- (UIMenuGridPanel.lua:132, UIMenuHorizontalOneLineGridPanel.lua:125).
-  -- For 1D panels only one of X/Y is set.
-  item.ActivatedPanel = function(_, _, _, position)
-    pcall(spec.onChange, position)
-  end
-  menu:AddItem(item)
-end
-
-function Menu.openMenu(_RESOURCE, menu)
-  _pool:Add(menu)
-  menu:Visible(true)
-  return true
-end
-
-function Menu.pushMenu(_RESOURCE, menu)
-  -- The nifty-ui shim's pushMenu closed the current menu first to mirror
-  -- the original in-house framework's "navigate to new menu" behaviour.
-  -- We do the same here so back-and-forth navigation works the same way.
-  for _, other in ipairs(_pool.Menus) do
-    if other.Visible then other.Visible(false) end
-  end
-  _pool:Add(menu)
-  menu:Visible(true)
-  return true
-end
-
-function Menu.closeMenu(_RESOURCE, _reason)
-  -- Close every visible menu. NativeUI's close does not pass a reason
-  -- to OnMenuClose, so the reason the shim accepts is dropped here -
-  -- callers read the reason from module-local state (e.g. `confirmed`)
-  -- the same way they did before.
-  for _, other in ipairs(_pool.Menus) do
-    if other.Visible then other.Visible(false) end
-  end
-end
-
-function Menu.isOpen()
-  for _, other in ipairs(_pool.Menus) do
-    if other.Visible then return true end
-  end
-  return false
-end
-
-function Menu.itemsCount(menu)
-  -- The menu argument is the real UIMenu (no proxy, same resource), so
-  -- reading #menu.Items works directly. The cross-resource shim needs
-  -- a side-table lookup for the same thing; we do not.
-  if type(menu) ~= 'table' or not menu.Items then return 0 end
-  return #menu.Items
-end
-
---- Colour palettes for the UIMenuColourPanel picker.
----
---- The game's head-overlay colours are looked up by index in two palettes:
---- the hair palette (`_GetNumHairColors` returns its length) and the
---- makeup palette (`_GetNumMakeupColors`). We hardcode a curated set
---- of the most useful swatches - enough to cover the common range
---- without forcing the player to scroll through every game colour.
---- Extend by appending {R, G, B, A} tables; the panel paginates 8 at
---- a time, so 27 entries is four quick swipes.
-local HAIR_PALETTE = {
-  { 28,  31,  33,  255 },  --  1 schwarz
-  { 39,  42,  44,  255 },  --  2 fast schwarz
-  { 49,  46,  44,  255 },  --  3 dunkelbraun
-  { 53,  38,  28,  255 },  --  4 espresso
-  { 75,  50,  31,  255 },  --  5 dunkles nussbraun
-  { 92,  59,  36,  255 },  --  6 kastanie
-  { 109, 76,  53,  255 },  --  7 mittelbraun
-  { 107, 80,  59,  255 },  --  8 caramel
-  { 118, 92,  69,  255 },  --  9 tabak
-  { 127, 104, 78,  255 },  -- 10 hellbraun
-  { 153, 129, 93,  255 },  -- 11 dunkelblond
-  { 167, 147, 105, 255 },  -- 12 aschblond
-  { 175, 156, 112, 255 },  -- 13 warmes blond
-  { 187, 160, 99,  255 },  -- 14 goldblond
-  { 214, 185, 123, 255 },  -- 15 hellblond
-  { 218, 195, 142, 255 },  -- 16 platinblond
-  { 159, 127, 89,  255 },  -- 17 mausbraun
-  { 132, 80,  57,  255 },  -- 18 mahagoni
-  { 104, 43,  31,  255 },  -- 19 weinrot
-  { 97,  18,  12,  255 },  -- 20 bordeaux
-  { 100, 15,  10,  255 },  -- 21 dunkelrot
-  { 124, 20,  15,  255 },  -- 22 ziegelrot
-  { 160, 46,  25,  255 },  -- 23 rot
-  { 182, 75,  40,  255 },  -- 24 kupfer
-  { 162, 80,  47,  255 },  -- 25 rotbraun
-  { 170, 78,  43,  255 },  -- 26 rostrotdunkel
-  { 98,  98,  98,  255 },  -- 27 silbergrau
-}
-
--- The makeup palette uses lighter, more saturated colours than the
--- hair palette. Same indexing shape: append entries to extend.
-local MAKEUP_PALETTE = {
-  { 240, 200, 195, 255 },  --  1 haut-hell
-  { 220, 170, 165, 255 },  --  2 haut-rose
-  { 200, 140, 130, 255 },  --  3 haut-pfirsich
-  { 180, 110, 100, 255 },  --  4 haut-bronze
-  { 255, 220, 210, 255 },  --  5 pfirsich-creme
-  { 255, 180, 175, 255 },  --  6 rose
-  { 250, 150, 145, 255 },  --  7 altrosa
-  { 240, 120, 115, 255 },  --  8 lachs
-  { 230, 100, 95,  255 },  --  9 koralle
-  { 220, 80,  75,  255 },  -- 10 rot-hell
-  { 200, 60,  55,  255 },  -- 11 rot-mittel
-  { 180, 40,  35,  255 },  -- 12 rot-dunkel
-  { 255, 200, 50,  255 },  -- 13 sonnengelb
-  { 240, 170, 30,  255 },  -- 14 gold
-  { 220, 140, 20,  255 },  -- 15 bernstein
-  { 190, 110, 15,  255 },  -- 16 bronze
-  { 150, 80,  10,  255 },  -- 17 kupfer-dunkel
-  { 100, 200, 100, 255 },  -- 18 hellgruen
-  { 60,  160, 60,  255 },  -- 19 gruen
-  { 30,  120, 30,  255 },  -- 20 dunkelgruen
-  { 100, 180, 220, 255 },  -- 21 himmelblau
-  { 60,  140, 200, 255 },  -- 22 meerblau
-  { 30,  100, 180, 255 },  -- 23 koenigsblau
-  { 150, 100, 200, 255 },  -- 24 flieder
-  { 120, 60,  170, 255 },  -- 25 lila
-  { 80,  20,  140, 255 },  -- 26 dunkellila
-  { 240, 240, 240, 255 },  -- 27 weiss-zart
-}
-
---- Which palettes a given overlay id accepts.
----
---- GTA's `_SetPedHeadOverlayColor` takes a `colourType` per overlay:
---- 1 = hair palette, 2 = makeup palette. Most overlays only support
---- one of the two; only Makeup (id 4) supports both. Overlays that
---- have no colour at all (blemishes, ageing, complexion, moles, body
---- blemishes) are absent from this table - the Farbe section is then
---- omitted in their menu.
-local OVERLAY_PALETTES = {
-  [1]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Bart
-  [2]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Augenbrauen
-  [4]  = {                                                       -- Makeup
-    { 1, 'Haarfarbe',     HAIR_PALETTE   },
-    { 2, 'Make-up-Farbe', MAKEUP_PALETTE },
-  },
-  [5]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Rouge
-  [7]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Sonnenbrand
-  [8]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Lippenstift
-  [10] = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Brustbehaarung
-}
-
---- Face-feature groups.
----
---- Each entry pairs two face-feature indices so a single 2D grid panel
---- controls both at once (X = first feature, Y = second). The remaining
---- indices get their own 1D horizontal grid panel. Face features are
---- GTA-internal: 0..19, value -1.0..1.0, addressed by `SetPedFaceFeature`.
----   0  Nose Width           10 Cheeks Width
----   1  Nose Peak Height     11 Eye Opening
----   2  Nose Peak Length     12 Lips Thickness
----   3  Nose Bone Height     13 Jaw Bone Width
----   4  Nose Peak Lowering   14 Jaw Bone Depth
----   5  Nose Bone Twist      15 Chin Height
----   6  Eyebrows Depth       16 Chin Depth
----   7  Eyebrows Height      17 Chin Width
----   8  Cheekbones Height    18 Chin Hole Size
----   9  Cheekbones Width     19 Neck Thickness
-local FACE_2D_GROUPS = {
-  { title = 'Nasenspitze',   top = 'Spitz',  bottom = 'Flach', left = 'Kurz', right = 'Lang',  xId = 2, yId = 1 },
-  { title = 'Augenbrauen',   top = 'Hoch',   bottom = 'Tief',  left = 'Flach', right = 'Tief', xId = 7, yId = 6 },
-  { title = 'Wangen',        top = 'Hoch',   bottom = 'Tief',  left = 'Schmal', right = 'Breit', xId = 9, yId = 8 },
-  { title = 'Kiefer',        top = 'Tief',   bottom = 'Hervor', left = 'Schmal', right = 'Breit', xId = 13, yId = 14 },
-  { title = 'Kinn',          top = 'Hervor', bottom = 'Flach', left = 'Schmal', right = 'Breit', xId = 17, yId = 15 },
-}
-
---- Face-feature indices that get a 1D horizontal grid panel.
---- The 2D groups above consume {1, 2, 6, 7, 8, 9, 13, 14, 15, 17};
---- everything else is single-axis and goes on a horizontal panel.
-local FACE_1D_GROUPS = {
-  { id = 0,  title = 'Nasenbreite',     left = 'Schmal', right = 'Breit' },
-  { id = 3,  title = 'Nasenbeinhoehe',  left = 'Tief',   right = 'Hoch'  },
-  { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
-  { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
-  { id = 10, title = 'Wangenspalt',     left = 'Schmal', right = 'Breit' },
-  { id = 11, title = 'Augenoeffnung',   left = 'Eng',    right = 'Weit'  },
-  { id = 12, title = 'Lippendicke',     left = 'Duenn',  right = 'Dick'  },
-  { id = 16, title = 'Kinn-Tiefe',      left = 'Flach',  right = 'Hervor' },
-  { id = 18, title = 'Kinn-Loch',       left = 'Klein',  right = 'Gross' },
-  { id = 19, title = 'Hals-Dicke',      left = 'Duenn',  right = 'Dick'  },
-}
+--- The menu framework. Same resource as the focus broker; one call opens a menu
+--- and takes the keyboard with it.
+local Menu = exports['nifty-ui']
 
 --- Our own German display labels, and the vendored item data.
 ---
@@ -498,7 +51,6 @@ end
 -- moment it was pressed. Read top to bottom: a definition must precede its use.
 local buildSlotMenu
 local randomise
-local randomiseAll
 local reset
 local submit
 local cancel
@@ -549,18 +101,18 @@ local slots = { components = {}, props = {} }
 --- wrong label here is a cosmetic bug, never a stored value. They exist because the
 --- alternative is a menu that says "Slot 3" and leaves the player guessing.
 local COMPONENT_LABELS = {
-  [0]  = 'Kopf',         -- PED_COMPONENT_HEAD        (head)
-  [1]  = 'Gesicht',      -- PED_COMPONENT_BERD        (beard / mask)
-  [2]  = 'Haare',        -- PED_COMPONENT_HAIR        (hair)
-  [3]  = 'Oberteil',     -- PED_COMPONENT_UPPR        (torso / upper body)
-  [4]  = 'Hose',         -- PED_COMPONENT_LOWR        (pants / lower body)
-  [5]  = 'Taschen',      -- PED_COMPONENT_HAND        (bags and parachutes)
-  [6]  = 'Schuhe',       -- PED_COMPONENT_FEET        (shoes)
-  [7]  = 'Accessoires',  -- PED_COMPONENT_TEEF        (teeth / accessories)
-  [8]  = 'Unterhemd',    -- PED_COMPONENT_ACCS        (accessories / undershirts)
-  [9]  = 'Ruestung',     -- PED_COMPONENT_TASK        (body armor / vest)
-  [10] = 'Decal',       -- PED_COMPONENT_DECL        (decals)
-  [11] = 'Jacke',       -- PED_COMPONENT_JBIB        (tops / jacket)
+  [0]  = 'Kopf',
+  [1]  = 'Gesicht',
+  [2]  = 'Haare',
+  [3]  = 'Oberteil',
+  [4]  = 'Hose',
+  [5]  = 'Schuhe',
+  [6]  = 'Handschuhe',
+  [7]  = 'Accessoires',
+  [8]  = 'Unterhemd',
+  [9]  = 'Jacke',
+  [10] = 'Shirt',
+  [11] = 'Tasche',
   [12] = 'Hose (2)',
 }
 
@@ -959,6 +511,11 @@ local OVERLAY_LABELS = {
   [12] = 'Koerperpickel (additiv)',
 }
 
+--- Face sliders 0..19. The engine gives them no names worth shipping; the player
+--- sees a number, which is what every creator shows anyway.
+local FEATURE_SLIDER_MIN = -1.0
+local FEATURE_SLIDER_MAX = 1.0
+
 --- Face sliders, head overlays, hair colour and the hair overlay decoration.
 local face = {
   features = {},
@@ -969,17 +526,6 @@ local face = {
   eyeColour = 0,
   headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 },
 }
-
---- The 9 realistic eye-colour indices in the GTA palette.
----
---- The engine ships 32 (0..31), but only 0..8 are things a human eye
---- actually looks like - green, emerald, light/ocean blue, light/dark
---- brown, hazel, dark/light grey. The rest are eye shadow tints
---- (Tequila Sunrise, Warp, ECola) and outright monster eyes
---- (Lizard, Dragon, Zombie, ...). A realistic-roleplay character
---- creator offers the realistic subset, with the rest reachable only
---- through admin commands.
-local REALISTIC_EYE_COLOUR_MAX = 8
 
 --- The whole appearance as the creator currently sees it.
 local function appearanceNow()
@@ -1196,6 +742,20 @@ local function overlayStyleCount(id)
   return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
 end
 
+--- How many colours a palette holds, bounded. 1 = hair palette, 2 = makeup.
+local function colourCount(colourType)
+  local n = natives()
+  local fn = (colourType == 2) and n.numMakeupColors or n.numHairColors
+  if type(fn) ~= 'function' then return AppearanceConfig.MAX_OVERLAY_COLOUR + 1 end
+
+  local ok, count = pcall(fn)
+  if not ok or type(count) ~= 'number' or count <= 0 then
+    return AppearanceConfig.MAX_OVERLAY_COLOUR + 1
+  end
+
+  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_COLOUR)
+end
+
 --- One overlay: style, opacity, and its two colours.
 local function buildOverlayMenu(id)
   local label = OVERLAY_LABELS[id] or ('Overlay ' .. id)
@@ -1244,13 +804,11 @@ local function buildOverlayMenu(id)
     end,
   })
 
-  -- Opacity in percent. The native takes 0.0..1.0, so we store `value / 100`.
-  -- Half-percent step (0..100 step 0.5 = 200 positions) so the player can
-  -- fade a beard from 50.5 to 51.0 without it snapping. New overlays start
-  -- at 100% so the style is visible the moment the player opens the menu.
+  -- Opacity in percent, because the native takes 0.0..1.0 and a slider that shows
+  -- "0.42" for a beard reads as a fault rather than as a setting.
   Menu.slider(menu, 'Deckkraft', {
-    min = 0, max = 100, step = 0.5, value = (current.opacity or 1.0) * 100,
-    format = function(value) return ('%g %%'):format(value) end,
+    min = 0, max = 100, step = 1, value = math.floor((current.opacity or 1.0) * 100 + 0.5),
+    format = function(value) return ('%d %%'):format(value) end,
     onChange = function(value)
       local live = face.overlays[tostring(id)] or {}
       face.overlays[tostring(id)] = {
@@ -1266,37 +824,27 @@ local function buildOverlayMenu(id)
 
   Menu.separator(menu, 'Farbe')
 
-  -- Only overlays that have a colour get pickers, and only the palettes
-  -- the engine accepts for them. Beard (1) is hair-only; Lipstick (8) is
-  -- makeup-only; Makeup (4) accepts both. OVERLAY_PALETTES encodes this
-  -- once so the menu reflects the engine, not the player's reading of it.
-  local palettes = OVERLAY_PALETTES[id]
-  if palettes then
-    for _, entry in ipairs(palettes) do
-      local colourType = entry[1]
-      local pickerLabel = entry[2]
-      local palette = entry[3]
-      local value = (current.colourType == colourType) and (current.colour + 1) or 1
-      if value < 1 then value = 1 end
-      if value > #palette then value = #palette end
+  -- Palette 0 is a fixed grey and has no indices to choose; only 1 and 2 do.
+  for _, entry in ipairs({ { 1, 'Haarfarben' }, { 2, 'Make-up-Farben' } }) do
+    local colourType = entry[1]
+    local max = colourCount(colourType)
+    local value = (current.colourType == colourType) and current.colour or 0
 
-      Menu.colourPicker(menu, pickerLabel, {
-        palette = palette,
-        panelTitle = pickerLabel,
-        value = value,
-        onChange = function(colour)
-          local live = face.overlays[tostring(id)] or {}
-          face.overlays[tostring(id)] = {
-            style = live.style or 0,
-            opacity = live.opacity or 1.0,
-            colourType = colourType,
-            colour = colour - 1,
-            secondColour = live.secondColour or 0,
-          }
-          refresh()
-        end,
-      })
-    end
+    Menu.slider(menu, entry[2], {
+      min = 0, max = max, step = 1, value = math.min(value, max),
+      format = function(v) return ('%d / %d'):format(v, max) end,
+      onChange = function(v)
+        local live = face.overlays[tostring(id)] or {}
+        face.overlays[tostring(id)] = {
+          style = live.style or 0,
+          opacity = live.opacity or 1.0,
+          colourType = colourType,
+          colour = v,
+          secondColour = live.secondColour or 0,
+        }
+        refresh()
+      end,
+    })
   end
 
   return menu
@@ -1343,13 +891,6 @@ local function buildParentsMenu()
     dock = 'right',
   })
 
-  -- The heritage window draws the two parent face portraits and a small
-  -- resemblance / skin-tone bar in the panel header. It's a `UIMenuWindow`
-  -- subclass; the library draws it between the title and the first row
-  -- every frame. Updating it is just `heritage:Index(mom, dad)`.
-  local heritage = NativeUI.CreateHeritageWindow(face.headBlend.mother, face.headBlend.father)
-  menu:AddWindow(heritage)
-
   Menu.separator(menu, 'Praesets')
 
   Menu.slider(menu, 'Mutter', {
@@ -1357,9 +898,6 @@ local function buildParentsMenu()
     format = function(value) return Labels.MOTHER(value) end,
     onChange = function(value)
       face.headBlend.mother = value
-      -- The window shows only mom and dad (third person has no portrait),
-      -- so re-index with both values when either changes.
-      heritage:Index(face.headBlend.mother, face.headBlend.father)
       refresh()
       Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
@@ -1370,7 +908,6 @@ local function buildParentsMenu()
     format = function(value) return Labels.FATHER(value) end,
     onChange = function(value)
       face.headBlend.father = value
-      heritage:Index(face.headBlend.mother, face.headBlend.father)
       refresh()
       Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
@@ -1406,13 +943,9 @@ local function buildParentsMenu()
 
   for _, weight in ipairs(weights) do
     local key = weight.key
-    -- Half-percent step (0..100 step 0.5 = 200 positions). The engine
-    -- reads the ratio, so storing value/100 keeps the precision and
-    -- the on-screen label shows 1 decimal place when set (50.5),
-    -- integer when whole (50).
     Menu.slider(menu, weight.label, {
-      min = 0, max = 100, step = 0.5, value = (face.headBlend[key] or 0.0) * 100,
-      format = function(value) return ('%g'):format(value) end,
+      min = 0, max = 100, step = 1, value = math.floor((face.headBlend[key] or 0.0) * 100 + 0.5),
+      format = function(value) return ('%d'):format(value) end,
       onChange = function(value)
         face.headBlend[key] = value / 100
         refresh()
@@ -1424,8 +957,8 @@ local function buildParentsMenu()
   Menu.separator(menu, 'Hautton')
 
   Menu.slider(menu, 'Hautton', {
-    min = 0, max = 100, step = 0.5, value = (face.headBlend.skinTone or 0.5) * 100,
-    format = function(value) return ('%g %%'):format(value) end,
+    min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.5) * 100 + 0.5),
+    format = function(value) return ('%d %%'):format(value) end,
     onChange = function(value)
       face.headBlend.skinTone = value / 100
       refresh()
@@ -1459,23 +992,12 @@ local function buildParentsMenu()
   return menu
 end
 
---- Eye colour: the nine realistic shades, in the engine's own order.
----
---- GTA ships 32 (0..31); we offer 0..8, the indices that map to
---- green, emerald, light/ocean blue, light/dark brown, hazel,
---- dark/light grey. The slider value is clamped on read so a
---- stored character with an eye colour above 8 (from before the
---- realistic-only rule) falls back to the closest realistic index
---- instead of going out of range.
+--- Eye colour: the game's thirty-two, in the engine's own order.
 local function buildEyeColourMenu()
   local menu = Menu.menu({ title = 'Augenfarbe', dock = 'right' })
 
-  local current = face.eyeColour or 0
-  if current > REALISTIC_EYE_COLOUR_MAX then current = REALISTIC_EYE_COLOUR_MAX end
-  if current < 0 then current = 0 end
-
   Menu.slider(menu, 'Farbe', {
-    min = 0, max = REALISTIC_EYE_COLOUR_MAX, step = 1, value = current,
+    min = 0, max = AppearanceConfig.MAX_EYE_COLOUR, step = 1, value = face.eyeColour or 0,
     format = function(value)
       return Labels.EYE_COLOURS[value + 1] or ('Farbe %d'):format(value)
     end,
@@ -1492,50 +1014,25 @@ end
 local function buildFaceMenu()
   local menu = Menu.menu({
     title = 'Gesichtsform',
-    subtitle = 'Ziehen, um das Gesicht zu formen.',
+    subtitle = 'Zwanzig Schieberegler.',
     dock = 'right',
   })
 
-  -- Sparse storage: an untouched feature is not stored. A ped whose stored
-  -- face is full of zeros and a ped whose stored face has no entries are
-  -- the same ped, but only one of them round-trips through the database
-  -- identically. We snap to 0 inside the dead zone and clear the entry
-  -- there so the JSON we save is as small as the player chose.
-  local function setFeature(id, value)
-    if math.abs(value) < 0.001 then
-      face.features[tostring(id)] = nil
-    else
-      face.features[tostring(id)] = value
-    end
-  end
+  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
+    local value = face.features[tostring(id)] or 0.0
 
-  -- 2D groups: one grid panel covers two features at once. X axis is the
-  -- first index in the group, Y axis is the second (see FACE_2D_GROUPS).
-  for _, g in ipairs(FACE_2D_GROUPS) do
-    local xv = face.features[tostring(g.xId)] or 0.0
-    local yv = face.features[tostring(g.yId)] or 0.0
-    Menu.gridPanel(menu, g.title, {
-      kind = 'grid',
-      top = g.top, bottom = g.bottom, left = g.left, right = g.right,
-      x = (xv + 1) / 2,  -- -1..1 -> 0..1
-      y = (yv + 1) / 2,
-      onChange = function(pos)
-        setFeature(g.xId, (pos.X or 0.5) * 2 - 1)
-        setFeature(g.yId, (pos.Y or 0.5) * 2 - 1)
-        refresh()
-      end,
-    })
-  end
-
-  -- 1D groups: horizontal panel, X position is the value.
-  for _, g in ipairs(FACE_1D_GROUPS) do
-    local v = face.features[tostring(g.id)] or 0.0
-    Menu.gridPanel(menu, g.title, {
-      kind = 'horizontal',
-      left = g.left, right = g.right,
-      x = (v + 1) / 2,
-      onChange = function(pos)
-        setFeature(g.id, (pos.X or 0.5) * 2 - 1)
+    Menu.slider(menu, Labels.FEATURES[id + 1] or ('Merkmal %d'):format(id), {
+      min = FEATURE_SLIDER_MIN, max = FEATURE_SLIDER_MAX, step = 0.05, value = value,
+      format = function(v) return ('%+.2f'):format(v) end,
+      onChange = function(v)
+        -- Sparse: an untouched slider is not stored. A ped whose stored face is
+        -- full of zeros and a ped whose stored face has no entries are the same
+        -- ped, but only one of them round-trips through the database identically.
+        if math.abs(v) < 0.001 then
+          face.features[tostring(id)] = nil
+        else
+          face.features[tostring(id)] = v
+        end
         refresh()
       end,
     })
@@ -1545,28 +1042,24 @@ local function buildFaceMenu()
 end
 
 --- Hair colour: primary and highlight, both from the hair palette.
---- Visual swatch picker instead of an opaque index slider.
 local function buildHairColourMenu()
   local menu = Menu.menu({ title = 'Haarfarbe', dock = 'right' })
+  local max = colourCount(1)
 
-  local function clamp(v) if v < 1 then return 1 end if v > #HAIR_PALETTE then return #HAIR_PALETTE end return v end
-
-  Menu.colourPicker(menu, 'Hauptfarbe', {
-    palette = HAIR_PALETTE,
-    panelTitle = 'Hauptfarbe',
-    value = clamp((face.hairColour.primary or 0) + 1),
-    onChange = function(colour)
-      face.hairColour.primary = colour - 1
+  Menu.slider(menu, 'Hauptfarbe', {
+    min = 0, max = max, step = 1, value = math.min(face.hairColour.primary, max),
+    format = function(v) return ('%d / %d'):format(v, max) end,
+    onChange = function(v)
+      face.hairColour.primary = v
       refresh()
     end,
   })
 
-  Menu.colourPicker(menu, 'Strähnen', {
-    palette = HAIR_PALETTE,
-    panelTitle = 'Strähnen',
-    value = clamp((face.hairColour.highlight or 0) + 1),
-    onChange = function(colour)
-      face.hairColour.highlight = colour - 1
+  Menu.slider(menu, 'Strähnen', {
+    min = 0, max = max, step = 1, value = math.min(face.hairColour.highlight, max),
+    format = function(v) return ('%d / %d'):format(v, max) end,
+    onChange = function(v)
+      face.hairColour.highlight = v
       refresh()
     end,
   })
@@ -1618,19 +1111,23 @@ buildTattooMenu = function(zoneId)
     Menu.button(menu, entry.name, {
       description = entry.collection,
       onSelect = function()
-        -- The engine layers decals on top of each other, so multiple tattoos
-        -- on the same zone are allowed. The previous "one per zone" rule was
-        -- a UI choice, not an engine limit; the server caps at MAX_TATTOOS as
-        -- a storage sanity check. We push the new entry at the end so the menu
-        -- order (most recently picked last) is the natural choice for "remove
-        -- the last one I added" via the Keins button if the player changes
-        -- their mind.
-        if #face.tattoos < AppearanceConfig.MAX_TATTOOS then
-          face.tattoos[#face.tattoos + 1] = {
+        -- ONE PER ZONE, not one per collection. Two tattoos on the same arm
+        -- compete for the same skin and the second is invisible, so letting the
+        -- player pick another one in the same place would look like a menu that
+        -- does not work. The stored entry keeps its zone precisely so this
+        -- decision can be made on the client, where the data is.
+        local kept = {}
+        for _, other in ipairs(face.tattoos) do
+          if other.zoneId ~= zoneId then kept[#kept + 1] = other end
+        end
+
+        if #kept < AppearanceConfig.MAX_TATTOOS then
+          kept[#kept + 1] = {
             collection = entry.collection,
             preset = entry.preset,
             zoneId = zoneId,
           }
+          face.tattoos = kept
           applyDecorations()
         end
 
@@ -1765,129 +1262,17 @@ buildSlotMenu = function(kind, id)
   return menu
 end
 
---- Category containers. The root menu lists five of them; each opens
---- a submenu that holds the items for that category. The build
---- functions exist so a submenu can lazy-build the right items, and
---- so an openRoot (Escape from a category) lands back at the root.
-
---- Heritage: parents (with the heritage window) and eye colour.
-local function buildHeritageCategoryMenu()
-  local menu = Menu.menu({ title = 'Heritage', dock = 'right' })
-  Menu.submenu(menu, 'Eltern', {
-    description = 'Vater, Mutter und die Mischungen daraus.',
-    build = buildParentsMenu,
-  })
-  Menu.submenu(menu, 'Augenfarbe', {
-    description = 'Eine von dreissigzwei.',
-    build = buildEyeColourMenu,
-  })
-  return menu
-end
-
---- Face features: the twenty grid panels.
-local function buildFaceFeaturesCategoryMenu()
-  return buildFaceMenu()
-end
-
---- Hair: hairstyle picker (component slot 2) and hair colour.
-local function buildHairCategoryMenu()
-  local menu = Menu.menu({ title = 'Haare', dock = 'right' })
-  local hairSlot = slots.components[2]
-  if hairSlot then
-    Menu.submenu(menu, 'Frisur', {
-      description = ('Slot 2 - %d Kollektionen'):format(#hairSlot),
-      build = function() return buildSlotMenu('components', 2) end,
-    })
-  end
-  Menu.submenu(menu, 'Haarfarbe', {
-    description = 'Hauptfarbe und Strähnen.',
-    build = buildHairColourMenu,
-  })
-  return menu
-end
-
---- Makeup: the face overlays (0..9). Body overlays (10..12) live in
---- Outfit, where the rest of the body-shaping choices sit.
-local function buildMakeupCategoryMenu()
-  local menu = Menu.menu({ title = 'Makeup', dock = 'right' })
-  for id = AppearanceConfig.MIN_OVERLAY_ID, 9 do
-    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
-      description = 'Stil, Deckkraft und Farbe.',
-      build = function() return buildOverlayMenu(id) end,
-    })
-  end
-  return menu
-end
-
---- Outfit: clothing (every component slot except the hair one, which
---- lives in Haare), accessoires (props), and the body overlays 10..12.
---- Tattoos are their own top-level category.
-local function buildOutfitCategoryMenu()
-  local menu = Menu.menu({ title = 'Outfit', dock = 'right' })
-
-  Menu.separator(menu, 'Kleidung')
-  local componentIds = {}
-  for id in pairs(slots.components) do componentIds[#componentIds + 1] = id end
-  table.sort(componentIds)
-  for _, id in ipairs(componentIds) do
-    if id ~= 2 then  -- slot 2 is hair, in the Haare category
-      Menu.submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
-        description = ('Slot %d - %d Kollektionen'):format(id, #slots.components[id]),
-        build = function() return buildSlotMenu('components', id) end,
-      })
-    end
-  end
-
-  local propIds = propIdsSorted()
-  if #propIds > 0 then
-    Menu.separator(menu, 'Accessoires')
-    for _, id in ipairs(propIds) do
-      Menu.submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
-        description = ('Prop %d - %d Kollektionen'):format(id, #slots.props[id]),
-        build = function() return buildSlotMenu('props', id) end,
-      })
-    end
-  end
-
-  -- Body overlays sit in Outfit, not Makeup, because they decorate the
-  -- body, not the face. The hair overlay is NOT here - the game ties
-  -- exactly one decal to each hairstyle, so picking the hair picks the
-  -- overlay. A list to choose from would offer a combination the game
-  -- has no way to draw.
-  for id = 10, AppearanceConfig.MAX_OVERLAY_ID do
-    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
-      description = 'Stil und Deckkraft.',
-      build = function() return buildOverlayMenu(id) end,
-    })
-  end
-
-  return menu
-end
-
---- Tattoos, grouped by body zone. A list of every tattoo per gender
---- would be 775 rows; grouping by where it goes on the body keeps each
---- submenu small and the player oriented.
-local function buildTattooCategoryMenu()
-  local menu = Menu.menu({ title = 'Tattoos', dock = 'right' })
-  local tattooZones = GameData.tattooZones()
-  for _, zoneId in ipairs(tattooZones) do
-    Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
-      description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
-      build = function() return buildTattooMenu(zoneId) end,
-    })
-  end
-  return menu
-end
-
---- The root menu: five category buttons, then the actions.
---- Section bar reads "Uebersicht 1 / 5" so the player knows the
---- creator is at the top of a five-stop tree.
+--- The root menu: one row per available slot, then the actions.
 buildRootMenu = function()
   local menu = Menu.menu({
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
     dock     = 'right',
-    section  = { name = 'Uebersicht', current = 1, total = 6 },
+    -- Section bar data: shown as "Features 1 / 11" in the dark strip
+    -- under the gradient header. The creator's top-level menu is step 1
+    -- of 11 (Features submenu, then the eleven submenus it opens).
+    -- Submenus carry their own section data; see buildSlotMenu.
+    section  = { name = 'Features', current = 1, total = 11 },
     onClose  = function(reason)
       -- Escape or Backspace at the root is the same event as pressing Abbrechen.
       -- Leaving the ped frozen with no menu and no way out is not a state anybody
@@ -1926,43 +1311,84 @@ buildRootMenu = function()
     end
   end
 
-  Menu.separator(menu, 'Kategorien')
+  Menu.separator(menu, 'Kleidung')
+  -- Iterate the component IDs the actual model exposes, not a hardcoded
+  -- COMPONENT_ORDER. The original list had a 12 that the mp_m_freemode_01
+  -- model does not expose (12 component slots, IDs 0-11), so 1 in 12 submenus
+  -- silently never appeared. Sort the discovered IDs so the menu order is
+  -- stable.
+  local componentIds = {}
+  for id in pairs(slots.components) do componentIds[#componentIds + 1] = id end
+  table.sort(componentIds)
+  for _, id in ipairs(componentIds) do
+    local options = slots.components[id]
+    Menu.submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
+      description = ('Slot %d - %d Kollektionen'):format(id, #options),
+      build = function() return buildSlotMenu('components', id) end,
+    })
+  end
 
-  Menu.submenu(menu, 'Heritage', {
-    description = 'Eltern und Augenfarbe.',
-    build = buildHeritageCategoryMenu,
+  local propIds = propIdsSorted()
+  if #propIds > 0 then
+    Menu.separator(menu, 'Accessoires')
+    for _, id in ipairs(propIds) do
+      Menu.submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
+        description = ('Prop %d - %d Kollektionen'):format(id, #slots.props[id]),
+        build = function() return buildSlotMenu('props', id) end,
+      })
+    end
+  end
+
+  Menu.separator(menu, 'Gesicht')
+  Menu.submenu(menu, 'Eltern', {
+    description = 'Vater, Mutter und die beiden Mischungen.',
+    build = buildParentsMenu,
   })
-  Menu.submenu(menu, 'Gesichtszuege', {
-    description = 'Nasen, Wangen, Kinn, Brauen, ...',
-    build = buildFaceFeaturesCategoryMenu,
+
+  Menu.submenu(menu, 'Augenfarbe', {
+    description = 'Eine von dreissigzwei.',
+    build = buildEyeColourMenu,
   })
-  Menu.submenu(menu, 'Haare', {
-    description = 'Frisur und Haarfarbe.',
-    build = buildHairCategoryMenu,
+
+  Menu.separator(menu, 'Merkmale')
+
+  for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
+    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
+      description = 'Stil, Deckkraft und Farbe.',
+      build = function() return buildOverlayMenu(id) end,
+    })
+  end
+
+  Menu.submenu(menu, 'Haarfarbe', {
+    description = 'Hauptfarbe und Strähnen.',
+    build = buildHairColourMenu,
   })
-  Menu.submenu(menu, 'Makeup', {
-    description = 'Bart, Augenbrauen, Makeup, Lippenstift, ...',
-    build = buildMakeupCategoryMenu,
+
+  Menu.submenu(menu, 'Gesichtsform', {
+    description = 'Die zwanzig Gesichtsschieberegler.',
+    build = buildFaceMenu,
   })
-  Menu.submenu(menu, 'Tattoos', {
-    description = 'Nach Koerperzone gruppiert.',
-    build = buildTattooCategoryMenu,
-  })
-  Menu.submenu(menu, 'Outfit', {
-    description = 'Kleidung, Accessoires, Koerper-Overlays.',
-    build = buildOutfitCategoryMenu,
-  })
+
+  -- Tattoos, grouped by the body part they go on. The hair overlay is NOT here:
+  -- the game ties exactly one decal to each hairstyle, so picking the hair picks
+  -- the overlay. A list to choose from would offer a combination the game has no
+  -- way to draw.
+  local tattooZones = GameData.tattooZones()
+  if #tattooZones > 0 then
+    Menu.separator(menu, 'Tattoos')
+    for _, zoneId in ipairs(tattooZones) do
+      Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
+        description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
+        build = function() return buildTattooMenu(zoneId) end,
+      })
+    end
+  end
 
   Menu.separator(menu, 'Aktionen')
 
   Menu.button(menu, 'Zufallsaufzug', {
     description = 'Zufaellige Kleidung. A/D dreht die Kamera.',
     onSelect = function() randomise() end,
-  })
-
-  Menu.button(menu, 'Zufallschar', {
-    description = 'Outfit, Gesicht, Haare, Eltern - alles auf einmal.',
-    onSelect = function() randomiseAll() end,
   })
 
   Menu.button(menu, 'Zuruecksetzen', {
@@ -1991,7 +1417,7 @@ end
 -- ---------------------------------------------------------------- actions
 
 openRoot = function()
-  if Menu.openMenu(RESOURCE, buildRootMenu()) then return end
+  if exports['nifty-ui']:openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework
@@ -2028,125 +1454,6 @@ randomise = function()
       end
     end
   end
-
-  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
-end
-
---- Roll every choice the creator exposes: outfit, face features,
---- overlays, hair colour, eye colour, parents and weights, skin tone.
---- Tattoos are left alone - they are personal and the player has
---- usually picked them by hand, so a "complete random" that wiped
---- them would feel hostile.
----
---- The distribution skews toward the middle of each value range so
---- the result is a person, not a caricature: 70% of feature rolls
---- land in -0.3..0.3, half the overlays end up off, and the third
---- parent stays subtle (max 0.2) so the face does not look like a
---- three-way composite.
-randomiseAll = function()
-  -- Outfit - same logic as the partial randomise.
-  selection = { components = {}, props = {} }
-  local dressProps = (math.random(1, 4) == 1)
-  for kind, options in pairs(slots) do
-    for id, list in pairs(options) do
-      if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
-        local chosen = list[math.random(#list)]
-        if chosen then
-          selection[kind][tostring(id)] = {
-            collection = chosen.name,
-            drawable   = math.random(0, chosen.drawables - 1),
-            texture    = math.random(0, chosen.textures - 1),
-          }
-        end
-      end
-    end
-  end
-
-  -- Face features. Three weight buckets: mild (70%), moderate (20%),
-  -- extreme (10%). The result is mostly unremarkable with occasional
-  -- striking features.
-  face.features = {}
-  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
-    local r = math.random()
-    local v
-    if r < 0.7 then
-      v = (math.random() - 0.5) * 0.6
-    elseif r < 0.9 then
-      v = (math.random() - 0.5) * 1.6
-    else
-      v = (math.random() - 0.5) * 2.0
-    end
-    if math.abs(v) < 0.05 then
-      face.features[tostring(id)] = nil
-    else
-      face.features[tostring(id)] = v
-    end
-  end
-
-  -- Overlays. 50/50 off vs on; on rolls get a random style, a
-  -- random opacity in 0.4..1.0 (so the overlay is visible), and a
-  -- random colour from the palette the engine accepts for this slot.
-  face.overlays = {}
-  for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
-    if math.random(1, 2) == 1 then
-      face.overlays[tostring(id)] = {
-        style = 0, opacity = 0.0, colourType = 1, colour = 0, secondColour = 0,
-      }
-    else
-      local maxStyle = overlayStyleCount(id)
-      local palettes = OVERLAY_PALETTES[id]
-      local colourType = 1
-      local palette = HAIR_PALETTE
-      if palettes and palettes[1] then
-        colourType = palettes[1][1]
-        palette = palettes[1][3]
-      end
-      face.overlays[tostring(id)] = {
-        style = math.random(0, maxStyle),
-        opacity = 0.4 + math.random() * 0.6,
-        colourType = colourType,
-        colour = math.random(0, #palette - 1),
-        secondColour = 0,
-      }
-    end
-  end
-
-  -- Hair colour. Two-thirds of random heads have no highlight.
-  face.hairColour = {
-    primary = math.random(0, #HAIR_PALETTE - 1),
-    highlight = (math.random(1, 3) <= 1) and math.random(0, #HAIR_PALETTE - 1) or 0,
-  }
-
-  face.eyeColour = math.random(0, REALISTIC_EYE_COLOUR_MAX)
-
-  -- Parents and weights. thirdWeight is capped at 0.2 so the third
-  -- person stays a hint, not a third of the face. motherWeight and
-  -- fatherWeight are renormalised so the engine receives a proper
-  -- ratio (the native treats them as ratios, not percentages).
-  local mw = math.random()
-  local fw = math.random()
-  local tw = math.random() * 0.2
-  local wsum = mw + fw + tw
-  if wsum > 0 then
-    mw, fw, tw = mw / wsum, fw / wsum, tw / wsum
-  end
-  face.headBlend = {
-    mother = math.random(0, MOTHER_COUNT - 1),
-    father = math.random(0, FATHER_COUNT - 1),
-    third  = math.random(0, AppearanceConfig.MAX_HEADBLEND_PRESET),
-    motherWeight = mw,
-    fatherWeight = fw,
-    thirdWeight  = tw,
-    skinTone = math.random(),
-  }
-
-  -- refresh() walks selection + face and applies the whole appearance
-  -- through nifty-world. applyDecorations() then lays the hair overlay
-  -- and tattoos on top.
-  refresh()
-  applyDecorations()
-  resolveHairOverlay()
-  applyDecorations()
 
   if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
@@ -2266,21 +1573,4 @@ RegisterNetEvent('nifty:client:creatorError', function(message)
   -- The creator deliberately stays open: the player has to be able to press Fertig
   -- again, and closing on an error would turn "try once more" into "start over".
   print(('[%s] creator refused: %s'):format(RESOURCE, tostring(message)))
-end)
-
--- ---------------------------------------------------------------- render thread
---
--- NativeUI menus need ProcessControl / ProcessMouse / Draw every frame.
--- MenuPool:ProcessMenus() runs all three in the documented order. The
--- lbg-char reference uses the same single-line pattern.
---
--- This thread is the only place the menu library's render loop runs in
--- this resource. nifty-ui runs a parallel render thread for its own
--- pool (used by wardrobe, store, spawn) - two pools, two threads, no
--- interference because they draw to separate UIMenu instances.
-Citizen.CreateThread(function()
-  while true do
-    _pool:ProcessMenus()
-    Citizen.Wait(0)
-  end
 end)

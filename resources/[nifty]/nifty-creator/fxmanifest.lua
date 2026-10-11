@@ -32,100 +32,34 @@ shared_scripts {
   '@nifty-core/shared/appearance_config.lua',
 }
 
--- THE INTERFACE IS A NATIVE GTA MENU, OWNED BY THIS RESOURCE.
+-- NO ui_page HERE. ON PURPOSE.
 --
--- Earlier this resource borrowed nifty-ui's menu surface through exports. That
--- worked, but every cross-resource call goes through FiveM's export proxy, which
--- (a) drops the first user arg and (b) deep-copies the return value. The shim
--- that papers over those quirks has its own bugs and its own debugging loop.
+-- The creator's interface is the menu framework (ADR-0023). It borrows the single
+-- menu surface from `nifty-ui` through exports, so this resource draws nothing of
+-- its own — and a resource with a `ui_page` would be a second focus owner, which
+-- is the exact thing the broker exists to prevent.
 --
--- The pattern lbg-char (lambits/lbg-char) uses is to load the menu library
--- directly in the consumer resource. The library files are sourced from
--- nifty-ui via @nifty-ui/... paths (so the vendored copy in nifty-ui stays
--- the single source of truth), and the menu / pool / render thread all live
--- in this file. Within the same Lua environment there is no proxy, so the
--- menu builders can use the passed `menu` argument directly - no
--- LastBuiltMenu fallback, no metatable-via-id lookup, no items-count helper.
+-- WHAT LIVES WHERE. The identity half of a character — name, gender, date of birth,
+-- birthplace — is entered on the WEBSITE, not here. This resource is appearance
+-- only: clothing, accessories, face and colour. The character row already exists
+-- when this opens, and `appearance IS NULL` is what says it has not been finished.
 --
--- No `ui_page` here on purpose. A resource with a `ui_page` would be a second
--- focus owner, which is the exact thing the broker exists to prevent. Native
--- menus draw with GTA natives (DrawSprite, DrawText, DrawRect) and never
--- touch NUI focus.
+-- So there are no text fields here, and `nifty-ui`'s input row is not used by the
+-- creator. It exists for other menus — a shop search box, an admin rename — not
+-- because of this screen.
 
 -- The data folder is loaded BY THE SCRIPT, not by the manifest's shared_scripts.
 -- It is nearly 8 MB of item names, restriction tags and torso mappings, and
 -- decoding all of it at boot would cost every player who never opens a menu.
 -- `cl_gamedata.lua` reads each file the first time something actually needs it.
---
--- The `stream/*.ytd` files are the texture atlases the menu library uses
--- (commonmenu, shop_arrows_upanddown, etc.). They must be in this resource's
--- `files` block so the GTA streaming system registers them. The same files
--- are also in nifty-ui's `files` block; registering the same textures from
--- two resources is harmless - the game picks the first registered copy.
 files {
   'data/*.json',
-  'data/tattoos/*.json',
-  '@nifty-ui/stream/*.ytd',
+  'data/tattoos/*.json'
 }
 
--- Load order is significant. The menu library (`@nifty-ui/...` paths) must
--- load BEFORE cl_creator.lua, because cl_creator.lua references `NativeUI`
--- and `UIMenuSeparatorItem` as globals. cl_labels.lua and cl_gamedata.lua
--- are loaded first because they populate the `Labels` and `GameData`
--- globals that cl_creator.lua reads.
---
--- The library files come from nifty-ui rather than being vendored here, so
--- the canonical copy lives in one place. A new nifty-ui release updates
--- every consumer at once.
 client_scripts {
   'client/cl_labels.lua',
   'client/cl_gamedata.lua',
-
-  -- NativeUI-Lua-Reloaded library, loaded in the same order nifty-ui uses.
-  '@nifty-ui/Wrapper/Utility.lua',
-
-  '@nifty-ui/UIElements/UIVisual.lua',
-  '@nifty-ui/UIElements/UIResRectangle.lua',
-  '@nifty-ui/UIElements/UIResText.lua',
-  '@nifty-ui/UIElements/Sprite.lua',
-
-  '@nifty-ui/UIMenu/elements/Badge.lua',
-  '@nifty-ui/UIMenu/elements/Colours.lua',
-  '@nifty-ui/UIMenu/elements/ColoursPanel.lua',
-  '@nifty-ui/UIMenu/elements/StringMeasurer.lua',
-
-  '@nifty-ui/UIMenu/items/UIMenuItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuCheckboxItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuListItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderHeritageItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuColouredItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuProgressItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderProgressItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSeparatorItem.lua',
-
-  '@nifty-ui/UIMenu/windows/UIMenuHeritageWindow.lua',
-
-  '@nifty-ui/UIMenu/panels/UIMenuGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuHorizontalOneLineGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuVerticalOneLineGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuColourPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuPercentagePanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuStatisticsPanel.lua',
-
-  '@nifty-ui/UIMenu/UIMenu.lua',
-  '@nifty-ui/UIMenu/MenuPool.lua',
-
-  '@nifty-ui/UITimerBar/UITimerBarPool.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarItem.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarProgressItem.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarProgressWithIconItem.lua',
-
-  '@nifty-ui/UIProgressBar/UIProgressBarPool.lua',
-  '@nifty-ui/UIProgressBar/items/UIProgressBarItem.lua',
-
-  '@nifty-ui/NativeUI.lua',
-
   'client/cl_creator.lua',
 }
 
