@@ -16,8 +16,6 @@ local RESOURCE = GetCurrentResourceName()
 -- nil and the pickup short-circuits to a refusal.
 local droppedItems = {}
 
-local PROP_HASH = `hei_prop_carrier_bag_02a`
-
 -- ---------------------------------------------------------------------------
 -- Spawn: nifty-inventory fires `drops:create` server-side once it has
 -- removed the inventory row and validated the player's coords. We spawn
@@ -25,6 +23,17 @@ local PROP_HASH = `hei_prop_carrier_bag_02a`
 -- ---------------------------------------------------------------------------
 
 local DISCARD_LIFETIME_MS = 5 * 60 * 1000  -- 5 minutes
+
+-- Resolve a model hash for a given item code, falling back to the
+-- shared/drop_props.lua default when the requested hash is not in the
+-- client's cdimage. CreateObject on a missing model returns 0 and
+-- can cause asset errors in some builds; the cdimage gate keeps the
+-- drop path quiet.
+local function pickHash(code)
+  local requested = DropProps.forCode(code)
+  if IsModelInCdimage(requested) then return requested end
+  return DropProps.default
+end
 
 -- nifty-inventory's discardItemOnGround handler validates proximity +
 -- inventory ownership + removes the row, then fires `drops:create` with
@@ -46,7 +55,7 @@ function Drops.create(src, payload)
   local cid = Nifty.Identity.getActiveCharacter(src)
   if not cid then return end
 
-  local ent = CreateObject(PROP_HASH, x, y, z, true, false, false)
+  local ent = CreateObject(pickHash(payload.code), x, y, z, true, false, false)
   if not ent or ent == 0 then return end
 
   SetEntityAsMissionEntity(ent, true, true)
@@ -69,6 +78,10 @@ function Drops.create(src, payload)
     -- returns the local entity handle.
     networkId   = netId,
     entityHandle = ent,
+    -- FiveM-side display name of the player who discarded. Captured at
+    -- drop time so a recipient can read it back from this entry rather
+    -- than depend on the dropper still being online.
+    giverName   = GetPlayerName(src) or ('Spieler ' .. tostring(src)),
   }
 
   -- Tell every client a new drop exists so they can show proximity
@@ -158,18 +171,25 @@ RegisterNetEvent('nifty:server:pickupGroundItem', function(payload)
   -- (an exported function is not strictly required - we let the Inventory
   -- add path reject with its own error if the bag is full).
 
-  -- Place the row in the recipient's inventory. The dropped row did
-  -- not carry a giver_name in V1 (drops are anonymous); the wardrobe
-  -- render will fall through to "no suffix" for picked-up items.
-  local ok, err = Inventory.add(cid, drop.code, drop.quantity)
+  -- Place the row in the recipient's inventory and stamp giver_name
+  -- onto the new row so the wardrobe render path sees "(von X)" without
+  -- any separate plumbing. Inventory.add now returns the new row id as
+  -- its third value; we stamp on the same Lua tick so a hostile client
+  -- cannot interfere.
+  local ok, err, newItemId = Inventory.add(cid, drop.code, drop.quantity)
   if not ok then
     TriggerClientEvent('nifty:client:pickupGroundItem', src,
                        { ok = false, reason = err })
     return
   end
 
+  if newItemId and drop.giverName then
+    Inventory.stampMetadata(cid, newItemId, { giver_name = drop.giverName })
+  end
+
   droppedItems[netId] = nil
-  TriggerClientEvent('nifty:client:pickupGroundItem', src, { ok = true, code = drop.code })
+  TriggerClientEvent('nifty:client:pickupGroundItem', src,
+                     { ok = true, code = drop.code })
   TriggerClientEvent('nifty:client:groundItemDespawned', -1, { networkId = netId })
   if DoesEntityExist(ent) then DeleteEntity(ent) end
 end)

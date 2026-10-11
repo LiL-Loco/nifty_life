@@ -104,8 +104,17 @@
     if (opts && opts.readOnly) tile.classList.add('inv__tile--read-only');
     tile.appendChild(el('span', 'inv__tile-qty',
       item.quantity > 1 ? `x${item.quantity}` : ''));
-    tile.appendChild(el('span', 'inv__tile-name',
-      String(item.name || item.code)));
+
+    // Inventory items carried for someone else carry an explicit
+    // "(von X)" suffix on the tile label so the player can see at a
+    // glance which item came from a friend vs their own stock. The
+    // wardrobe renders the same suffix from character_clothing.
+    let displayName = String(item.name || item.code)
+    if (item.metadata && item.metadata.giver_name) {
+      displayName += ` (von ${item.metadata.giver_name})`
+    }
+    tile.appendChild(el('span', 'inv__tile-name', displayName));
+
     tile.appendChild(el('span', 'inv__tile-weight',
       `${money(item.unitWeight || 0)} kg`));
     return tile;

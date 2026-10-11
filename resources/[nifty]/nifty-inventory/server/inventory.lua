@@ -205,7 +205,12 @@ end
 --- Stacks only merge when metadata matches exactly - a black hat and a red
 --- hat are different items even when they share an item code.
 ---
---- @return boolean ok, string|nil error
+--- `metadata` is optional: when passed, the row carries a JSON blob identifying
+--- the specific item (for example a clothing_outfit whose outfitId varies).
+--- Stacks only merge when metadata matches exactly - a black hat and a red
+--- hat are different items even when they share an item code.
+---
+--- @return boolean ok, string|nil error, string|nil newItemId
 function Inventory.add(characterId, code, quantity, metadata)
   quantity = math.floor(tonumber(quantity) or 0)
 
@@ -290,7 +295,29 @@ function Inventory.add(characterId, code, quantity, metadata)
     return false, 'could not store item'
   end
 
-  return true, nil
+  -- Read back the row's id so callers that need to stamp metadata after
+  -- the add (e.g. pickup with giver_name) can find the new row. The
+  -- lookup matches on (character_id, code, metadata) - metadata makes
+  -- the match exact so a stack-merge on metadata-less codes still
+  -- returns the canonical row.
+  local newId
+  if metadataKey ~= nil then
+    local row = Db.one([[
+      SELECT id FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata = ?
+       ORDER BY slot LIMIT 1
+    ]], { characterId, def.code, metadataKey }, 'inventory:add:lookup')
+    newId = row and row.id
+  else
+    local row = Db.one([[
+      SELECT id FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata IS NULL
+       ORDER BY slot LIMIT 1
+    ]], { characterId, def.code }, 'inventory:add:lookup')
+    newId = row and row.id
+  end
+
+  return true, nil, newId
 end
 
 -- ---------------------------------------------------------------------------

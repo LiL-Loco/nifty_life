@@ -21,6 +21,7 @@ shared_scripts {
   'shared/config.lua',
   'shared/stores.lua',
   'shared/prices.lua',
+  'shared/drop_props.lua',
 }
 
 server_script 'server/sv_clothing.lua'
