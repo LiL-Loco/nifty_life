@@ -83,3 +83,6 @@ desktop.ini
 # contains `.local.`. This has to come AFTER that rule — later rules win — or the
 # credentials template silently stays untracked and nobody notices.
 !/database/.credentials.local.example
+# REPLXX shell history from an interactive session. Not ours, not wanted, and
+# it records what was typed into a terminal.
+.replxx_history
