@@ -1782,8 +1782,8 @@ local function buildMakeupCategoryMenu()
 end
 
 --- Outfit: clothing (every component slot except the hair one, which
---- lives in Haare), accessoires (props), tattoos grouped by zone, and
---- the body overlays 10..12.
+--- lives in Haare), accessoires (props), and the body overlays 10..12.
+--- Tattoos are their own top-level category.
 local function buildOutfitCategoryMenu()
   local menu = Menu.menu({ title = 'Outfit', dock = 'right' })
 
@@ -1811,17 +1811,6 @@ local function buildOutfitCategoryMenu()
     end
   end
 
-  local tattooZones = GameData.tattooZones()
-  if #tattooZones > 0 then
-    Menu.separator(menu, 'Tattoos')
-    for _, zoneId in ipairs(tattooZones) do
-      Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
-        description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
-        build = function() return buildTattooMenu(zoneId) end,
-      })
-    end
-  end
-
   -- Body overlays sit in Outfit, not Makeup, because they decorate the
   -- body, not the face. The hair overlay is NOT here - the game ties
   -- exactly one decal to each hairstyle, so picking the hair picks the
@@ -1837,6 +1826,21 @@ local function buildOutfitCategoryMenu()
   return menu
 end
 
+--- Tattoos, grouped by body zone. A list of every tattoo per gender
+--- would be 775 rows; grouping by where it goes on the body keeps each
+--- submenu small and the player oriented.
+local function buildTattooCategoryMenu()
+  local menu = Menu.menu({ title = 'Tattoos', dock = 'right' })
+  local tattooZones = GameData.tattooZones()
+  for _, zoneId in ipairs(tattooZones) do
+    Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
+      description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
+      build = function() return buildTattooMenu(zoneId) end,
+    })
+  end
+  return menu
+end
+
 --- The root menu: five category buttons, then the actions.
 --- Section bar reads "Uebersicht 1 / 5" so the player knows the
 --- creator is at the top of a five-stop tree.
@@ -1845,7 +1849,7 @@ buildRootMenu = function()
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
     dock     = 'right',
-    section  = { name = 'Uebersicht', current = 1, total = 5 },
+    section  = { name = 'Uebersicht', current = 1, total = 6 },
     onClose  = function(reason)
       -- Escape or Backspace at the root is the same event as pressing Abbrechen.
       -- Leaving the ped frozen with no menu and no way out is not a state anybody
@@ -1902,8 +1906,12 @@ buildRootMenu = function()
     description = 'Bart, Augenbrauen, Makeup, Lippenstift, ...',
     build = buildMakeupCategoryMenu,
   })
+  Menu.submenu(menu, 'Tattoos', {
+    description = 'Nach Koerperzone gruppiert.',
+    build = buildTattooCategoryMenu,
+  })
   Menu.submenu(menu, 'Outfit', {
-    description = 'Kleidung, Accessoires, Tattoos.',
+    description = 'Kleidung, Accessoires, Koerper-Overlays.',
     build = buildOutfitCategoryMenu,
   })
 
