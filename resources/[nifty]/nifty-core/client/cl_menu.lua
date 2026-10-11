@@ -64,6 +64,13 @@ local function stripSelf(...)
   if args.n >= 1 and args[1] == Self then
     return table.unpack(args, 2, args.n)
   end
+  -- DIAGNOSTIC: surface the actual args so we can see what the proxy sent
+  if _G._NIFTY_STRIPSELF_DEBUG then
+    local s = {}
+    for i = 1, args.n do s[i] = ('[%d]=%s(%s)'):format(i, tostring(args[i]), type(args[i])) end
+    print(('[nifty-core] stripSelf: n=%d, args=%s, Self=%s, args[1]==Self=%s'):format(
+      args.n, table.concat(s, ', '), tostring(Self), tostring(args[1] == Self)))
+  end
   return table.unpack(args, 1, args.n)
 end
 
