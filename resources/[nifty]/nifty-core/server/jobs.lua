@@ -295,8 +295,12 @@ end)
 
 --- Leaving a job that pays out is the last chance to settle up, so it happens
 --- here rather than in `Jobs.leave` — which may be called from anywhere.
-AddEventHandler('playerDropped', function()
-  local characterId = Identity.getActiveCharacter(source)
+---
+--- Registered with the session guard, not hooked to `playerDropped`: in OneSync
+--- big mode a distant disconnect delivers no event, and an unsettled shift means
+--- a worker who logged off never gets paid.
+SessionGuard.onSettle('jobs', function(src)
+  local characterId = Identity.getActiveCharacter(src)
   if not characterId then return end
 
   local row = Db.one([[

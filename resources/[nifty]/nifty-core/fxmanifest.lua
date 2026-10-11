@@ -25,6 +25,12 @@ server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/db.lua'
 server_script 'server/settings.lua'
 server_script 'server/validate.lua'
+
+-- Before every module that registers teardown with it. The guard owns the
+-- playerDropped handler, so anything loading after it must not hook the event
+-- itself (OneSync big mode does not guarantee it fires).
+server_script 'server/sv_session_guard.lua'
+
 server_script 'server/identity.lua'
 server_script 'server/economy.lua'
 server_script 'server/stuetze.lua'

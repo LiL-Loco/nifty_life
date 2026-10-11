@@ -35,10 +35,19 @@ function Stuetze.start(src, characterId)
   PaidThisSession[src] = 0
 
   local function tick()
-    -- Re-check the session rather than trusting the closure: a player who
-    -- dropped and rejoined mid-interval must not be paid for a character they
-    -- are no longer playing.
-    if Identity.getActiveCharacter(src) ~= characterId then
+    -- Two independent reasons to stop, because this closure moves money.
+    --
+    -- The first is the session: a player who dropped and rejoined mid-interval
+    -- must not be paid for a character they are no longer playing.
+    --
+    -- The second is the engine itself. Under OneSync big mode a distant
+    -- disconnect produces no playerDropped, so the session is still open and the
+    -- first check passes — the Stütze would keep paying a character nobody is
+    -- playing. `GetPlayerName` reads the player list directly and is not scoped
+    -- by distance. The watchdog in sv_session_guard.lua would catch this within
+    -- 30 seconds anyway, but the step that pays out should not depend on a
+    -- background thread having run.
+    if Identity.getActiveCharacter(src) ~= characterId or not GetPlayerName(src) then
       Stuetze.stop(src)
       return
     end
@@ -120,8 +129,12 @@ function Stuetze.pay(src, characterId)
   return true
 end
 
-AddEventHandler('playerDropped', function()
-  Stuetze.stop(source)
+-- Registered with the session guard rather than hooked to `playerDropped`
+-- directly. Under OneSync big mode that event does not arrive for a player who
+-- disconnects out of range, and a Stütze that keeps paying is the exact failure
+-- this server's economy cannot survive.
+SessionGuard.onStop('stuetze', function(src)
+  Stuetze.stop(src)
 end)
 
 --- `/niftystuetze` — prints the number the whole economy hangs on, plus what the

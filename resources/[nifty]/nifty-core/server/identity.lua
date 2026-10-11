@@ -218,6 +218,18 @@ function Identity.getActiveCharacter(src)
   return entry and entry.characterId or nil
 end
 
+--- Every slot this resource currently believes is active.
+---
+--- Exists for the session watchdog, which has to compare this list against the
+--- engine's player list to find slots the engine has released. Keeping the table
+--- private is deliberate; exposing a copy of the keys is not the same as exposing
+--- the table.
+function Identity.activeSlots()
+  local slots = {}
+  for src in pairs(ActiveSessions) do slots[#slots + 1] = src end
+  return slots
+end
+
 --- The DB session id for this connection, or nil. Used by the Stütze to link a
 --- payout to the session it was paid in — ADR-0009 needs that link to tell
 --- "someone stayed online too long" apart from "someone was paid too much".
@@ -272,7 +284,17 @@ function Identity.endSession(src)
   CreationAttempts[src] = nil
 end
 
+--- Identity closes its own sessions.
+---
+--- This lived in sv_main and was moved here deliberately. sv_main orchestrates a
+--- connection; the session belongs to this module. Registering it here also means
+--- the guarantee is exercised by the harness, which loads this file but not
+--- sv_main — and it keeps the rule "the guard drives teardown, the owner performs
+--- it" free of exceptions.
+SessionGuard.onClose('identity', Identity.endSession)
+
 exports('getActiveCharacter', Identity.getActiveCharacter)
+exports('activeSlots', Identity.activeSlots)
 exports('createCharacter', Identity.createCharacter)
 exports('saveCharacter', Identity.saveCharacter)
 exports('endSession', Identity.endSession)

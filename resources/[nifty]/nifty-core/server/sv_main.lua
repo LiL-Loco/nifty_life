@@ -165,12 +165,11 @@ RegisterNetEvent('nifty:server:saveCharacter', function(payload)
   Identity.saveCharacter(src, payload)
 end)
 
-AddEventHandler('playerDropped', function()
-  local src = source
+-- Per-connection scratch state. The session itself is closed by identity.lua,
+-- which owns it; all this needs is to stop its own timers.
+SessionGuard.onStop('bootstrap', function(src)
   BootstrapAttempts[src] = nil
   Stuetze.stop(src)
-  Identity.endSession(src)
-  print(('[%s] session ended for slot %s'):format(RESOURCE, src))
 end)
 
 RegisterCommand('niftystatus', function(src)

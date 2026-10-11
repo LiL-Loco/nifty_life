@@ -107,13 +107,39 @@ RegisterNetEvent('nifty:client:creatorError', function(message)
   print(('[nifty-core] creator refused: %s'):format(tostring(message)))
 end)
 
---- Persist on the way out. ADR-0004: nothing is lost across a restart, so this
---- has to fire reliably rather than opportunistically.
+--- Persist on the way out, opportunistically. ADR-0004: nothing is lost across a
+--- restart.
+---
+--- This is a fast path, not the mechanism. Under OneSync big mode a player who
+--- disconnects outside server range may never see this handler run, so the
+--- periodic save below is what actually guarantees the appearance survives.
 AddEventHandler('playerDisconnected', function()
   if not waitingForWorld then
     TriggerServerEvent('nifty:server:saveCharacter', {
       appearance = exports.nifty_core:getCurrentAppearance(),
     })
+  end
+end)
+
+--- Periodic save. Everything a player can change about themselves is stored, and
+--- none of it is worth losing to an event that is documented not to fire reliably.
+local AUTOSAVE_INTERVAL_MS = 60000
+
+CreateThread(function()
+  while not NetworkIsSessionStarted() do
+    Wait(200)
+  end
+
+  while true do
+    Wait(AUTOSAVE_INTERVAL_MS)
+
+    -- `waitingForWorld` is false from the moment the player has a character, so
+    -- this only starts saving for someone who is actually in the world.
+    if not waitingForWorld then
+      TriggerServerEvent('nifty:server:saveCharacter', {
+        appearance = exports.nifty_core:getCurrentAppearance(),
+      })
+    end
   end
 end)
 

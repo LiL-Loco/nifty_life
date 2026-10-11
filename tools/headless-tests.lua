@@ -122,6 +122,33 @@ local timers = {}
 _G.SetTimeout = function(ms, fn) local id = #timers + 1; timers[id] = fn; return id end
 _G.ClearTimeout = function(id) timers[id] = nil end
 
+--- Run a pending timer by hand. The Stütze and the session guard both schedule
+--- work through SetTimeout; without this, time never advances in the harness.
+_G.runTimers = function()
+  local fired = 0
+  for id, fn in pairs(timers) do
+    timers[id] = nil
+    fn()
+    fired = fired + 1
+  end
+  return fired
+end
+
+--- Threads are captured, never run.
+---
+--- A real `CreateThread` starts an infinite loop that calls `Wait`. Running one
+--- here would hang the harness, so the shim records what the resource asked to
+--- run. That is the same contract as the SetTimeout shim above: expose the API,
+--- do not simulate its scheduling.
+local capturedThreads = {}
+_G.CreateThread = function(fn)
+  capturedThreads[#capturedThreads + 1] = fn
+  return #capturedThreads
+end
+_G.capturedThreads = capturedThreads
+
+_G.Wait = function() end
+
 _G.RegisterNetEvent = function() end
 _G.RegisterCommand = function() end
 _G.DropPlayer = function() end
@@ -150,6 +177,17 @@ end
 
 function FakePlayers.disconnect(src)
   FakePlayers[src] = nil
+end
+
+--- The engine's own view of who is connected.
+---
+--- This is the primitive the session watchdog exists for. It is NOT scoped by
+--- OneSync distance, so it keeps answering correctly even when the event a naive
+--- implementation relies on never arrives. Revoking a connection here WITHOUT
+--- firing `playerDropped` reproduces the real-world failure exactly — and it is
+--- the failure 291 green checks could previously not see.
+_G.GetPlayerName = function(src)
+  return FakePlayers[src] and ('Player' .. tostring(src)) or nil
 end
 
 _G.GetPlayerIdentifiers = function(src)
@@ -490,6 +528,7 @@ load(RES .. '/shared/appearance_config.lua')
 load(RES .. '/server/db.lua')
 load(RES .. '/server/settings.lua')
 load(RES .. '/server/validate.lua')
+load(RES .. '/server/sv_session_guard.lua')
 load(RES .. '/server/identity.lua')
 load(RES .. '/server/economy.lua')
 load(RES .. '/server/stuetze.lua')
@@ -1083,6 +1122,118 @@ check('the session cap stops further payouts',
 
 check('the cap is the only brake — amount is unconditional',
   toNumber(GetSetting('economy.stuetze.amount', 0)) > 0)
+
+-- ============================================================================
+group('Session guard — the drop event is not a guarantee')
+
+-- The failure this whole group exists for.
+--
+-- `onesync on` enables OneSync big mode, where player connect/disconnect events
+-- are distance-scoped: a client that drops out of range delivers NO playerDropped.
+-- Five handlers hung off that event, so a missed one meant the Stütze kept paying,
+-- a shift never settled, and the session row stayed open. The harness fired
+-- playerDropped by hand, so it could never see this.
+--
+-- Reproduce it honestly: revoke the connection WITHOUT firing the event.
+
+sql('TRUNCATE TABLE ledger')
+sql('DELETE FROM stuetze_payouts')
+sql('DELETE FROM character_jobs')
+sql('DELETE FROM sessions')
+sql('DELETE FROM wallets')
+sql('DELETE FROM characters')
+sql('DELETE FROM accounts')
+
+-- Order matters: every one of these tables is a child of the one above it, so
+-- the account has to exist before the character, the character before the wallet.
+sql([[
+  INSERT INTO accounts (id, discord_id, status) VALUES ('acct-guard', '777000007', 'active')
+]])
+sql([[
+  INSERT INTO characters (id, account_id, first_name, last_name, date_of_birth, gender, appearance)
+  VALUES ('chr-guard', 'acct-guard', 'Watch', 'Dog', '1990-01-01', 'male', '{}')
+]])
+sql([[
+  INSERT INTO wallets (character_id, cash, bank) VALUES ('chr-guard', 0.00, 0.00)
+]])
+sql([[
+  INSERT INTO character_jobs (character_id, job_code, is_duty, duty_since)
+  VALUES ('chr-guard', 'trucker', 1, NOW())
+]])
+
+FakePlayers.connect(7, '777000007')
+Identity.beginSession(7, 'chr-guard')
+Stuetze.start(7, 'chr-guard')
+
+check('the connection starts out live', GetPlayerName(7) ~= nil)
+check('the character is active', Identity.getActiveCharacter(7) == 'chr-guard')
+
+-- Now simulate the engine releasing the slot at distance. NO playerDropped fires.
+-- This is the exact moment the old code silently did nothing.
+FakePlayers[7] = nil
+
+check('the engine reports the slot gone while the session is still open',
+  GetPlayerName(7) == nil and Identity.getActiveCharacter(7) == 'chr-guard',
+  'the whole bug is that these two disagree')
+
+-- The Stütze tick must refuse to pay, even though the session still looks live.
+local cashBeforeGuard = Economy.get('chr-guard').cash
+_G.runTimers()
+local cashAfterGuard = Economy.get('chr-guard').cash
+
+check('a disconnected player is not paid a Stütze instalment',
+  cashAfterGuard == cashBeforeGuard,
+  'cash moved from ' .. tostring(cashBeforeGuard) .. ' to ' .. tostring(cashAfterGuard))
+
+-- The watchdog reconciles the slot away, and everything registered runs.
+local stale = SessionGuard.reconcile()
+check('the watchdog notices the released slot', stale == 1, 'got ' .. tostring(stale) .. ' stale slots')
+check('the session is closed', Identity.getActiveCharacter(7) == nil)
+check('the shift was settled on disconnect',
+  toNumber(Db.one('SELECT is_duty FROM character_jobs WHERE character_id = ?',
+    { 'chr-guard' }, 'test').is_duty) == 0,
+  'is_duty must be 0 — an unsettled shift is unpaid work')
+
+local openGuardSessions = Db.one(
+  'SELECT COUNT(*) AS c FROM sessions WHERE character_id = ? AND disconnected_at IS NULL',
+  { 'chr-guard' }, 'test')
+check('no session row is left open', toNumber(openGuardSessions.c) == 0,
+  'got ' .. tostring(openGuardSessions.c))
+
+-- Releasing twice must not settle twice. A reconnect reuses the slot, and the
+-- real event plus the watchdog can both fire.
+local settledOnce = toNumber(Db.one('SELECT COUNT(*) AS c FROM sessions WHERE character_id = ?',
+  { 'chr-guard' }, 'test').c)
+SessionGuard.release(7, 'duplicate event')
+check('a second release for the same slot is a no-op',
+  toNumber(Db.one('SELECT COUNT(*) AS c FROM sessions WHERE character_id = ?',
+    { 'chr-guard' }, 'test').c) == settledOnce)
+
+-- A live player must be left alone. This is the check that stops the watchdog
+-- from becoming the thing that logs everyone out.
+FakePlayers.connect(8, '777000008')
+Identity.beginSession(8, 'chr-guard')
+check('a connected player survives reconciliation',
+  SessionGuard.reconcile() == 0 and Identity.getActiveCharacter(8) == 'chr-guard',
+  'the watchdog released a player who was still online')
+
+SessionGuard.release(8, 'test cleanup')
+FakePlayers.disconnect(8)
+
+-- A crash leaves rows open that no event will ever close.
+sql([[
+  INSERT INTO sessions (character_id, disconnected_at) VALUES ('chr-guard', NULL)
+]])
+check('fixture: an orphaned open row exists before the sweep',
+  toNumber(Db.one('SELECT COUNT(*) AS c FROM sessions WHERE character_id = ? AND disconnected_at IS NULL',
+    { 'chr-guard' }, 'test').c) == 1)
+
+local swept = SessionGuard.sweepOrphans()
+check('the boot sweep reports what it closed', swept >= 1, 'got ' .. tostring(swept))
+check('after the sweep no open session remains',
+  toNumber(Db.one('SELECT COUNT(*) AS c FROM sessions WHERE character_id = ? AND disconnected_at IS NULL',
+    { 'chr-guard' }, 'test').c) == 0)
+check('the sweep is idempotent', SessionGuard.sweepOrphans() == 0)
 
 -- ============================================================================
 group('Character creation — one transaction, or nothing at all')

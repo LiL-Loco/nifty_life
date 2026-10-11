@@ -385,6 +385,10 @@ RegisterNetEvent('nifty:server:myVehicles', function()
 end)
 
 -- ---------------------------------------------------------------------------
-AddEventHandler('playerDropped', function()
-  ActionLog[source] = nil
+
+-- An in-memory table that is never cleaned leaks one entry per drop. Under
+-- OneSync big mode a distant disconnect delivers no `playerDropped`, so it
+-- leaks silently rather than visibly.
+SessionGuard.onStop('actionLog', function(src)
+  ActionLog[src] = nil
 end)
