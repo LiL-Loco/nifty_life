@@ -19,6 +19,13 @@ local RESOURCE = GetCurrentResourceName()
 local State = {
   money = { cash = 0, bank = 0 },
   inventory = { items = {}, usedSlots = 0, totalSlots = 0, usedWeight = 0, maxWeight = 0 },
+  -- The character's full appearance (model + every component / prop slot).
+  -- Lives here so the inventory panel can render the OUTFIT section
+  -- ("what you are currently wearing") without the server having to
+  -- repeat the data on a separate channel. Refreshed when the wardrobe
+  -- applies an outfit; today that path is implicit (Identity.saveCharacter
+  -- updates characters.appearance, the next state push carries it).
+  character = nil,
   jobs = {},
   jobCatalogue = {},
   shop = {},
@@ -43,6 +50,7 @@ local function render()
   sendToNui('render', {
     money = State.money,
     inventory = State.inventory,
+    character = State.character,
     jobs = State.jobs,
     jobCatalogue = State.jobCatalogue,
     shop = State.shop,
@@ -107,6 +115,24 @@ end)
 RegisterNetEvent('nifty:client:vehicles', function(list)
   if type(list) ~= 'table' then return end
   State.vehicles = list
+  render()
+end)
+
+-- Track the character's appearance so the inventory panel can show what
+-- the player is currently wearing in the OUTFIT section. The server
+-- ships this in nifty:client:enterWorld and on every save.
+RegisterNetEvent('nifty:client:enterWorld', function(data)
+  if type(data) ~= 'table' then return end
+  -- The shape carries character with an appearance sub-object.
+  if type(data.character) == 'table' then
+    State.character = data.character
+    render()
+  end
+end)
+
+RegisterNetEvent('nifty:client:character', function(character)
+  if type(character) ~= 'table' then return end
+  State.character = character
   render()
 end)
 
