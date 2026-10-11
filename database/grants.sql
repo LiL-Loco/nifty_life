@@ -235,13 +235,48 @@ GRANT SELECT, INSERT, UPDATE ON nifty_life.portal_user_discord TO 'nifty_website
 FLUSH PRIVILEGES;
 
 -- ---------------------------------------------------------------------------
+-- Character creation on the website (migration 021).
+--
+-- The player enters name, gender, date of birth and birthplace on the site, and
+-- the in-game creator is left with appearance alone. The website does NOT get
+-- INSERT on `characters`. It gets EXECUTE on one stored procedure.
+--
+-- Why not a grant: the website cannot write a correct row even if it were allowed
+-- to try. `account_id` is a UUID minted by the game server and never exposed, so
+-- an INSERT from the web tier would need either a lookup the web tier must not
+-- perform or a value the web tier must not read. The procedure takes what the
+-- website actually has — a Discord ID — and resolves the account itself.
+--
+-- The invariant this preserves, which line 244 asserts and which is still TRUE:
+--
+--   INSERT INTO characters (...)  -- still denied, no grant
+--   UPDATE characters SET ...     -- still denied, no grant
+--   DELETE FROM characters        -- still denied, no grant
+--
+-- What changed is narrower than it looks. The website can now CREATE a character,
+-- and it can do so only for an account whose Discord ID it presents and which is
+-- active and unbanned — checked inside the procedure, not in application code.
+-- It still cannot touch any character that already exists, including one it just
+-- created. Changing a character's name or gender is a game-server operation.
+--
+-- The same procedure allocates the permanent phone number (ADR-0021), so the
+-- website cannot produce a character that can never be messaged.
+-- ---------------------------------------------------------------------------
+GRANT EXECUTE ON PROCEDURE nifty_life.create_character_from_web
+  TO 'nifty_website'@'localhost';
+
+FLUSH PRIVILEGES;
+
+-- ---------------------------------------------------------------------------
 -- Verify the boundary holds. All of these should return zero rows or an
 -- access-denied error. Run them after every credential change.
 -- ---------------------------------------------------------------------------
 -- SELECT * FROM nifty_life.wallets;        -- denied: no grant
 -- UPDATE nifty_life.applications SET status='approved' WHERE id='x';  -- denied: no UPDATE
 -- DELETE FROM nifty_life.accounts;         -- denied: no DELETE
--- INSERT INTO nifty_life.characters VALUES (...);  -- denied: no grant
+-- INSERT INTO nifty_life.characters VALUES (...);  -- denied: no grant, use create_character_from_web
+-- CALL create_character_from_web('0','A','B','male','1990-01-01','X');
+--   -> ok=0, code='no_account'. The procedure refuses, it does not insert.
 
 -- ADR-0022 — the identity binding must stay one-directional:
 -- SELECT * FROM nifty_life.web_pairing_codes;                 -- denied: no grant

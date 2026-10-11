@@ -1,7 +1,15 @@
 import Link from 'next/link';
 
 import { registrations } from '@/lib/users';
-import { Card, Td, Th } from '@/components/ui';
+import {
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,59 +37,74 @@ export default async function AdminUsers() {
 
   return (
     <>
-      <h1>Registrierungen</h1>
-      <p className="mb-8 text-muted">
+      <h1 className="px-5 sm:px-6">Registrierungen</h1>
+      <p className="mb-8 px-5 text-muted-foreground sm:px-6">
         {rows.length} {rows.length === 1 ? 'Konto' : 'Konten'}, neueste zuerst.
       </p>
 
       {rows.length === 0 ? (
         <Card>
-          <p className="mb-0 text-sm text-muted">Noch niemand hat sich registriert.</p>
+          <p className="text-sm text-muted-foreground">
+            Noch niemand hat sich registriert.
+          </p>
         </Card>
       ) : (
-        <Card padding="flush">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <Th>E-Mail</Th>
-                <Th>Adresse</Th>
-                <Th>Discord</Th>
-                <Th>Bewerbung</Th>
-                <Th>Registriert</Th>
-                <Th>Letzte Anmeldung</Th>
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="overflow-hidden p-0 mx-5 sm:mx-6">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>E-Mail</TableHead>
+                <TableHead>Adresse</TableHead>
+                <TableHead>Discord</TableHead>
+                <TableHead>Rolle</TableHead>
+                <TableHead>Bewerbung</TableHead>
+                <TableHead>Registriert</TableHead>
+                <TableHead>Letzte Anmeldung</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.id}>
-                  <Td>{row.email}</Td>
-                  <Td>
+                <TableRow key={row.id}>
+                  <TableCell>{row.email}</TableCell>
+                  <TableCell>
                     {row.email_verified_at ? (
-                      <span className="text-ok">bestätigt</span>
+                      <span className="text-success">bestätigt</span>
                     ) : (
-                      <span className="text-muted">offen</span>
+                      <span className="text-muted-foreground">offen</span>
                     )}
-                  </Td>
-                  <Td className="font-mono">
-                    {row.discord_id ?? <span className="text-muted">—</span>}
-                  </Td>
-                  <Td>
+                  </TableCell>
+                  <TableCell>
+                    {row.username ?? <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell>
+                    {row.is_staff ? (
+                      <span className="text-primary">Staff</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     {row.application_status ?? (
-                      <span className="text-muted">keine</span>
+                      <span className="text-muted-foreground">keine</span>
                     )}
-                  </Td>
-                  <Td>{formatDate(row.created_at)}</Td>
-                  <Td className="text-muted">{formatDate(row.last_login_at)}</Td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{formatDate(row.created_at)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(row.last_login_at)}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </Card>
       )}
 
-      <p className="text-sm text-muted">
-        <Link href="/admin">← zu den Bewerbungen</Link>
-      </p>
+      <Link
+        href="/admin"
+        className="mt-2 inline-block px-5 text-sm text-muted-foreground hover:text-foreground sm:px-6"
+      >
+        ← zu den Bewerbungen
+      </Link>
     </>
   );
 }

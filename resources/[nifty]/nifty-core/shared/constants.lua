@@ -1,8 +1,14 @@
 --- Shared constants for Nifty Life 2.0.
 --- Anything a client and the server must agree on belongs here. Anything the
 --- server must never trust from a client does NOT (see sv_main.lua).
+---
+--- `Nifty = Nifty or {}` rather than `Nifty = {}`: this file is loaded by
+--- nifty-core AND by every system resource, and in a system resource it is
+--- loaded AFTER `shared/core.lua` has already put the base facade on the table.
+--- An unconditional assignment here would wipe it, and the next line of business
+--- code would fail with a nil index that points nowhere near this file.
 
-Nifty = {}
+Nifty = Nifty or {}
 
 --- Row identifier generator. Every player-owned row is keyed by a UUID (ADR-0001):
 --- slot IDs get recycled and must never end up in a key. Shared so the identity

@@ -1,0 +1,718 @@
+/* Nifty Life 2.0 — character creator
+   Layout leaves a clear gap in the middle-bottom where the player ped stands,
+   so the UI frames the character rather than covering them. */
+
+:root {
+  --bg: rgba(12, 12, 14, 0.86);
+  --bg-solid: #16161a;
+  --panel: rgba(24, 24, 28, 0.92);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f2f2f4;
+  --text-dim: #9a9aa4;
+  --accent: #d6b469;
+  --accent-dim: rgba(214, 180, 105, 0.18);
+  --danger: #d64545;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+.hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- shell */
+
+.creator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(10,10,12,0.92) 0%, rgba(10,10,12,0.45) 42%, rgba(10,10,12,0.92) 100%);
+  animation: fade-in 220ms ease;
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.creator__header {
+  padding: 18px 26px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.creator__header h1 {
+  font-size: 20px; font-weight: 600; letter-spacing: 0.02em;
+}
+.creator__subtitle {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--accent); margin-top: 2px;
+}
+
+.creator__footer {
+  padding: 10px 26px 16px;
+  border-top: 1px solid var(--border);
+}
+.hint { font-size: 11px; color: var(--text-dim); letter-spacing: 0.04em; }
+
+.creator__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 300px 1fr 220px;
+  gap: 14px;
+  padding: 14px 18px;
+  /* keep the lower centre clear so the ped is visible */
+  align-items: start;
+}
+
+/* --------------------------------------------------------------- panels */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  backdrop-filter: blur(6px);
+}
+
+.panel--identity,
+.panel--actions { max-height: calc(100vh - 190px); overflow-y: auto; }
+
+.panel__title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--text-dim); margin-bottom: 12px; font-weight: 600;
+}
+.panel__title--spaced { margin-top: 20px; }
+.panel__subtitle {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--text-dim); margin: 16px 0 8px; font-weight: 600;
+}
+
+/* -------------------------------------------------------------- fields */
+
+.field { display: block; margin-bottom: 14px; }
+.field__label {
+  display: block; font-size: 11px; color: var(--text-dim);
+  margin-bottom: 5px; letter-spacing: 0.03em;
+}
+.field__label em { font-style: normal; opacity: 0.6; }
+.field__hint { display: block; font-size: 10px; color: var(--text-dim); margin-top: 4px; opacity: 0.7; }
+
+input[type="text"],
+input[type="date"] {
+  width: 100%;
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+input:focus { outline: none; border-color: var(--accent); }
+
+.segmented { display: flex; gap: 6px; }
+.segmented__btn {
+  flex: 1;
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-dim);
+  padding: 7px 4px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.segmented__btn:hover { color: var(--text); }
+.segmented__btn.is-active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------- slot lists */
+
+.slots__columns { display: grid; grid-template-columns: 210px 1fr; gap: 18px; }
+
+.slotlist { list-style: none; }
+.slotlist__item {
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  transition: all 120ms ease;
+}
+.slotlist__item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.slotlist__item.is-active { background: var(--accent-dim); color: var(--accent); }
+.slotlist__index { font-size: 10px; opacity: 0.5; }
+
+/* ----------------------------------------------------------- variants */
+
+.variantgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.variant {
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 10px 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.variant:hover { border-color: rgba(255,255,255,0.25); color: var(--text); }
+.variant.is-active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
+/* ------------------------------------------------------------- colours */
+
+.colourgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+  gap: 5px;
+  max-height: 130px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.colour {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: transform 100ms ease;
+}
+.colour:hover { transform: scale(1.12); }
+.colour.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+
+/* ------------------------------------------------------------- buttons */
+
+.btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 140ms ease;
+  margin-bottom: 8px;
+}
+.btn--ghost {
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.btn--ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.25); }
+.btn--primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #16161a;
+  font-weight: 600;
+}
+.btn--primary:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.actions__spacer { height: 20px; }
+
+.error {
+  background: rgba(214, 69, 69, 0.14);
+  border: 1px solid rgba(214, 69, 69, 0.4);
+  border-radius: 5px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #f0a0a0;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+/* scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+/* ==========================================================================
+   HUD and panels (vertical slice)
+   Presentation only. Nothing here decides state - it draws what the server sent.
+   ========================================================================== */
+
+.hud {
+  position: fixed;
+  top: 18px;
+  right: 22px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud__money {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.hud__amount {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f2f2f0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .85);
+}
+
+.hud__amount--bank {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(242, 242, 240, .62);
+}
+
+.hud__duty {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #e8e8e4;
+  background: rgba(18, 18, 20, .72);
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 2px;
+}
+
+.hud__duty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #48bb78;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 20px;
+  font-size: 14px;
+  color: #f2f2f0;
+  background: rgba(18, 18, 20, .92);
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 2px;
+}
+
+.toast--error {
+  border-color: #a8443c;
+}
+
+.panel-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .55);
+}
+
+.panel-shell__inner {
+  width: min(620px, 84vw);
+  max-height: 76vh;
+  display: flex;
+  flex-direction: column;
+  background: #141416;
+  border: 1px solid rgba(255, 255, 255, .1);
+}
+
+.panel-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+
+.panel-shell__header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: rgba(242, 242, 240, .82);
+}
+
+.panel-shell__body {
+  padding: 14px 18px 18px;
+  overflow-y: auto;
+}
+
+.panel-shell__summary {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: rgba(242, 242, 240, .55);
+}
+
+.panel-shell__empty {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(242, 242, 240, .5);
+}
+
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.row-actions { display: flex; gap: 8px; }
+
+.itemlist { list-style: none; margin: 0; padding: 0; }
+
+.itemlist__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .05);
+}
+
+.itemlist__name {
+  flex: 1;
+  font-size: 14px;
+  color: #f2f2f0;
+}
+
+.itemlist__weight,
+.itemlist__price {
+  font-size: 12px;
+  color: rgba(242, 242, 240, .55);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn--small {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ phone */
+/* A handset, not a panel. Sits right of centre so the character stays visible
+   on the left — the player is in the world, not in a menu. */
+
+.phone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4vh 6vw;
+  background: rgba(8, 8, 10, 0.35);
+  animation: fade-in 160ms ease;
+}
+
+.phone__device {
+  width: 360px;
+  height: 640px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.phone__statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.phone__number {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__carrier {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Unread badge. Drawn next to the number rather than on the Messages tab, so
+   the count is visible without switching apps — and it is the same number the
+   server sent, never recomputed here. */
+.phone__badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #16161a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.phone__tab {
+  flex: 1;
+  padding: 11px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.phone__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.phone__app {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+.phone__app.is-active { display: flex; }
+
+.phone__list { display: flex; flex-direction: column; gap: 8px; }
+
+.phone__message {
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.phone__message--unread { border-left: 3px solid var(--accent); }
+
+.phone__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.phone__from { color: var(--text); font-weight: 600; }
+
+.phone__time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.phone__body {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.phone__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Reason picker for reporting. Native select, restyled to the panel tokens —
+   a custom dropdown would be a second keyboard-navigation surface to get wrong
+   for no gain. */
+.phone__reason {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.phone__field { display: block; margin-bottom: 12px; }
+
+.phone__label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.phone__field input,
+.phone__field textarea {
+  width: 100%;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+}
+
+.phone__field input:focus,
+.phone__field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.phone__hint {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.phone__empty {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* The homebar is also the close target. There is no close button: the phone
+   closes the way a phone closes, and Escape does the same thing. */
+.phone__homebar {
+  height: 26px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+/* ===========================================================================
+   Chat.
+
+   Two independent surfaces, and the split is the whole design:
+
+   .chat-log    passive, always mounted, every line fades out on its own timer.
+                It never takes focus. If it did, a message arriving in the middle
+                of a police chase would eat the mouse.
+
+   .chat-input  exists only while somebody is typing, and the only thing in the
+                entire NUI that takes focus from the game. One owner at a time
+                is enforced in cl_chat.lua, not here — a stylesheet cannot know
+                whether the phone is open.
+
+   The palette reuses the phone's variables on purpose. This is one interface
+   wearing two shapes, and a second set of near-identical greys would be a
+   difference nobody could act on.
+   =========================================================================== */
+
+.chat-log {
+  position: absolute;
+  left: 24px;
+  bottom: 96px;
+  width: 34ch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.chat-line {
+  padding: 4px 9px;
+  background: rgba(12, 12, 14, 0.62);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text);
+  /* The fade is driven per line by a class the JS removes on a timer, so a
+     long scrollback does not all vanish at once. */
+  animation: chat-line-in 140ms ease-out;
+}
+
+.chat-line__author {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* System lines are the server talking, not a person. They are quieter and
+   carry no author, so a player cannot mistake one for another player's line. */
+.chat-line--system {
+  border-left-color: var(--text-dim);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.chat-line--command {
+  border-left-color: #7fb3a8;
+}
+
+.chat-line.is-leaving {
+  opacity: 0;
+  transition: opacity 600ms ease-in;
+}
+
+.chat-input {
+  position: absolute;
+  left: 24px;
+  bottom: 60px;
+  width: 42ch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(12, 12, 14, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+}
+
+.chat-input__caret {
+  color: var(--accent);
+  font-weight: 700;
+  cursor: default;
+}
+
+.chat-input__field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  padding: 0;
+}
+
+.chat-input__field::placeholder {
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+@keyframes chat-line-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}

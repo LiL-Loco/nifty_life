@@ -1,5 +1,5 @@
 {
-  "$schema": "https://ui.shadcn.com/schema.json",
+  "$schema": "http://ui.shadcn.com/schema.json",
   "style": "new-york",
   "rsc": true,
   "tsx": true,
@@ -16,10 +16,5 @@
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
-  },
-  "notes": {
-    "whyNewYork": "Nothing from the default registry is installed. The six primitives in src/components/ui are hand-written against this project's own palette (see @theme in globals.css), not copied from the registry - `ground`/`surface`/`line` replaced shadcn's `background`/`foreground`/`border` because those names describe a system rather than this one. This file exists so `npx shadcn@latest add <component>` puts new primitives in the right place with the right aliases; it is not a record of what came from upstream.",
-    "whyNoRadix": "Every primitive here is a plain element with variants - no overlay, no focus trap, no portal. Radix is only needed once something like a Dialog, Select or Dropdown is used, and it is not installed. Adding it for four buttons and two cards would be a dependency nobody asked for.",
-    "whyNoIcons": "`lucide-react` is deliberately NOT installed. The site is text; the only symbol anywhere is the CSS-drawn hero mark. Installing an icon library to render nothing is a dependency with no consumer."
   }
 }

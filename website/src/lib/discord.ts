@@ -112,3 +112,22 @@ export async function exchangeCode(
     return null;
   }
 }
+
+/**
+ * The avatar URL to render for a Discord user, given their snowflake ID.
+ *
+ * Discord serves two flavours of avatar from its CDN:
+ *
+ *   - a custom one at `/avatars/{id}/{hash}.{ext}`, when the user has set one,
+ *   - a built-in one at `/embed/avatars/{index}.png` for everyone else.
+ *
+ * The site does not store the custom-hash field (it is not in the schema), so
+ * this function returns the built-in URL. The index is derived from the user
+ * ID itself, which is the same formula Discord uses client-side, so the same
+ * person always gets the same default picture and we never reach into a CDN
+ * path that 404s.
+ */
+export function discordAvatarUrl(discordId: string): string {
+  const index = Number((BigInt(discordId) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+}

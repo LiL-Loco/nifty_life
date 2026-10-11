@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 
-import { Button, Notice } from '@/components/ui';
+import { Alert, Button, Textarea } from '@/components/ui';
 import { decideAction } from '../actions';
 
 /**
@@ -19,7 +19,7 @@ export default function DecisionForm({ id, status }: { id: string; status: strin
   // A decided application is shown, not re-decided. The record is the evidence:
   // re-readable for ever, never overwritable by a second opinion.
   if (status === 'approved' || status === 'rejected') {
-    return <p className="text-sm text-muted">Diese Bewerbung ist bereits entschieden.</p>;
+    return <p className="text-sm text-muted-foreground">Diese Bewerbung ist bereits entschieden.</p>;
   }
 
   return (
@@ -27,15 +27,15 @@ export default function DecisionForm({ id, status }: { id: string; status: strin
       <input type="hidden" name="id" value={id} />
 
       {state && !state.ok ? (
-        <Notice tone="error" role="alert">
+        <Alert variant="destructive" role="alert">
           {state.error}
-        </Notice>
+        </Alert>
       ) : null}
-      {state && state.ok ? <Notice>Liegt gespeichert vor.</Notice> : null}
+      {state && state.ok ? <Alert>Liegt gespeichert vor.</Alert> : null}
 
-      <label className="mb-2 block text-sm text-muted">
+      <label className="mb-2 block text-sm text-muted-foreground">
         Notiz für dich (optional, nicht für den Bewerber sichtbar)
-        <textarea name="note" rows={2} maxLength={500} className="mt-1.5" />
+        <Textarea name="note" rows={2} maxLength={500} className="mt-1.5" />
       </label>
 
       <div className="flex flex-wrap gap-3">

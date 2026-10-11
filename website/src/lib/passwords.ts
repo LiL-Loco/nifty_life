@@ -133,3 +133,20 @@ export function normalizeEmail(input: string): string | null {
 
   return email;
 }
+
+/**
+ * Username shape check.
+ *
+ * A display name, not a login. Length and charset are the only rules: 3–32
+ * characters, letters/digits/underscore/hyphen, must start and end with a
+ * letter or digit. No uniqueness — two people can pick the same name; the
+ * field is a label, not an identity.
+ */
+const USERNAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,30}[A-Za-z0-9])?$/;
+
+export function normalizeUsername(input: string): string | null {
+  const username = input.trim();
+  if (username.length < 3 || username.length > 32) return null;
+  if (!USERNAME_PATTERN.test(username)) return null;
+  return username;
+}

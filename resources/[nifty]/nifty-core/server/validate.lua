@@ -115,6 +115,194 @@ local function validateSlot(slot, cfg)
   return true, { collection = collection, drawable = drawable, texture = texture }
 end
 
+--- A finite number, or nil.
+---
+--- `tonumber('abc')` is nil and `tonumber('nan')` is a number that is not equal to
+--- itself. Both would sail through a range check as false-positive "valid" values
+--- if written as `if n < min or n > max`, because every comparison with NaN is
+--- false - so the check has to be positive, not negative.
+local function finiteNumber(value)
+  local n = tonumber(value)
+  if n == nil then return nil end
+  if n ~= n then return nil end          -- NaN
+  if n == math.huge or n == -math.huge then return nil end
+  return n
+end
+
+--- A whole number inside an inclusive range, or nil.
+local function boundedInt(value, min, max)
+  local n = finiteNumber(value)
+  if n == nil or n ~= math.floor(n) then return nil end
+  if n < min or n > max then return nil end
+  return n
+end
+
+--- A float inside an inclusive range, or nil.
+local function boundedFloat(value, min, max)
+  local n = finiteNumber(value)
+  if n == nil or n < min or n > max then return nil end
+  return n
+end
+
+--- Face sliders: a sparse map `{ ['0'] = -0.35, ['7'] = 0.8, ... }`.
+---
+--- SPARSE on purpose. Twenty sliders at full precision for every character is a
+--- stored blob nobody reads, and the ones nobody touched must not be able to
+--- disagree with the ped. Only the keys the player actually moved survive.
+function Validate.faceFeatures(value)
+  local out = {}
+  if type(value) ~= 'table' then return out end
+
+  for id, raw in pairs(value) do
+    local index = boundedInt(id, 0, AppearanceConfig.MAX_FACE_FEATURE)
+    local slider = boundedFloat(raw, -1.0, 1.0)
+    if index and slider then
+      out[tostring(index)] = slider
+    end
+  end
+
+  return out
+end
+
+--- Head overlays: `{ ['1'] = { style=, opacity=, colourType=, colour=, secondColour= } }`.
+---
+--- A malformed overlay is DROPPED rather than rejected. The difference matters:
+--- an overlay the player never touched is simply absent, and refusing to save the
+--- whole appearance because one unrecognised slot came in would mean a client on
+--- an older build can never change its hair. What is stored is always rebuilt
+--- from these fields, so an entry that cannot be understood contributes nothing.
+function Validate.headOverlays(value)
+  local out = {}
+  if type(value) ~= 'table' then return out end
+
+  for id, raw in pairs(value) do
+    local index = boundedInt(id, AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID)
+
+    if index and type(raw) == 'table' then
+      local style = boundedInt(raw.style, 0, AppearanceConfig.MAX_OVERLAY_STYLE)
+      if style then
+        -- Opacity defaults to 1.0 rather than 0.0: a style with no stated opacity
+        -- is a style the player wants at full strength, and defaulting to
+        -- invisible would silently erase a beard.
+        local opacity = boundedFloat(raw.opacity, 0.0, 1.0) or 1.0
+        local colourType = boundedInt(raw.colourType, 0, AppearanceConfig.MAX_OVERLAY_COLOUR_TYPE) or 1
+        local colour = boundedInt(raw.colour, 0, AppearanceConfig.MAX_OVERLAY_COLOUR) or 0
+        local second = boundedInt(raw.secondColour, 0, AppearanceConfig.MAX_OVERLAY_COLOUR) or colour
+
+        out[tostring(index)] = {
+          style        = style,
+          opacity      = opacity,
+          colourType   = colourType,
+          colour       = colour,
+          secondColour = second,
+        }
+      end
+    end
+  end
+
+  return out
+end
+
+--- Hair colour: primary and highlight, both from the hair palette.
+function Validate.hairColour(value)
+  if type(value) ~= 'table' then return nil end
+
+  return {
+    primary   = boundedInt(value.primary, 0, AppearanceConfig.MAX_OVERLAY_COLOUR) or 0,
+    highlight = boundedInt(value.highlight, 0, AppearanceConfig.MAX_OVERLAY_COLOUR) or 0,
+  }
+end
+
+--- A hair overlay: a facial decoration riding on top of a hairstyle.
+---
+--- `{ collection = <joaat>, preset = <joaat> }`. Both are 32-bit hashes, so the only
+--- meaningful bound is "is this a number that fits in 32 unsigned bits". The server
+--- cannot know whether the combination exists - see the note on `MAX_OVERLAY_STYLE`
+--- in appearance_config. The creator resolves them through the tattoo-shop map and
+--- a client that invents them gets a ped with no visible overlay, which is harmless.
+function Validate.hairOverlay(value)
+  if type(value) ~= 'table' then return nil end
+
+  local collection = boundedInt(value.collection, 0, 0xFFFFFFFF)
+  local preset = boundedInt(value.preset, 0, 0xFFFFFFFF)
+
+  if collection and preset then
+    return { collection = collection, preset = preset }
+  end
+
+  return nil
+end
+
+--- Tattoos, as a LIST rather than a map by slot.
+---
+--- A ped can wear several at once - they are facial decorations, and each call to
+--- the native adds one without clearing the others. A map keyed by body zone would
+--- be tidier and wrong: the game allows more than one per zone, and a map would
+--- silently drop one of them.
+---
+--- The collection is checked against the allowlist, which makes this stronger than
+--- the head overlays above: a client cannot name a collection the server has never
+--- heard of. The preset is still only range-checked - it is a joaat hash and the
+--- server has no table to look it up in.
+function Validate.tattoos(value)
+  if type(value) ~= 'table' then return {} end
+
+  local out = {}
+  for _, entry in ipairs(value) do
+    if #out >= AppearanceConfig.MAX_TATTOOS then break end
+
+    if type(entry) == 'table'
+      and type(entry.collection) == 'string'
+      and AppearanceConfig.ALLOWED_TATTOO_COLLECTIONS[entry.collection]
+    then
+      local preset = boundedInt(entry.preset, 0, 0xFFFFFFFF)
+      if preset then
+        out[#out + 1] = { collection = entry.collection, preset = preset }
+      end
+    end
+  end
+
+  return out
+end
+
+--- Eye colour index.
+function Validate.eyeColour(value)
+  local colour = boundedInt(value, 0, AppearanceConfig.MAX_EYE_COLOUR)
+  return colour or 0
+end
+
+--- Head blend: three presets and how much of each.
+---
+--- `SetPedHeadBlendData` takes THREE form presets, not two - mother, father and a
+--- third, which is how a face can show all three at once. What it does not have
+--- is three independent weights: the engine derives them from two numbers plus a
+--- third blend, so the weights a player asks for have to be converted on the way
+--- in. See `shapeMix` in nifty-world/client/cl_identity.lua, which is the one
+--- place that conversion happens.
+---
+--- The weights are stored as the player set them, 0..1 and unnormalised. Storing
+--- the engine's derived numbers instead would make the database disagree with
+--- every slider on the menu.
+---
+--- `skinTone` is the mix between the two SKIN presets. It is separate from the
+--- three shape weights because the engine gives it its own parameter - with the
+--- third blend, which it shares, as the one unavoidable exception.
+function Validate.headBlend(value)
+  if type(value) ~= 'table' then return nil end
+
+  return {
+    mother = boundedInt(value.mother, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    father = boundedInt(value.father, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+    third  = boundedInt(value.third, 0, AppearanceConfig.MAX_HEADBLEND_PRESET) or 0,
+
+    motherWeight = boundedFloat(value.motherWeight, 0.0, 1.0) or 0.5,
+    fatherWeight = boundedFloat(value.fatherWeight, 0.0, 1.0) or 0.5,
+    thirdWeight  = boundedFloat(value.thirdWeight, 0.0, 1.0) or 0.0,
+
+    skinTone = boundedFloat(value.skinTone, 0.0, 1.0) or 0.5,
+  }
+end
+
 --- Validate a whole appearance object (ADR-0017).
 ---
 --- Returns a *rebuilt* structure rather than the input: only known keys survive,
@@ -122,7 +310,13 @@ end
 --- fields a client sends have no way to persist.
 function Validate.appearance(value)
   if value == nil then
-    return { model = 'mp_m_freemode_01', components = {}, props = {} }
+    return {
+      model = 'mp_m_freemode_01',
+      components = {},
+      props = {},
+      faceFeatures = {},
+      overlays = {},
+    }
   end
   if type(value) ~= 'table' then return nil, 'appearance must be an object' end
 
@@ -156,6 +350,22 @@ function Validate.appearance(value)
       end
     end
   end
+
+  -- Face sliders, overlays and hair colour.
+  --
+  -- These three CANNOT reject the appearance the way components and props do, and
+  -- the difference is worth being explicit about. A component carries a
+  -- collection name, so the server can look the name up in its allowlist and know
+  -- whether that garment exists. A head overlay carries a bare integer index whose
+  -- meaning is decided by the client's game files - the server cannot ask. So these
+  -- are range-checked, not verified: a bound, not a guarantee.
+  result.faceFeatures = Validate.faceFeatures(value.faceFeatures)
+  result.overlays = Validate.headOverlays(value.overlays)
+  result.hairColour = Validate.hairColour(value.hairColour)
+  result.hairOverlay = Validate.hairOverlay(value.hairOverlay)
+  result.eyeColour = Validate.eyeColour(value.eyeColour)
+  result.headBlend = Validate.headBlend(value.headBlend)
+  result.tattoos = Validate.tattoos(value.tattoos)
 
   return result
 end

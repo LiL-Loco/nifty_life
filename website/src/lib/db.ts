@@ -15,14 +15,27 @@ import mysql from 'mysql2/promise';
 
 import { config } from './config';
 
-let pool: mysql.Pool | null = null;
-let adminPool: mysql.Pool | null = null;
+/**
+ * Where the pools live between hot reloads.
+ *
+ * In `next dev` the module is re-evaluated on every file change, so a plain
+ * `let pool = null` at module scope resets to null and `createPool` runs again
+ * — leaving the previous pool with its connections still open. After a few
+ * reloads the MySQL server hits `max_connections` and refuses every new
+ * connection with "Too many connections". Stashing the pool on `globalThis`
+ * makes the handle survive the reload; the underlying TCP connections stay
+ * open for the lifetime of the dev process, which is what we want anyway.
+ */
+const globalForDb = globalThis as unknown as {
+  __nifty_db_pool?: mysql.Pool;
+  __nifty_db_admin_pool?: mysql.Pool;
+};
 
 /** The ordinary pool. Everything a visitor can reach runs on this. */
 export function db(): mysql.Pool {
-  if (pool) return pool;
+  if (globalForDb.__nifty_db_pool) return globalForDb.__nifty_db_pool;
 
-  pool = mysql.createPool({
+  globalForDb.__nifty_db_pool = mysql.createPool({
     host: config.db.host,
     port: config.db.port,
     user: config.db.user,
@@ -42,7 +55,7 @@ export function db(): mysql.Pool {
     multipleStatements: false,
   });
 
-  return pool;
+  return globalForDb.__nifty_db_pool;
 }
 
 /**
@@ -73,9 +86,9 @@ export function adminDb(): mysql.Pool {
     );
   }
 
-  if (adminPool) return adminPool;
+  if (globalForDb.__nifty_db_admin_pool) return globalForDb.__nifty_db_admin_pool;
 
-  adminPool = mysql.createPool({
+  globalForDb.__nifty_db_admin_pool = mysql.createPool({
     host: config.db.host,
     port: config.db.port,
     user,
@@ -88,7 +101,7 @@ export function adminDb(): mysql.Pool {
     multipleStatements: false,
   });
 
-  return adminPool;
+  return globalForDb.__nifty_db_admin_pool;
 }
 
 /** Run a SELECT on the admin connection. */

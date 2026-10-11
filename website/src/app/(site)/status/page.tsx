@@ -8,7 +8,7 @@ import {
   latestApplication,
   type ApplicationStatus,
 } from '@/lib/applications';
-import { Card, Notice, StatusPill, buttonLinkClass } from '@/components/ui';
+import { Alert, Card, StatusPill, buttonVariants } from '@/components/ui';
 
 const LABELS: Record<ApplicationStatus, string> = {
   submitted: 'Eingegangen',
@@ -53,8 +53,8 @@ export default async function StatusPage({
 
   return (
     <>
-      <h1>Deine Bewerbung</h1>
-      <p className="mb-8 text-muted">
+      <h1 className="px-5 sm:px-6">Deine Bewerbung</h1>
+      <p className="mb-8 px-5 text-muted-foreground sm:px-6">
         {account.user.email}
         {account.discord ? (
           <>
@@ -69,35 +69,35 @@ export default async function StatusPage({
       </p>
 
       {params.submitted ? (
-        <Notice tone="ok">
+        <Alert className="border-success/40 bg-success/10 text-success [&>svg]:text-success">
           Bewerbung eingegangen. Ein Mensch wird sie lesen.
-        </Notice>
+        </Alert>
       ) : null}
 
       {ban ? (
-        <Notice tone="error" role="alert">
+        <Alert variant="destructive" role="alert">
           <strong>Auf diesem Konto ist ein aktives Ban hinterlegt.</strong>
           <br />
           {ban.reason ? <span>{ban.reason} - </span> : null}
           {ban.expires_at ? `Läuft ab am ${ban.expires_at}.` : 'Ohne Ablaufdatum.'}
-        </Notice>
+        </Alert>
       ) : null}
 
       {!application ? (
-        <Card>
+        <Card className="mx-5 sm:mx-6">
           <p>Du hast dich noch nicht beworben.</p>
-          <Link className={buttonLinkClass()} href="/apply">
+          <Link className={buttonVariants()} href="/apply">
             Bewerben
           </Link>
         </Card>
       ) : (
         <>
-          <Card>
+          <Card className="mx-5 sm:mx-6">
             <div className="mb-1.5 flex justify-between gap-4 text-sm">
               <strong>Aktuelle Bewerbung</strong>
               <StatusPill tone={application.status}>{LABELS[application.status]}</StatusPill>
             </div>
-            <p className="mb-0 mt-0 text-sm text-muted">
+            <p className="mb-0 text-sm text-muted-foreground">
               {BLURB[application.status]} Eingegangen am {application.submitted_at}.
             </p>
 
@@ -108,22 +108,31 @@ export default async function StatusPage({
             ) : null}
 
             {application.status === 'approved' && !ban ? (
-              <p className="text-sm">
-                Verbinde dich während des Zeitfensters mit{' '}
-                <code>connect 127.0.0.1:30120</code>.
-              </p>
+              <>
+                <p className="text-sm">
+                  Verbinde dich während des Zeitfensters mit{' '}
+                  <code>connect 127.0.0.1:30120</code>.
+                </p>
+                <p className="mb-0 text-sm">
+                  Noch keinen Charakter?{' '}
+                  <Link className="underline" href="/apply/character">
+                    Jetzt Charakter anlegen
+                  </Link>
+                  .
+                </p>
+              </>
             ) : null}
           </Card>
 
           {history.length > 1 ? (
             <>
-              <h2>Frühere Bewerbungen</h2>
+              <h2 className="px-5 sm:px-6">Frühere Bewerbungen</h2>
               {history.slice(1).map((row) => (
-                <Card className="text-sm" key={row.id}>
+                <Card className="text-sm mx-5 sm:mx-6" key={row.id}>
                   <StatusPill tone={row.status}>{LABELS[row.status]}</StatusPill>{' '}
-                  <span className="text-muted">eingegangen am {row.submitted_at}</span>
+                  <span className="text-muted-foreground">eingegangen am {row.submitted_at}</span>
                   {row.decision_note ? (
-                    <div className="text-muted">{row.decision_note}</div>
+                    <div className="text-muted-foreground">{row.decision_note}</div>
                   ) : null}
                 </Card>
               ))}
@@ -132,8 +141,8 @@ export default async function StatusPage({
         </>
       )}
 
-      <h2>Was diese Seite nicht kann</h2>
-      <p className="text-sm text-muted">
+      <h2 className="px-5 sm:px-6">Was diese Seite nicht kann</h2>
+      <p className="px-5 text-sm text-muted-foreground sm:px-6">
         Hier gibt es keinen Knopf, um eine Bewerbung freizugeben - der
         Datenbankzugang dieser Seite besitzt auf keinerlei Tabelle ein UPDATE-Recht.
         Das ist eine Eigenschaft der Rechtevergabe, nicht dieser Oberfläche.

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
 import { discordConfigured } from '@/lib/config';
-import { Card, Notice, buttonLinkClass } from '@/components/ui';
+import { Alert, Card, buttonVariants } from '@/components/ui';
 import ResendButton from './resend-button';
 
 const ERRORS: Record<string, string> = {
@@ -41,21 +41,28 @@ export default async function AccountPage({
 
   return (
     <>
-      <h1>Dein Konto</h1>
+      <h1 className="px-5 sm:px-6">Dein Konto</h1>
 
       {params.linked ? (
-        <Notice tone="ok">
+        <Alert className="border-success/40 bg-success/10 text-success [&>svg]:text-success">
           Discord-Konto verknüpft. Damit kannst du dich bewerben.
-        </Notice>
+        </Alert>
       ) : null}
       {error ? (
-        <Notice tone="error" role="alert">
+        <Alert variant="destructive" role="alert">
           {error}
-        </Notice>
+        </Alert>
       ) : null}
 
-      <Card>
+      <Card className="mx-5 sm:mx-6">
         <dl className="m-0">
+          {user.username ? (
+            <>
+              <dt className={term}>Anzeigename</dt>
+              <dd className={value}>{user.username}</dd>
+            </>
+          ) : null}
+
           <dt className={term}>E-Mail</dt>
           <dd className={value}>{user.email}</dd>
 
@@ -66,7 +73,7 @@ export default async function AccountPage({
             ) : (
               <>
                 nein
-                <div className="mt-3 text-sm text-muted">
+                <div className="mt-3 text-sm text-muted-foreground">
                   Ohne bestätigte Adresse kannst du dich nicht bewerben.
                   <div className="mt-2.5">
                     <ResendButton />
@@ -81,28 +88,30 @@ export default async function AccountPage({
             {discord ? (
               <>
                 {discord.username}{' '}
-                <span className="font-mono text-xs text-muted">{discord.discordId}</span>
-                <div className="mt-1 text-sm text-muted">
+                <span className="font-mono text-xs text-muted-foreground">
+                  {discord.discordId}
+                </span>
+                <div className="mt-1 text-sm text-muted-foreground">
                   verknüpft am {String(discord.linkedAt).slice(0, 16).replace('T', ' ')}
                 </div>
               </>
             ) : (
               <>
                 nicht verknüpft
-                <div className="mt-2 text-sm text-muted">
+                <div className="mt-2 text-sm text-muted-foreground">
                   Die Bewerbung läuft unter einer Discord-Kennung — das ist die
                   Identität, die der Spielserver beim Verbinden prüft.
                 </div>
                 <div className="mt-3">
                   {discordConfigured ? (
                     <Link
-                      className={buttonLinkClass()}
+                      className={buttonVariants()}
                       href="/auth/discord/connect?next=/account"
                     >
                       Discord-Konto verknüpfen
                     </Link>
                   ) : (
-                    <span className="text-sm text-muted">
+                    <span className="text-sm text-muted-foreground">
                       Auf diesem Server ist keine Discord-Anwendung eingerichtet.
                     </span>
                   )}
@@ -113,31 +122,31 @@ export default async function AccountPage({
         </dl>
       </Card>
 
-      <h2>Was du jetzt kannst</h2>
-      <p className="flex flex-wrap gap-3">
+      <h2 className="px-5 sm:px-6">Was du jetzt kannst</h2>
+      <p className="flex flex-wrap gap-3 px-5 sm:px-6">
         <Link
-          className={buttonLinkClass({
+          className={buttonVariants({
             variant: user.emailVerifiedAt && discord ? 'default' : 'secondary',
           })}
           href="/apply"
         >
           Bewerben
         </Link>
-        <Link className={buttonLinkClass({ variant: 'secondary' })} href="/status">
+        <Link className={buttonVariants({ variant: 'secondary' })} href="/status">
           Mein Status
         </Link>
         {isStaff ? (
-          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/admin">
+          <Link className={buttonVariants({ variant: 'secondary' })} href="/admin">
             Team-Bereich
           </Link>
         ) : null}
-        <Link className={buttonLinkClass({ variant: 'secondary' })} href="/auth/logout">
+        <Link className={buttonVariants({ variant: 'secondary' })} href="/auth/logout">
           Abmelden
         </Link>
       </p>
 
       {!user.emailVerifiedAt || !discord ? (
-        <p className="text-sm text-muted">
+        <p className="px-5 text-sm text-muted-foreground sm:px-6">
           Für eine Bewerbung brauchst du beides: eine bestätigte Adresse und ein
           verknüpftes Discord-Konto. Erst dann ist die Bewerbung einem Discord-Konto
           zuordenbar — und nur so kann der Spielserver sie beim Verbinden prüfen.
@@ -147,7 +156,6 @@ export default async function AccountPage({
   );
 }
 
-const term =
-  'mt-4 text-xs uppercase tracking-[0.06em] text-muted';
+const term = 'mt-4 text-xs uppercase tracking-[0.06em] text-muted-foreground';
 
 const value = 'mt-1.5 mb-0';

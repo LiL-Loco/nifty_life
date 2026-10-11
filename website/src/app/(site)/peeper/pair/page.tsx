@@ -4,8 +4,18 @@ import { redirect } from 'next/navigation';
 import { currentAccount } from '@/lib/auth';
 import { discordConfigured } from '@/lib/config';
 import { linkedCharacter, pairingRequests } from '@/lib/identity';
-import { Button, Card, Field, Label, Notice, buttonLinkClass } from '@/components/ui';
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  Input,
+  buttonVariants,
+} from '@/components/ui';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { pair } from './actions';
+
+const SUCCESS_CLASS = 'border-success/40 bg-success/10 text-success [&>svg]:text-success';
 
 export default async function PairPage({
   searchParams,
@@ -22,7 +32,7 @@ export default async function PairPage({
   if (!account.discord) {
     return (
       <Card className="max-w-[32rem]">
-        <h1 className="mt-0">Zuerst Discord verknüpfen</h1>
+        <h1>Zuerst Discord verknüpfen</h1>
         <p>
           Die Verknüpfung bindet genau einen Charakter an dein Discord-Konto. Ohne
           dieses Konto gibt es nichts zu binden.
@@ -30,13 +40,13 @@ export default async function PairPage({
         <p className="flex flex-wrap gap-3">
           {discordConfigured ? (
             <Link
-              className={buttonLinkClass()}
+              className={buttonVariants()}
               href="/auth/discord/connect?next=/peeper/pair"
             >
               Discord-Konto verknüpfen
             </Link>
           ) : null}
-          <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
+          <Link className={buttonVariants({ variant: 'secondary' })} href="/account">
             Zur Kontoseite
           </Link>
         </p>
@@ -53,60 +63,66 @@ export default async function PairPage({
 
   return (
     <>
-      <h1>Charakter verknüpfen</h1>
-      <p className="mb-8 text-muted">
+      <h1 className="px-5 sm:px-6">Charakter verknüpfen</h1>
+      <p className="mb-8 px-5 text-muted-foreground sm:px-6">
         Peeper wird von Charakteren geschrieben. Die Verknüpfung bindet dein
         Discord-Konto an genau einen deiner Charaktere.
       </p>
 
       {params.error ? (
-        <Notice tone="error" role="alert">
+        <Alert variant="destructive" role="alert">
           Dieser Code ist nicht verwendbar.
-        </Notice>
+        </Alert>
       ) : null}
 
       {params.sent ? (
-        <Notice tone="ok">
+        <Alert className={SUCCESS_CLASS}>
           Anfrage gesendet. Der Spielserver bestätigt sie, solange die Welt offen
           ist - Freitag 19:00 bis Sonntag 22:00. Codes laufen nach 15 Minuten ab.
-        </Notice>
+        </Alert>
       ) : null}
 
       {link ? (
-        <Notice tone="ok">
+        <Alert className={SUCCESS_CLASS}>
           Bereits mit dem Charakter{' '}
-          <span className="text-xs">{link.characterId}</span> verknüpft. Ein Konto, ein
-          Charakter - für einen Wechsel bitte in Discord melden.
-        </Notice>
+          <span className="text-xs">{link.characterId}</span> verknüpft. Ein Konto,
+          ein Charakter - für einen Wechsel bitte in Discord melden.
+        </Alert>
       ) : (
         <Card>
-          <ol className="ml-4 list-decimal pl-0.5 text-sm">
-            <li>Verbinde dich mit dem Server.</li>
-            <li>Führe im Spiel den Befehl zur Code-Erzeugung aus.</li>
-            <li>Trage den Code unten ein.</li>
-          </ol>
+          <CardContent>
+            <ol className="my-0 ml-4 list-decimal pl-0.5 text-sm">
+              <li>Verbinde dich mit dem Server.</li>
+              <li>Führe im Spiel den Befehl zur Code-Erzeugung aus.</li>
+              <li>Trage den Code unten ein.</li>
+            </ol>
 
-          <form action={pair}>
-            <Field>
-              <Label htmlFor="code">Verknüpfungscode</Label>
-              <input id="code" name="code" maxLength={16} autoComplete="off" required />
-            </Field>
-            <Button type="submit">Anfrage senden</Button>
-          </form>
+            <form action={pair}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="code">Verknüpfungscode</FieldLabel>
+                  <Input id="code" name="code" maxLength={16} autoComplete="off" required />
+                </Field>
+                <Field>
+                  <Button type="submit">Anfrage senden</Button>
+                </Field>
+              </FieldGroup>
+            </form>
 
-          <p className="mb-0 mt-4 text-sm text-muted">
-            Diese Seite reicht den Code ein und kann ihn nicht selbst bestätigen.
-            Diese Bestätigung gehört dem Spielserver - deshalb besitzt der
-            Datenbankzugang hier auf keiner Tabelle ein UPDATE-Recht. Er könnte
-            sich sonst selbst mit jedem Charakter verknüpfen.
-          </p>
+            <p className="mb-0 mt-4 text-sm text-muted-foreground">
+              Diese Seite reicht den Code ein und kann ihn nicht selbst bestätigen.
+              Diese Bestätigung gehört dem Spielserver - deshalb besitzt der
+              Datenbankzugang hier auf keiner Tabelle ein UPDATE-Recht. Er könnte
+              sich sonst selbst mit jedem Charakter verknüpfen.
+            </p>
+          </CardContent>
         </Card>
       )}
 
       {requests.length > 0 ? (
         <>
           <h2>Aktuelle Anfragen</h2>
-          <ul className="text-sm text-muted">
+          <ul className="text-sm text-muted-foreground">
             {requests.map((row) => (
               <li key={row.id}>gesendet am {row.created_at}</li>
             ))}

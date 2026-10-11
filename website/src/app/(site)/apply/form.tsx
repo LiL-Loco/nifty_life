@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useActionState, useCallback, useEffect, useRef, useState } from 'react';
 
 import { RULEBOOK_QUESTIONS, RULEBOOK_SECTIONS, RULEBOOK_URL } from '@/lib/rulebook';
-import { Button, Card, Notice } from '@/components/ui';
+import { Alert, Button, Card, Textarea } from '@/components/ui';
 import { submit, type ApplyState } from './actions';
 
 /** Mirrors LIMITS.answerMin in src/lib/applications.ts. */
@@ -172,18 +172,18 @@ export default function ApplicationWizard() {
           browser keeps what was typed when the applicant steps back. */}
       <form action={action}>
         {state?.error ? (
-          <Notice tone="error" role="alert">
+          <Alert variant="destructive" role="alert">
             {state.error}
-          </Notice>
+          </Alert>
         ) : null}
         {stepError ? (
-          <Notice tone="error" role="alert">
+          <Alert variant="destructive" role="alert">
             {stepError}
-          </Notice>
+          </Alert>
         ) : null}
 
         {restored && step === 0 ? (
-          <Notice>
+          <Alert>
             Deine Antworten sind gespeichert. Du machst dort weiter, wo du
             aufgehört hast.
             <Button
@@ -194,7 +194,7 @@ export default function ApplicationWizard() {
             >
               Alles verwerfen
             </Button>
-          </Notice>
+          </Alert>
         ) : null}
 
         {question ? (
@@ -213,7 +213,7 @@ export default function ApplicationWizard() {
               autoFocus
             />
 
-            <p className="mt-2 mb-0 text-sm text-muted">
+            <p className="mt-2 mb-0 text-sm text-muted-foreground">
               Frage {step + 1} von {RULEBOOK_QUESTIONS.length} ·{' '}
               {(answers[question.id] ?? '').trim().length < ANSWER_MIN ? (
                 <>noch {ANSWER_MIN - (answers[question.id] ?? '').trim().length} Zeichen</>
@@ -226,7 +226,7 @@ export default function ApplicationWizard() {
 
         {step === RULEBOOK_STEP ? (
           <Step title="Regelwerk" hint="Lies es einmal komplett, dann bestätige es." wide>
-            <Card className="bg-ground">
+            <Card className="bg-background">
               <p className="text-sm">
                 Das vollständige Regelwerk liegt als Google-Dokument vor:{' '}
                 <a href={RULEBOOK_URL} target="_blank" rel="noreferrer noopener">
@@ -235,8 +235,8 @@ export default function ApplicationWizard() {
                 .
               </p>
 
-              <p className="text-sm text-muted">Es besteht aus:</p>
-              <ul className="text-sm text-muted">
+              <p className="text-sm text-muted-foreground">Es besteht aus:</p>
+              <ul className="text-sm text-muted-foreground">
                 {RULEBOOK_SECTIONS.map((section) => (
                   <li key={section.ref}>
                     <strong>{section.ref}</strong> {section.title}
@@ -260,7 +260,7 @@ export default function ApplicationWizard() {
 
         {step === REVIEW_STEP ? (
           <Step title="Prüfen und abschicken" hint="So wird deine Bewerbung gespeichert." wide>
-            <p className="mt-0 text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               {answered === RULEBOOK_QUESTIONS.length
                 ? 'Alle 20 Fragen beantwortet.'
                 : `Noch ${RULEBOOK_QUESTIONS.length - answered} von ${RULEBOOK_QUESTIONS.length} Fragen unbeantwortet oder zu kurz.`}
@@ -302,7 +302,7 @@ export default function ApplicationWizard() {
               </label>
             ) : null}
 
-            <p className="mt-4 text-sm text-muted">
+            <p className="mt-4 text-sm text-muted-foreground">
               Eine Bewerbung kann nur einmal eingereicht werden — danach entscheidet
               ein Mensch in Discord, und zwar endgültig.
             </p>
@@ -327,7 +327,7 @@ export default function ApplicationWizard() {
           )}
         </div>
 
-        <p className="mt-4 text-sm text-muted">
+        <p className="mt-4 text-sm text-muted-foreground">
           Den <Link href="/status">Status</Link> deiner Bewerbung kannst du jederzeit
           abrufen.
         </p>
@@ -365,7 +365,7 @@ function NoPasteTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   }, []);
 
   return (
-    <textarea
+    <Textarea
       {...props}
       ref={ref}
       onPaste={block}
@@ -378,11 +378,11 @@ function NoPasteTextarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
 
 function Progress({ current, total }: { current: number; total: number }) {
   return (
-    <div className="mb-6 text-sm text-muted">
+    <div className="mb-6 text-sm text-muted-foreground">
       Schritt {current + 1} von {total}
-      <div className="mt-2 h-[3px] rounded-[2px] bg-line">
+      <div className="mt-2 h-[3px] rounded-[2px] bg-muted">
         <div
-          className="h-[3px] rounded-[2px] bg-accent"
+          className="h-[3px] rounded-[2px] bg-primary"
           style={{ width: `${((current + 1) / total) * 100}%` }}
         />
       </div>
@@ -404,7 +404,7 @@ function Step({
   return (
     <Card>
       <h2 className="mt-0">{title}</h2>
-      {hint ? <p className="-mt-1.5 text-sm text-muted">{hint}</p> : null}
+      {hint ? <p className="-mt-1.5 text-sm text-muted-foreground">{hint}</p> : null}
       <div className={wide ? undefined : 'max-w-[28rem]'}>{children}</div>
     </Card>
   );
@@ -421,10 +421,10 @@ function Review({
 }) {
   return (
     <>
-      <dt className="mt-3 text-muted">{label}</dt>
+      <dt className="mt-3 text-muted-foreground">{label}</dt>
       <dd
         className={
-          bad ? 'm-0 whitespace-pre-wrap text-danger' : 'm-0 whitespace-pre-wrap'
+          bad ? 'm-0 whitespace-pre-wrap text-destructive' : 'm-0 whitespace-pre-wrap'
         }
       >
         {children}

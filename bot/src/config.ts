@@ -84,7 +84,7 @@ export function loadConfig(): BotConfig {
   }
 
   const rawAdminUrl = (process.env.WEB_ADMIN_URL ?? '').trim();
-  if (rawAdminUrl && !/^https?:\/\/[^\s]+$/.test(rawAdminUrl)) {
+  if (rawAdminUrl && !/^http?:\/\/[^\s]+$/.test(rawAdminUrl)) {
     throw new Error(`WEB_ADMIN_URL is not a valid http(s) URL: ${rawAdminUrl}`);
   }
 

@@ -2,7 +2,16 @@ import Link from 'next/link';
 
 import { queue, queueCounts } from '@/lib/admin';
 import type { ApplicationStatus } from '@/lib/applications';
-import { Card, Td, Th, buttonLinkClass } from '@/components/ui';
+import {
+  Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  buttonVariants,
+} from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,9 +56,14 @@ export default async function AdminQueue({
 
   return (
     <>
-      <h1>Bewerbungen</h1>
+      <h1 className="px-5 sm:px-6">Bewerbungen</h1>
+      <p className="mb-8 px-5 text-muted-foreground sm:px-6">
+        {entries.length === 0
+          ? 'Keine offenen Bewerbungen.'
+          : `${entries.length} ${entries.length === 1 ? 'Bewerbung' : 'Bewerbungen'} in dieser Ansicht.`}
+      </p>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex flex-wrap gap-2 px-5 sm:px-6">
         {FILTERS.map((filter) => {
           const key = filter ?? 'all';
           const label = filter === null ? 'alle' : LABELS[filter];
@@ -58,7 +72,7 @@ export default async function AdminQueue({
             <Link
               key={key}
               href={filter === null ? '/admin' : `/admin?status=${filter}`}
-              className={buttonLinkClass({
+              className={buttonVariants({
                 variant: filter === active ? 'default' : 'secondary',
                 size: 'sm',
               })}
@@ -71,51 +85,53 @@ export default async function AdminQueue({
       </div>
 
       {entries.length === 0 ? (
-        <Card>
-          <p className="mb-0 text-sm text-muted">Keine Bewerbungen in dieser Ansicht.</p>
+        <Card className="mx-5 sm:mx-6">
+          <p className="text-sm text-muted-foreground">
+            Keine Bewerbungen in dieser Ansicht.
+          </p>
         </Card>
       ) : (
-        <Card padding="flush">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <Th>Eingegangen</Th>
-                <Th>E-Mail</Th>
-                <Th>Discord</Th>
-                <Th>Status</Th>
-                <Th>Entschieden</Th>
-                <Th />
-              </tr>
-            </thead>
-            <tbody>
+        <Card className="overflow-hidden p-0 mx-5 sm:mx-6">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Eingegangen</TableHead>
+                <TableHead>E-Mail</TableHead>
+                <TableHead>Discord</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Entschieden</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {entries.map((entry) => (
-                <tr key={entry.id}>
-                  <Td>{formatDate(entry.submitted_at)}</Td>
-                  <Td>
+                <TableRow key={entry.id}>
+                  <TableCell>{formatDate(entry.submitted_at)}</TableCell>
+                  <TableCell>
                     {entry.email ?? (
                       // The one application that predates portal accounts. Said
                       // out loud rather than left blank, so nobody reads the
                       // empty cell as a bug.
-                      <span className="text-sm text-muted">kein Portal-Konto</span>
+                      <span className="text-sm text-muted-foreground">kein Portal-Konto</span>
                     )}
-                  </Td>
-                  <Td className="font-mono">{entry.discord_id}</Td>
-                  <Td>{LABELS[entry.status] ?? entry.status}</Td>
-                  <Td className="text-muted">
+                  </TableCell>
+                  <TableCell className="font-mono">{entry.discord_id}</TableCell>
+                  <TableCell>{LABELS[entry.status] ?? entry.status}</TableCell>
+                  <TableCell className="text-muted-foreground">
                     {formatDate(entry.reviewed_at)}
                     {entry.reviewed_by_discord_id ? (
                       <span className="block text-[0.8em]">
                         von {entry.reviewed_by_discord_id}
                       </span>
                     ) : null}
-                  </Td>
-                  <Td className="text-right">
+                  </TableCell>
+                  <TableCell className="text-right">
                     <Link href={`/admin/${entry.id}`}>ansehen</Link>
-                  </Td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </Card>
       )}
     </>

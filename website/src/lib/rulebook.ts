@@ -22,7 +22,7 @@
  */
 
 export const RULEBOOK_URL =
-  'https://docs.google.com/document/d/16AfnoT8c_Bs2nfCyoRV3CjwChOWL0tdPjcV-b0g3G0Y/edit';
+  'http://docs.google.com/document/d/16AfnoT8c_Bs2nfCyoRV3CjwChOWL0tdPjcV-b0g3G0Y/edit';
 
 export const RULEBOOK_SECTIONS: { ref: string; title: string }[] = [
   { ref: '§1', title: 'Allgemeines' },

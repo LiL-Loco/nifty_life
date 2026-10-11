@@ -1,12 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
 import { registerAction } from '@/lib/account-actions';
 import { mailConfigured } from '@/lib/mailer';
-import { Card } from '@/components/ui';
-import AuthForm from '../login/form';
+import { LoginForm } from '@/components/login-form';
 
 export const metadata: Metadata = { title: 'Registrieren — Nifty Life 2.0' };
 
@@ -25,25 +23,15 @@ export default async function RegisterPage() {
   if (await currentAccount()) redirect('/account');
 
   return (
-    <Card className="max-w-[26rem]">
-      <h1 className="mt-0">Registrieren</h1>
-
-      <p className="mt-0 text-sm text-muted">
-        Das Konto gehört dir. Bewerben kannst du dich danach, und dafür brauchst du
-        zusätzlich ein verknüpftes Discord-Konto.
-      </p>
-
-      <AuthForm action={registerAction} submitLabel="Konto anlegen" showRepeat />
-
-      <p className="mt-6 text-sm text-muted">
-        {mailConfigured()
-          ? 'Wir schicken dir danach einen Link, mit dem du deine Adresse bestätigst.'
-          : 'Hinweis: Auf diesem Server ist derzeit kein E-Mail-Versand eingerichtet, das Konto wird aber trotzdem angelegt.'}
-      </p>
-
-      <p className="text-sm text-muted">
-        Schon ein Konto? <Link href="/login">Hier anmelden</Link>
-      </p>
-    </Card>
+    <div className="flex min-h-svh w-full items-start justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <LoginForm action={registerAction} mode="register" />
+        <p className="text-muted-foreground mt-4 text-center text-sm">
+          {mailConfigured()
+            ? 'Wir schicken dir danach einen Link, mit dem du deine Adresse bestätigst.'
+            : 'Hinweis: Auf diesem Server ist derzeit kein E-Mail-Versand eingerichtet, das Konto wird aber trotzdem angelegt.'}
+        </p>
+      </div>
+    </div>
   );
 }
