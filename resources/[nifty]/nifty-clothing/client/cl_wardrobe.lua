@@ -177,10 +177,25 @@ local function buildSlotItemMenu(kind, slot, items)
 
   -- The "Ablegen" action drops this slot. For a component that's an empty
   -- object; for a prop it's index -1 (the engine treats that as no prop).
+  -- For an accessory, the inventory mirror STAYS - only the "Hinwerfen"
+  -- action below actually removes both at once.
   Menu:button(menu, 'Ablegen', {
     description = ('Dieses Teil ausziehen (Slot leer lassen).'),
     onSelect = function() unequipPiece(kind, slot) end,
   })
+
+  -- Drop is the path that fully discards an accessory: unequips + removes
+  -- the inventory row. Only show on slots that have an inventory mirror
+  -- to drop (the accessory slots).
+  local isAccessory = isAccessorySlot(kind, slot)
+  if isAccessory then
+    Menu:button(menu, 'Hinwerfen (wegwerfen)', {
+      description = ('Ausziehen UND das Inventar-Item loswerden. '
+                  .. 'Das Item ist hinterher weg - benutze "Ablegen", '
+                  .. 'wenn du es behalten willst.'),
+      onSelect = function() dropAccessory(kind, slot) end,
+    })
+  end
 
   Menu:button(menu, 'Zurueck', {
     onSelect = function() Menu:closeMenu(RESOURCE, 'back') end,
@@ -192,6 +207,36 @@ end
 -- ----------------------------------------------------------------------------
 -- Equip / unequip
 -- ----------------------------------------------------------------------------
+
+local ACCESSORY_SLOTS = {
+  component = { [1] = true },
+  prop      = { [0] = true, [1] = true, [2] = true, [6] = true, [7] = true },
+}
+
+local function isAccessorySlot(kind, slot)
+  local byKind = ACCESSORY_SLOTS[kind]
+  if not byKind then return false end
+  return byKind[slot] == true
+end
+
+local function dropAccessory(kind, slot)
+  -- Tell the server to unequip the slot AND remove the matching
+  -- inventory item. The server's `equippedDrop` handler does both.
+  TriggerServerEvent('nifty:server:equippedDrop', {
+    kind = kind, slot_id = slot,
+  })
+
+  local listener
+  listener = RegisterNetEvent('nifty:client:equippedDrop', function(data)
+    RemoveEventHandler(listener)
+    if data and data.ok then
+      notify(('Weggeworfen: ' .. labelFor(kind, slot)))
+      Menu:closeMenu(RESOURCE, 'dropped')
+    else
+      notify(('Wegwerfen fehlgeschlagen: ' .. tostring(data and data.reason or 'unbekannt')))
+    end
+  end)
+end
 
 local function equipPiece(kind, slot, item)
   local a = snapshotCurrent()

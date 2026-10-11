@@ -30,6 +30,156 @@ local function resolvePrice(kind, slot_id, drawable, texture, collection)
 end
 
 -- ----------------------------------------------------------------------------
+-- Accessory auto-item
+--
+-- For accessory slots (mask, hat, glasses, earring, ring/bracelet, watch)
+-- equipping creates an inventory item with metadata identifying the piece.
+-- The item stays on the ped - "Ablegen" only clears the slot, the inventory
+-- row is untouched. Drop / give is the only path that removes it.
+--
+-- The slot -> item_code map mirrors migration 029. Halsketten (necklace)
+-- has no free-mode slot and is intentionally not represented.
+-- ----------------------------------------------------------------------------
+
+local ACCESSORY_CODE = {
+  component = {
+    [1] = 'clothing_mask',
+  },
+  prop = {
+    [0] = 'clothing_hat',
+    [1] = 'clothing_glasses',
+    [2] = 'clothing_earring',
+    [6] = 'clothing_ring',
+    [7] = 'clothing_watch',
+  },
+}
+
+local function accessoryCodeFor(kind, slot_id)
+  local byKind = ACCESSORY_CODE[kind]
+  if not byKind then return nil end
+  return byKind[slot_id]
+end
+
+local function accessoryMetadata(kind, slot_id, collection, drawable, texture)
+  return {
+    kind       = kind,
+    slot_id    = tonumber(slot_id) or slot_id,
+    collection = collection,
+    drawable   = tonumber(drawable) or drawable,
+    texture    = tonumber(texture)  or texture,
+  }
+end
+
+-- Find an inventory row that matches a specific accessory piece.
+-- Returns the row's id, or nil. The accessory item family is unique by
+-- (kind, slot, collection, drawable, texture); this finds the row to drop.
+local function findAccessoryItemRow(characterId, kind, slot_id, collection, drawable, texture)
+  if not Inventory or not Inventory.view then return nil end
+  local code = accessoryCodeFor(kind, slot_id)
+  if not code then return nil end
+
+  local meta = accessoryMetadata(kind, slot_id, collection, drawable, texture)
+  local encoded
+  local ok, enc = pcall(json.encode, meta)
+  if ok then encoded = enc end
+
+  local view = Inventory.view(characterId)
+  for _, it in ipairs(view.items or {}) do
+    if it.code == code and type(it.metadata) == 'table' then
+      if not encoded then return nil end
+      local okEnc, e2 = pcall(json.encode, it.metadata)
+      if okEnc and e2 == encoded then return it.id end
+    end
+  end
+  return nil
+end
+
+-- Local helper; the lower-cased name flagged by lint is deliberate - it
+-- matches the pattern used by Owner/grants throughout the file's history
+-- (see ensure-greeted-vs-function-of-the-same-name). Marked `local` so the
+-- warning is silenced.
+local ensureAccessoryItem
+ensureAccessoryItem = function(characterId, kind, slot_id, collection, drawable, texture)
+  if not characterId or not kind or not slot_id then return end
+  local code = accessoryCodeFor(kind, slot_id)
+  if not code then return end
+
+  if findAccessoryItemRow(characterId, kind, slot_id, collection, drawable, texture) then
+    return
+  end
+
+  local ok, err = Inventory.add(characterId, code, 1,
+                                accessoryMetadata(kind, slot_id, collection, drawable, texture))
+  if not ok then
+    -- Most likely 'too heavy' on a fresh character. The wardrobe still
+    -- works because the piece is owned; the player just has no inventory
+    -- mirror for it. Don't surface this to the client - it's a soft fail.
+    print(('[%s] could not auto-create accessory item for %s: %s'):format(
+      RESOURCE, tostring(characterId), tostring(err)))
+  end
+end
+
+-- ----------------------------------------------------------------------------
+-- Bulk accessory ensuring (creator finish path)
+--
+-- nifty-world's finishAppearance triggers `nifty:server:clothingEnsureAccessories`
+-- with the freshly-saved appearance. We iterate each slot and create an
+-- inventory row for every accessory piece the player is now wearing.
+-- Doing this server-side on a single event rather than per-grant keeps the
+-- dependency direction one-way (nifty-world does not import nifty-clothing).
+-- ----------------------------------------------------------------------------
+AddEventHandler('nifty:server:clothingEnsureAccessories', function(characterId, appearance)
+  if not characterId or type(appearance) ~= 'table' then return end
+
+  for slotId, slot in pairs(appearance.components or {}) do
+    if type(slot) == 'table' then
+      local sid = tonumber(slotId)
+      if sid and slot.collection and slot.drawable and slot.texture then
+        ensureAccessoryItem(characterId, 'component', sid,
+                            slot.collection, slot.drawable, slot.texture)
+      end
+    end
+  end
+
+  for slotId, slot in pairs(appearance.props or {}) do
+    if type(slot) == 'table' then
+      local sid = tonumber(slotId)
+      if sid and slot.collection and slot.drawable and slot.texture then
+        ensureAccessoryItem(characterId, 'prop', sid,
+                            slot.collection, slot.drawable, slot.texture)
+      end
+    end
+  end
+end)
+
+--- Ensure an accessory slot's inventory item exists.
+---
+--- Adds the inventory row only if no matching row exists already (one
+-- per (kind, slot, collection, drawable, texture)). A failure (heavy, full
+-- bag) is logged but does not propagate - the player can still wear the
+-- piece; they just do not have the inventory mirror for it.
+local function ensureAccessoryItem(characterId, kind, slot_id, collection, drawable, texture)
+  if not characterId or not kind or not slot_id then return end
+  local code = accessoryCodeFor(kind, slot_id)
+  if not code then return end
+
+  -- Already there? skip.
+  if findAccessoryItemRow(characterId, kind, slot_id, collection, drawable, texture) then
+    return
+  end
+
+  local ok, err = Inventory.add(characterId, code, 1,
+                                accessoryMetadata(kind, slot_id, collection, drawable, texture))
+  if not ok then
+    -- Most likely 'too heavy' on a fresh character. The wardrobe still
+    -- works because the piece is owned; the player just has no inventory
+    -- item to drop. Don't surface this to the client - it's a soft fail.
+    print(('[%s] could not auto-create accessory item for %s: %s'):format(
+      RESOURCE, tostring(characterId), tostring(err)))
+  end
+end
+
+-- ----------------------------------------------------------------------------
 -- Inventory bridge
 -- ----------------------------------------------------------------------------
 
@@ -266,6 +416,12 @@ RegisterNetEvent('nifty:server:clothingPurchase', function(payload)
   -- debit is reversed (the Owned.has check above is the gate in practice).
   Owned.grant(cid, kind, slot_id, collection, drawable, texture, 'purchase')
 
+  -- For accessory slots the inventory mirror is created in the same
+  -- transaction concept: the player just paid for a hat, they can hold
+  -- it in their bag. A soft fail (full inventory) is logged inside the
+  -- helper and does not abort the sale.
+  ensureAccessoryItem(cid, kind, slot_id, collection, drawable, texture)
+
   TriggerClientEvent('nifty:client:clothingPurchase', src, {
     ok = true,
     kind = kind, slot_id = slot_id, collection = collection,
@@ -294,6 +450,29 @@ RegisterNetEvent('nifty:server:clothingEquip', function(payload)
   if not Identity.saveCharacter(src, { appearance = payload.appearance }) then
     TriggerClientEvent('nifty:client:clothingEquip', src, { ok = false })
     return
+  end
+
+  -- After a successful equip, ensure every accessory slot has its
+  -- inventory mirror. A wardrobe-driven equip may have arrived at a
+  -- slot that was granted by the creator pre-inventory - the mirror was
+  -- never created if the bag was full at creator time.
+  for slotId, slot in pairs(payload.appearance.components or {}) do
+    if type(slot) == 'table' then
+      local sid = tonumber(slotId)
+      if sid and slot.drawable and slot.texture then
+        ensureAccessoryItem(cid, 'component', sid,
+                            slot.collection, slot.drawable, slot.texture)
+      end
+    end
+  end
+  for slotId, slot in pairs(payload.appearance.props or {}) do
+    if type(slot) == 'table' then
+      local sid = tonumber(slotId)
+      if sid and slot.drawable and slot.texture then
+        ensureAccessoryItem(cid, 'prop', sid,
+                            slot.collection, slot.drawable, slot.texture)
+      end
+    end
   end
 
   TriggerClientEvent('nifty:client:clothingEquip', src, { ok = true })
@@ -425,6 +604,76 @@ RegisterNetEvent('nifty:server:outfitPack', function(payload)
 
   TriggerClientEvent('nifty:client:outfitPack', src,
                      { ok = true, outfitId = payload.outfitId })
+end)
+
+-- Drop while wearing.
+--
+-- The user has the equipped accessory in their inventory and chooses to
+-- discard / give / drop it. The ped must come off the equipped piece AND
+-- the inventory row must be removed. This is the only path that removes
+-- the inventory item - the wardrobe's 'Ablegen' leaves it untouched.
+--
+-- We do not currently implement world-prop spawning or player-to-player
+-- trade; this endpoint is the missing-piece companion for those flows.
+-- The currently-equipped piece's (collection, drawable, texture) is the
+-- one to remove.
+RegisterNetEvent('nifty:server:equippedDrop', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  if not allowBurst(src) then return end
+
+  local kind = payload.kind
+  local slot_id = tonumber(payload.slot_id)
+  if kind ~= 'component' and kind ~= 'prop' then return end
+  if type(slot_id) ~= 'number' then return end
+
+  local cid = characterOf(src)
+  if not cid then return end
+
+  -- Read the player's CURRENT appearance to find the (collection, drawable,
+  -- texture) of the equipped piece. The character table is the source of
+  -- truth for "what's on the ped right now".
+  local account = Identity.resolveAccount(src)
+  if not account then return end
+  local character = Identity.getCharacter(account.id)
+  if not character or not character.appearance then return end
+
+  local ok, appDecoded = pcall(json.decode, character.appearance)
+  if not ok or type(appDecoded) ~= 'table' then return end
+
+  local bucket = (kind == 'component') and appDecoded.components or appDecoded.props
+  local entry = bucket and bucket[tostring(slot_id)]
+  if type(entry) ~= 'table' then return end
+
+  -- Remove the equipped piece from the appearance. Components go to an
+  -- empty stub (drawable 0, texture 0) - the engine treats this as "no
+  -- component"; props go to a stub of drawable -1 (the engine's "no
+  -- prop" sentinel). Mirrors what the wardrobe's Ablegen does.
+  bucket[tostring(slot_id)] = nil
+
+  -- Validate the resulting appearance and write it.
+  local validated, err = Validate.appearance(appDecoded)
+  if not validated then
+    TriggerClientEvent('nifty:client:equippedDrop', src, { ok = false, reason = err })
+    return
+  end
+
+  if not Identity.saveCharacter(src, { appearance = validated }) then
+    TriggerClientEvent('nifty:client:equippedDrop', src, { ok = false, reason = 'save_failed' })
+    return
+  end
+
+  -- Find and remove the matching inventory item. The ped-side and bag-side
+  -- did their dance; the drop ends here.
+  local itemId = findAccessoryItemRow(cid, kind, slot_id,
+                                      entry.collection, entry.drawable, entry.texture)
+  if itemId then
+    Inventory.remove(cid, accessoryCodeFor(kind, slot_id), 1, itemId)
+  end
+
+  TriggerClientEvent('nifty:client:equippedDrop', src, {
+    ok = true, kind = kind, slot_id = slot_id,
+  })
 end)
 
 -- Use-handler trigger. The client calls use() on the inventory row when

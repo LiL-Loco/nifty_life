@@ -297,6 +297,13 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
       'Das Aussehen konnte nicht gespeichert werden. Bitte erneut versuchen.')
   end
 
+  -- Side-effect: nifty-clothing listens for this and creates an inventory
+  -- mirror for every accessory slot (mask, hat, glasses, etc.). One event
+  -- keeps the dependency direction one-way: nifty-world does not import
+  -- nifty-clothing, but it can fire a NetEvent that nifty-clothing
+  -- handles whenever it likes.
+  TriggerEvent('nifty:server:clothingEnsureAccessories', character.id, appearance)
+
   -- Now that the save is in stone, treat every selected piece as owned. The
   -- creator grants the outfit (per-drawable rows in `character_clothing`),
   -- so the wardrobe can offer them back later and the store can skip them.
