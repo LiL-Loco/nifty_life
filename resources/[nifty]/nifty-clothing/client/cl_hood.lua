@@ -1,34 +1,36 @@
---- Hood up / hood down.
----
---- PORTED FROM root-cause/ragemp-hood-up (MIT licence). The original is two
---- JavaScript files for RAGE MP and does not run here at all: RAGE MP's server
---- can set clothes on a player directly, FiveM cannot, so its whole shape - the
---- client asks the server, the server calls `player.setClothes` - has to be
---- inverted. In FiveM the ped is only ever touched on the client, and the server
---- is told afterwards so the change survives a relog.
----
---- WHAT IT DOES
---- Press the key. If your top is a hoodie that is not a "tucked" variant, it is
---- swapped for the same hoodie in the other hood state. If a hat or a mask would
---- clip through a raised hood, it refuses and says why.
----
---- WHERE THIS DEPARTS FROM THE REFERENCE, AND WHY
----
---- 1. The variant drawable index comes from GET_VARIANT_COMPONENT, not from
----    GET_SHOP_PED_COMPONENT. The reference reads drawable and texture out of a
----    136-byte struct that native fills. Cfx Lua can only hand a native a
----    four-byte pointer (Citizen.PointerValueInt), so that struct is simply not
----    readable from Lua - the port has no way to do what the reference does, and
----    GET_VARIANT_COMPONENT returns the same drawable index directly.
----
---- 2. The reference works in GLOBAL freemode indices. This project stores
----    clothing per collection (ADR-0017), so the swap keeps the current top's
----    collection and only replaces drawable and texture. The consequence is that
----    a variant index is applied into whichever collection the player is already
----    wearing, which is correct for the base collection and unproven for a DLC
----    one. The first in-game run reports what actually happened - see the
----    diagnostic net event at the bottom of this file - and the collection
----    handling is the thing to check in it.
+--[[
+  Hood up / hood down.
+
+  PORTED FROM root-cause/ragemp-hood-up (MIT licence). The original is two
+  JavaScript files for RAGE MP and does not run here at all: RAGE MP's server
+  can set clothes on a player directly, FiveM cannot, so its whole shape - the
+  client asks the server, the server calls `player.setClothes` - has to be
+  inverted. In FiveM the ped is only ever touched on the client, and the server
+  is told afterwards so the change survives a relog.
+
+  WHAT IT DOES
+  Press the key. If your top is a hoodie that is not a "tucked" variant, it is
+  swapped for the same hoodie in the other hood state. If a hat or a mask would
+  clip through a raised hood, it refuses and says why.
+
+  WHERE THIS DEPARTS FROM THE REFERENCE, AND WHY
+
+  1. The variant drawable index comes from GET_VARIANT_COMPONENT, not from
+     GET_SHOP_PED_COMPONENT. The reference reads drawable and texture out of a
+     136-byte struct that native fills. Cfx Lua can only hand a native a
+     four-byte pointer (Citizen.PointerValueInt), so that struct is simply not
+     readable from Lua - the port has no way to do what the reference does, and
+     GET_VARIANT_COMPONENT returns the same drawable index directly.
+
+  2. The reference works in GLOBAL freemode indices. This project stores
+     clothing per collection (ADR-0017), so the swap keeps the current top's
+     collection and only replaces drawable and texture. The consequence is that
+     a variant index is applied into whichever collection the player is already
+     wearing, which is correct for the base collection and unproven for a DLC
+     one. The first in-game run reports what actually happened - see the
+     diagnostic net event at the bottom of this file - and the collection
+     handling is the thing to check in it.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 local N = Clothing.NATIVES

@@ -1,22 +1,24 @@
---- Chat — the client half.
----
---- This file owns ONE thing that nothing else in the resource may touch while it is
---- true: the game's keyboard and cursor.
----
---- It does NOT own focus outright. `SetNuiFocus` is a single global client native,
---- and after the resource split there are ten surfaces in this project that want the
---- keyboard — chat, creator, phone, panels. If each of them called the native
---- itself, last writer wins and the player types into a window they are not looking
---- at. So focus is ARBITRATED by nifty-ui (ADR-0018 made the phone the second
---- surface; the split made it the tenth) and this file only asks.
----
---- The rules that fall out of asking rather than taking:
----   - The chat input refuses to open while another surface holds focus.
----   - Another surface opening closes this one, via `focusAcquire`'s failure.
----   - Every exit path releases, through one function, including resource stop.
----
---- The chat LOG is the exception: it is always visible and never holds focus. A
---- chat you cannot read while walking is not a chat.
+--[[
+  Chat — the client half.
+
+  This file owns ONE thing that nothing else in the resource may touch while it is
+  true: the game's keyboard and cursor.
+
+  It does NOT own focus outright. `SetNuiFocus` is a single global client native,
+  and after the resource split there are ten surfaces in this project that want the
+  keyboard — chat, creator, phone, panels. If each of them called the native
+  itself, last writer wins and the player types into a window they are not looking
+  at. So focus is ARBITRATED by nifty-ui (ADR-0018 made the phone the second
+  surface; the split made it the tenth) and this file only asks.
+
+  The rules that fall out of asking rather than taking:
+    - The chat input refuses to open while another surface holds focus.
+    - Another surface opening closes this one, via `focusAcquire`'s failure.
+    - Every exit path releases, through one function, including resource stop.
+
+  The chat LOG is the exception: it is always visible and never holds focus. A
+  chat you cannot read while walking is not a chat.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

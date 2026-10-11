@@ -1,26 +1,28 @@
---- The menu framework — client half.
----
---- ONE menu surface for the whole server. `nifty-ui` owns the `ui_page` that draws
---- menus, and therefore also owns the keyboard while one is open. Two resources
---- each drawing their own menus would put two CEF browsers behind one global
---- `SetNuiFocus`, and last writer wins — the player would be steering a menu they
---- cannot see. So the menu is not a component every resource instantiates; it is
---- a single surface this resource lends out.
----
---- WHAT THIS FILE DECIDES: whether a menu is open, which menu, and whether the
---- keyboard may move. Nothing else. Every item in a menu carries a callback that
---- was supplied by the RESOURCE that built it — the menu never decides what any of
---- those callbacks mean, and a value a player changed in a slider is untrusted the
---- moment it leaves here.
----
---- A menu is a plain description, not a live object. Building one produces a table:
----
----     { title = 'Character erstellen', items = { { kind = 'slider', ... } } }
----
---- and it is that table which is sent to the page and back. No functions survive the
---- crossing, which is the point: the page can redraw the menu, a submenu can be
---- restored after a focus change, and nothing the browser does can become a Lua
---- call it was not given.
+--[[
+  The menu framework — client half.
+
+  ONE menu surface for the whole server. `nifty-ui` owns the `ui_page` that draws
+  menus, and therefore also owns the keyboard while one is open. Two resources
+  each drawing their own menus would put two CEF browsers behind one global
+  `SetNuiFocus`, and last writer wins — the player would be steering a menu they
+  cannot see. So the menu is not a component every resource instantiates; it is
+  a single surface this resource lends out.
+
+  WHAT THIS FILE DECIDES: whether a menu is open, which menu, and whether the
+  keyboard may move. Nothing else. Every item in a menu carries a callback that
+  was supplied by the RESOURCE that built it — the menu never decides what any of
+  those callbacks mean, and a value a player changed in a slider is untrusted the
+  moment it leaves here.
+
+  A menu is a plain description, not a live object. Building one produces a table:
+
+      { title = 'Character erstellen', items = { { kind = 'slider', ... } } }
+
+  and it is that table which is sent to the page and back. No functions survive the
+  crossing, which is the point: the page can redraw the menu, a submenu can be
+  restored after a focus change, and nothing the browser does can become a Lua
+  call it was not given.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

@@ -1,26 +1,28 @@
---- Character creator (ADR-0017, ADR-0023).
----
---- Appearance only. Name, gender, date of birth and birthplace are entered on the
---- WEBSITE through create_character_from_web (migration 021) - the character row
---- already exists by the time this opens. `appearance IS NULL` is what said the
---- creator was needed.
----
---- THE INTERFACE IS THE MENU FRAMEWORK. This resource has no `ui_page` and draws
---- nothing of its own; it borrows the single menu surface from `nifty-ui` through
---- exports. Two reasons, and both are load-bearing:
----
----   * One CEF browser, one focus owner. A second `ui_page` here would put two
----     browsers behind one global `SetNuiFocus` and the player would steer a menu
----     they cannot see.
----   * The menu docks to the RIGHT of the screen, which leaves the middle free. A
----     native GTA menu cannot do that, and a character creator that covers its own
----     subject is not a character creator.
----
---- WHAT THIS FILE DECIDES: nothing. Every collection it offers comes from
---- AppearanceConfig, which lives in nifty-core and is loaded by both sides - so the
---- allowlist the UI offers is the allowlist the server validates against, because
---- there is only one (ADR-0017). The server additionally derives the ped model from
---- the stored gender and refuses the client's own idea of it.
+--[[
+  Character creator (ADR-0017, ADR-0023).
+
+  Appearance only. Name, gender, date of birth and birthplace are entered on the
+  WEBSITE through create_character_from_web (migration 021) - the character row
+  already exists by the time this opens. `appearance IS NULL` is what said the
+  creator was needed.
+
+  THE INTERFACE IS THE MENU FRAMEWORK. This resource has no `ui_page` and draws
+  nothing of its own; it borrows the single menu surface from `nifty-ui` through
+  exports. Two reasons, and both are load-bearing:
+
+    * One CEF browser, one focus owner. A second `ui_page` here would put two
+      browsers behind one global `SetNuiFocus` and the player would steer a menu
+      they cannot see.
+    * The menu docks to the RIGHT of the screen, which leaves the middle free. A
+      native GTA menu cannot do that, and a character creator that covers its own
+      subject is not a character creator.
+
+  WHAT THIS FILE DECIDES: nothing. Every collection it offers comes from
+  AppearanceConfig, which lives in nifty-core and is loaded by both sides - so the
+  allowlist the UI offers is the allowlist the server validates against, because
+  there is only one (ADR-0017). The server additionally derives the ped model from
+  the stored gender and refuses the client's own idea of it.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

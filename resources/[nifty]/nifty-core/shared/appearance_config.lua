@@ -1,18 +1,20 @@
---- Appearance and spawn configuration (ADR-0017).
----
---- SHARED: loaded on both client and server. The client uses it to offer only
---- options the server will accept; the server uses it to reject anything else.
---- It is deliberately one file — a duplicated allowlist would drift, and the
---- failure mode of a drifted allowlist is a creator that offers something the
---- server silently refuses.
----
---- WHY THIS FILE EXISTS
----
---- The collection natives (GetNumberOfPedCollectionDrawableVariations and
---- friends) are CLIENT-ONLY. The server cannot ask the engine whether a given
---- component/collection/drawable combination is real. Appearance submitted by a
---- client is therefore untrusted input, exactly like an item id in an inventory
---- event. The allowlist below is what the server validates against instead.
+--[[
+  Appearance and spawn configuration (ADR-0017).
+
+  SHARED: loaded on both client and server. The client uses it to offer only
+  options the server will accept; the server uses it to reject anything else.
+  It is deliberately one file — a duplicated allowlist would drift, and the
+  failure mode of a drifted allowlist is a creator that offers something the
+  server silently refuses.
+
+  WHY THIS FILE EXISTS
+
+  The collection natives (GetNumberOfPedCollectionDrawableVariations and
+  friends) are CLIENT-ONLY. The server cannot ask the engine whether a given
+  component/collection/drawable combination is real. Appearance submitted by a
+  client is therefore untrusted input, exactly like an item id in an inventory
+  event. The allowlist below is what the server validates against instead.
+]]
 
 AppearanceConfig = {
   --- Hard bounds. A drawable index above these is malformed rather than exotic,

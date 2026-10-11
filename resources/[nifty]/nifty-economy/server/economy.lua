@@ -1,15 +1,17 @@
---- Money (ADR-0009).
----
---- There is exactly one way money moves in this server: `Economy.apply`. Not a
---- convenience — the enforcement. Any code path that reaches for
---- `UPDATE wallets` directly is a bug, because the ledger is what makes a balance
---- explainable after an incident, and a balance without an entry is a balance
---- nobody can defend to a player who lost it.
----
---- Two rules the schema cannot express, so they live here:
----   * A `reason` is mandatory and is a closed vocabulary. "money went somewhere"
----          is not a usable audit record.
----   * The balance change and the ledger entry are written together or not at all.
+--[[
+  Money (ADR-0009).
+
+  There is exactly one way money moves in this server: `Economy.apply`. Not a
+  convenience — the enforcement. Any code path that reaches for
+  `UPDATE wallets` directly is a bug, because the ledger is what makes a balance
+  explainable after an incident, and a balance without an entry is a balance
+  nobody can defend to a player who lost it.
+
+  Two rules the schema cannot express, so they live here:
+    * A `reason` is mandatory and is a closed vocabulary. "money went somewhere"
+           is not a usable audit record.
+    * The balance change and the ledger entry are written together or not at all.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

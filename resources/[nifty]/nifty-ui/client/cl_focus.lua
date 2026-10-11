@@ -1,29 +1,31 @@
---- The NUI focus broker.
----
---- This file is the ONLY place in Nifty Life 2.0 that calls `SetNuiFocus`.
----
---- Why that matters: `SetNuiFocus` is a single global client native, not a
---- per-resource one. Every system resource owns its own `ui_page` and therefore
---- its own CEF browser, but they all share ONE keyboard. If each of them called
---- the native on its own initiative, last writer wins, the previous surface keeps
---- drawing while it has lost the keyboard, and the player types into a window they
---- are not looking at. The symptom is not "it breaks" — it is "the close button
---- does not respond", which is close to undebuggable.
----
---- The rule this file enforces: at most ONE surface may hold the keyboard, it is
---- always named, and both natives move together. That is why there is a broker at
---- all instead of each resource doing the obvious thing.
----
---- The contract a system resource uses:
----   exports.nifty_ui:acquire('nifty-phone')   -> true|false
----   exports.nifty_ui:release('nifty-phone')
----   exports.nifty_ui:holder()                 -> string|nil
----
---- Acquire is a REQUEST, not a steal. A surface that is already open must be told
---- to close, not silently overwritten, so `acquire` returns false and the caller
---- decides what that means (the chat input refuses; the phone closes the chat).
---- Letting `acquire` preempt would just move the same bug one layer down: a system
---- would open on top of another without the other knowing it lost focus.
+--[[
+  The NUI focus broker.
+
+  This file is the ONLY place in Nifty Life 2.0 that calls `SetNuiFocus`.
+
+  Why that matters: `SetNuiFocus` is a single global client native, not a
+  per-resource one. Every system resource owns its own `ui_page` and therefore
+  its own CEF browser, but they all share ONE keyboard. If each of them called
+  the native on its own initiative, last writer wins, the previous surface keeps
+  drawing while it has lost the keyboard, and the player types into a window they
+  are not looking at. The symptom is not "it breaks" — it is "the close button
+  does not respond", which is close to undebuggable.
+
+  The rule this file enforces: at most ONE surface may hold the keyboard, it is
+  always named, and both natives move together. That is why there is a broker at
+  all instead of each resource doing the obvious thing.
+
+  The contract a system resource uses:
+    exports.nifty_ui:acquire('nifty-phone')   -> true|false
+    exports.nifty_ui:release('nifty-phone')
+    exports.nifty_ui:holder()                 -> string|nil
+
+  Acquire is a REQUEST, not a steal. A surface that is already open must be told
+  to close, not silently overwritten, so `acquire` returns false and the caller
+  decides what that means (the chat input refuses; the phone closes the chat).
+  Letting `acquire` preempt would just move the same bug one layer down: a system
+  would open on top of another without the other knowing it lost focus.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

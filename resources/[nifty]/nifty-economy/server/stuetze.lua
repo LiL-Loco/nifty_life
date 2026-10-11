@@ -1,18 +1,20 @@
---- Stütze (ADR-0009).
----
---- An unconditional handout: no job, no location, no check of any kind. Every
---- connected character gets it, on a timer, forever. That is the decision, and
---- the entire economy is built around the consequence.
----
---- The number that matters is `economy.stuetze.amount`. It MUST stay below what a
---- character needs to eat. The moment it reaches subsistence, logging in becomes
---- more profitable than working, and every job, property and business in this
---- server becomes decoration nobody is obliged to touch.
----
---- So this module does not enforce that. Nothing can, from the inside — a setting
---- can be edited by anyone with database access. What it does instead is leave a
---- complete record, so the assumption being wrong is a number in a table rather
---- than a mystery discovered months later by players who stopped playing.
+--[[
+  Stütze (ADR-0009).
+
+  An unconditional handout: no job, no location, no check of any kind. Every
+  connected character gets it, on a timer, forever. That is the decision, and
+  the entire economy is built around the consequence.
+
+  The number that matters is `economy.stuetze.amount`. It MUST stay below what a
+  character needs to eat. The moment it reaches subsistence, logging in becomes
+  more profitable than working, and every job, property and business in this
+  server becomes decoration nobody is obliged to touch.
+
+  So this module does not enforce that. Nothing can, from the inside — a setting
+  can be edited by anyone with database access. What it does instead is leave a
+  complete record, so the assumption being wrong is a number in a table rather
+  than a mystery discovered months later by players who stopped playing.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

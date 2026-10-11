@@ -1,14 +1,16 @@
---- Client world state and the HUD bridge.
----
---- This file holds **nothing that decides anything**. Money, inventory and jobs
---- are whatever the server last said they are; this client stores them only to
---- draw them. That is the whole reason the server pushes instead of answering
---- questions: a cheating client can lie about what it displays, and cannot
---- change what it owns.
----
---- The one thing the client does decide is presentation state — which panel is
---- open, what the player last typed. Nothing in `State` is ever sent back to the
---- server as an authority.
+--[[
+  Client world state and the HUD bridge.
+
+  This file holds **nothing that decides anything**. Money, inventory and jobs
+  are whatever the server last said they are; this client stores them only to
+  draw them. That is the whole reason the server pushes instead of answering
+  questions: a cheating client can lie about what it displays, and cannot
+  change what it owns.
+
+  The one thing the client does decide is presentation state — which panel is
+  open, what the player last typed. Nothing in `State` is ever sent back to the
+  server as an authority.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

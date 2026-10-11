@@ -1,19 +1,21 @@
---- The phone handset (ADR-0018, ADR-0021).
----
---- This file is the **only** reason the phone is reachable. `server/phone.lua`
---- was already complete and fully tested while nothing on this side existed —
---- a module with no client handler is not implemented, it is just unreachable
---- code that happens to be green (see LEARNINGS.md).
----
---- What this file decides: whether the phone is open, and what the NUI is told.
---- What it never decides: whether a message may be sent, whether it is
---- addressed to a real character, or whether a report is legitimate. Those are
---- answered by `Phone.*` on the server, and every net event it sends carries no
---- authority at all.
----
---- The number on screen is the SERVER's number. There is no path by which this
---- file can change it, and the UI cannot supply one — `phoneSend` takes a number
---- the player typed and the server resolves it to a character itself.
+--[[
+  The phone handset (ADR-0018, ADR-0021).
+
+  This file is the **only** reason the phone is reachable. `server/phone.lua`
+  was already complete and fully tested while nothing on this side existed —
+  a module with no client handler is not implemented, it is just unreachable
+  code that happens to be green (see LEARNINGS.md).
+
+  What this file decides: whether the phone is open, and what the NUI is told.
+  What it never decides: whether a message may be sent, whether it is
+  addressed to a real character, or whether a report is legitimate. Those are
+  answered by `Phone.*` on the server, and every net event it sends carries no
+  authority at all.
+
+  The number on screen is the SERVER's number. There is no path by which this
+  file can change it, and the UI cannot supply one — `phoneSend` takes a number
+  the player typed and the server resolves it to a character itself.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

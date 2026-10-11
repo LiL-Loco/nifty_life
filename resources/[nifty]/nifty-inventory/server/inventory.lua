@@ -1,19 +1,21 @@
---- Inventory (ADR-0014 layer 4).
----
---- What this module refuses to do:
----   * Trust a client-supplied item definition. Weight, stackability and max stack
----     come from `item_defs` on the server, always. A client that sends
----     `{ code = 'bank_frobnicator', weight = 0 }` gets a rejection, not a bank.
----   * Trust a client-supplied slot index. Slots are assigned by this module; the
----     client may only ask for a move *between* two slots it already owns.
----   * Partially apply a transfer. A transaction that consumes a stack and then
----     fails to write the destination leaves a player who quietly lost items, so
----     item moves run in one transaction or not at all.
----
---- Capacity is two limits, and they fail differently on purpose:
----   * slots   — how many distinct stacks you carry
----   * weight  — how much you can physically carry
---- A heavy item can leave you one slot short; a light one can leave you too heavy.
+--[[
+  Inventory (ADR-0014 layer 4).
+
+  What this module refuses to do:
+    * Trust a client-supplied item definition. Weight, stackability and max stack
+      come from `item_defs` on the server, always. A client that sends
+      `{ code = 'bank_frobnicator', weight = 0 }` gets a rejection, not a bank.
+    * Trust a client-supplied slot index. Slots are assigned by this module; the
+      client may only ask for a move *between* two slots it already owns.
+    * Partially apply a transfer. A transaction that consumes a stack and then
+      fails to write the destination leaves a player who quietly lost items, so
+      item moves run in one transaction or not at all.
+
+  Capacity is two limits, and they fail differently on purpose:
+    * slots   — how many distinct stacks you carry
+    * weight  — how much you can physically carry
+  A heavy item can leave you one slot short; a light one can leave you too heavy.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

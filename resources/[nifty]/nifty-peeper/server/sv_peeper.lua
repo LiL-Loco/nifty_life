@@ -1,18 +1,20 @@
---- Peeper — the broadcast social layer, and the web↔character binding.
----
---- ADR-0019: a broadcast feed in the Twitter mould. Asymmetric follows, public
---- timeline, replies, likes. A character CANNOT delete their own post; only
---- staff can, and that writes a record rather than removing the row.
----
---- ADR-0022: the same feed is reachable from the website, and that required
---- solving identity before it required any UI. A post is authored by a
---- CHARACTER whichever surface wrote it — there is no "web identity". The
---- binding is proven by a code generated in game and typed on the website, and
---- only this module can complete it, because only this module runs with the
---- privileges that `nifty_website` does not have (see database/grants.sql).
----
---- Everything a client could influence arrives here untrusted: the author is
---- derived from the caller's binding, never from a payload.
+--[[
+  Peeper — the broadcast social layer, and the web↔character binding.
+
+  ADR-0019: a broadcast feed in the Twitter mould. Asymmetric follows, public
+  timeline, replies, likes. A character CANNOT delete their own post; only
+  staff can, and that writes a record rather than removing the row.
+
+  ADR-0022: the same feed is reachable from the website, and that required
+  solving identity before it required any UI. A post is authored by a
+  CHARACTER whichever surface wrote it — there is no "web identity". The
+  binding is proven by a code generated in game and typed on the website, and
+  only this module can complete it, because only this module runs with the
+  privileges that `nifty_website` does not have (see database/grants.sql).
+
+  Everything a client could influence arrives here untrusted: the author is
+  derived from the caller's binding, never from a payload.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

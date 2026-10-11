@@ -1,10 +1,12 @@
---- Server side of the hood toggle: player-facing notices, and the diagnostics
---- channel that makes the client observable.
----
---- There is deliberately no clothing logic here. RAGE MP's version of this
---- feature lived on the server because its server can set clothes on a player;
---- FiveM's cannot, so the ped is only ever touched on the client. What the
---- server owns is the conversation: a message to the player, and the log.
+--[[
+  Server side of the hood toggle: player-facing notices, and the diagnostics
+  channel that makes the client observable.
+
+  There is deliberately no clothing logic here. RAGE MP's version of this
+  feature lived on the server because its server can set clothes on a player;
+  FiveM's cannot, so the ped is only ever touched on the client. What the
+  server owns is the conversation: a message to the player, and the log.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 local PREFIX = ('[%s]'):format(RESOURCE)

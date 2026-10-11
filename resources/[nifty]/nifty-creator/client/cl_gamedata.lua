@@ -1,24 +1,26 @@
---- Static clothing data, read from this resource's `data/` folder.
----
---- WHAT THIS IS
---- Item names, restriction tags and "best torso" mappings for the freemode peds.
---- They are keyed by GLOBAL drawable index - the number `GetNumDrawableVariations`
---- would return for a component set with `SetPedComponentVariation`, which is not
---- how this project stores anything (ADR-0017 stores collection + local drawable +
---- texture, because global indices shift with every Title Update).
----
---- So every lookup here goes through `globalFor()`, and that function is the whole
---- point of this file. See the note on it before changing anything.
----
---- WHY THE DATA LIVES IN THE REPOSITORY
---- These tables are derived from the game's own clothes metadata and GXT text. They
---- are vendored rather than generated at runtime because the source is inside RPF
---- archives, which are not a documented format and which nobody on this project has
---- tooling for. What they ARE is static game data, and static game data belongs with
---- the code that reads it rather than in a runtime dependency on someone's server.
----
---- The labels a player actually reads are NOT from here - those are ours, in
---- cl_labels.lua. This is only item names, tags and torso mappings.
+--[[
+  Static clothing data, read from this resource's `data/` folder.
+
+  WHAT THIS IS
+  Item names, restriction tags and "best torso" mappings for the freemode peds.
+  They are keyed by GLOBAL drawable index - the number `GetNumDrawableVariations`
+  would return for a component set with `SetPedComponentVariation`, which is not
+  how this project stores anything (ADR-0017 stores collection + local drawable +
+  texture, because global indices shift with every Title Update).
+
+  So every lookup here goes through `globalFor()`, and that function is the whole
+  point of this file. See the note on it before changing anything.
+
+  WHY THE DATA LIVES IN THE REPOSITORY
+  These tables are derived from the game's own clothes metadata and GXT text. They
+  are vendored rather than generated at runtime because the source is inside RPF
+  archives, which are not a documented format and which nobody on this project has
+  tooling for. What they ARE is static game data, and static game data belongs with
+  the code that reads it rather than in a runtime dependency on someone's server.
+
+  The labels a player actually reads are NOT from here - those are ours, in
+  cl_labels.lua. This is only item names, tags and torso mappings.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

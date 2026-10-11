@@ -1,18 +1,20 @@
---- The bridge to nifty-core, loaded before every file in this resource.
----
---- Why this file exists at all, since `exports.nifty_core:facade()` is one line:
----
---- A `local` in fxmanifest does NOT reach the files loaded after it. Every
---- `server_script` / `client_script` chunk is compiled and run as its OWN scope, so
---- `local Core = exports.nifty_core:facade()` written in fxmanifest would be gone
---- by the time sv_chat.lua runs — and the failure would be `attempt to index a nil
---- value` on the first query, which points at the database rather than at scope.
----
---- So the value is fetched here, once, into a global, and the files below read it.
---- A global is the correct choice precisely because it must cross chunk boundaries.
---- It is namespaced under `Nifty` so it cannot collide with another resource's Lua
---- state — each resource has its own state, which is also why this has to be
---- repeated per resource rather than done once anywhere.
+--[[
+  The bridge to nifty-core, loaded before every file in this resource.
+
+  Why this file exists at all, since `exports.nifty_core:facade()` is one line:
+
+  A `local` in fxmanifest does NOT reach the files loaded after it. Every
+  `server_script` / `client_script` chunk is compiled and run as its OWN scope, so
+  `local Core = exports.nifty_core:facade()` written in fxmanifest would be gone
+  by the time sv_chat.lua runs — and the failure would be `attempt to index a nil
+  value` on the first query, which points at the database rather than at scope.
+
+  So the value is fetched here, once, into a global, and the files below read it.
+  A global is the correct choice precisely because it must cross chunk boundaries.
+  It is namespaced under `Nifty` so it cannot collide with another resource's Lua
+  state — each resource has its own state, which is also why this has to be
+  repeated per resource rather than done once anywhere.
+]]
 
 Nifty = Nifty or {}
 

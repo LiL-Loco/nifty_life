@@ -1,20 +1,22 @@
---- The player's action surface.
----
---- Every event here follows the same three rules, and they are the reason this
---- file exists at all:
----
----   1. The character comes from the SESSION, never from the event payload.
----      A client that sends `{ characterId = 'someone-else' }` is ignored, because
----      nothing in this file reads a character ID from a client.
----   2. No event takes a price, a quantity that matters economically, or a
----      permission from a client. Codes and slot numbers yes ÔÇö they are looked
----      up and checked. Numbers that move money never.
----   3. Every handler answers with `nifty:client:result`, so the UI can say
----      something honest instead of silently doing nothing.
----
---- Rate limiting is per-slot and in memory. It exists to stop an event being
---- spammed into a transaction storm, not to enforce a design ÔÇö a well-behaved
---- client never trips it.
+--[[
+  The player's action surface.
+
+  Every event here follows the same three rules, and they are the reason this
+  file exists at all:
+
+    1. The character comes from the SESSION, never from the event payload.
+       A client that sends `{ characterId = 'someone-else' }` is ignored, because
+       nothing in this file reads a character ID from a client.
+    2. No event takes a price, a quantity that matters economically, or a
+       permission from a client. Codes and slot numbers yes ÔÇö they are looked
+       up and checked. Numbers that move money never.
+    3. Every handler answers with `nifty:client:result`, so the UI can say
+       something honest instead of silently doing nothing.
+
+  Rate limiting is per-slot and in memory. It exists to stop an event being
+  spammed into a transaction storm, not to enforce a design ÔÇö a well-behaved
+  client never trips it.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 --- From the base facade, fetched by shared/core.lua at load. These were globals

@@ -1,25 +1,27 @@
---- Session watchdog — because `playerDropped` is not a guarantee (OneSync big mode).
----
---- `onesync on` enables OneSync big mode, and big mode scopes *entity* events by
---- distance: the official documentation states that player connect/disconnect
---- events only arrive when the player is in range. A client that drops while far
---- away produces no `playerDropped` at all.
----
---- Five handlers hung off that one event. If it does not fire, none of them run:
----   stuetze.lua  the Stütze keeps paying a character nobody is playing
----   jobs.lua     a worker's shift never settles, so they are never paid
----   sv_main.lua  the session row stays open forever
----   sv_actions.lua  an in-memory table leaks one entry per drop
----
---- The harness fires `playerDropped` synchronously by hand, so 291 green checks
---- could never see this. It is the same class of bug as the oxmysql shim: the
---- test world was not the real world.
----
---- The fix is not a better event, it is a different primitive. `GetPlayerName`
---- reads the engine's player list directly and is unaffected by entity scoping,
---- so anything this resource believes about a connection can be reconciled
---- against it. Teardown is registered here once and run from exactly one place,
---- which is what makes "the event did not arrive" survivable.
+--[[
+  Session watchdog — because `playerDropped` is not a guarantee (OneSync big mode).
+
+  `onesync on` enables OneSync big mode, and big mode scopes *entity* events by
+  distance: the official documentation states that player connect/disconnect
+  events only arrive when the player is in range. A client that drops while far
+  away produces no `playerDropped` at all.
+
+  Five handlers hung off that one event. If it does not fire, none of them run:
+    stuetze.lua  the Stütze keeps paying a character nobody is playing
+    jobs.lua     a worker's shift never settles, so they are never paid
+    sv_main.lua  the session row stays open forever
+    sv_actions.lua  an in-memory table leaks one entry per drop
+
+  The harness fires `playerDropped` synchronously by hand, so 291 green checks
+  could never see this. It is the same class of bug as the oxmysql shim: the
+  test world was not the real world.
+
+  The fix is not a better event, it is a different primitive. `GetPlayerName`
+  reads the engine's player list directly and is unaffected by entity scoping,
+  so anything this resource believes about a connection can be reconciled
+  against it. Teardown is registered here once and run from exactly one place,
+  which is what makes "the event did not arrive" survivable.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

@@ -1,16 +1,18 @@
---- Jobs (ADR-0008).
----
---- Two decisions shape this module, and both are about what a job is *not*:
----
----   * It is not a progression system. There is no level, no unlock, no
----     qualification. Anyone may join anything, at any time, with no cooldown.
----     A department that is empty because nobody qualified for it is a dead
----     server on a 48-slot weekend, and 48 slots is the entire population.
----   * It is not a job you hold. You may hold as many as you like, and be on
----     duty for at most one at a time — being two places at once is not a
----     clever exploit, it is just not a thing that can be paid for honestly.
----
---- What a job *is*: a wage table, a duty flag, and somewhere to stand.
+--[[
+  Jobs (ADR-0008).
+
+  Two decisions shape this module, and both are about what a job is *not*:
+
+    * It is not a progression system. There is no level, no unlock, no
+      qualification. Anyone may join anything, at any time, with no cooldown.
+      A department that is empty because nobody qualified for it is a dead
+      server on a 48-slot weekend, and 48 slots is the entire population.
+    * It is not a job you hold. You may hold as many as you like, and be on
+      duty for at most one at a time — being two places at once is not a
+      clever exploit, it is just not a thing that can be paid for honestly.
+
+  What a job *is*: a wage table, a duty flag, and somewhere to stand.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

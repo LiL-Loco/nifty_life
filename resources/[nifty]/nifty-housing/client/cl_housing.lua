@@ -1,21 +1,23 @@
---- Housing entrances — markers, blips and a prompt. Nothing more.
----
---- This file is **presentation only**, and that is the whole design. It does not
---- know whether a house is free, whether the player may have it, or what it
---- costs. Those are the server's answers (ADR-0013, ADR-0009). The client draws
---- a marker on the map and sends a request when a key is pressed; if the answer
---- is no, the server says no and the client changes nothing.
----
---- It also does not teleport. Teleporting needs a confirmed interior (ADR-0013)
---- and a known interior exit coordinate, and `properties.exit_*` is NULL for
---- every seeded row until Bob74_IPL has proved the interior loads. Teleporting
---- into an IPL that silently failed to load drops the player into the void with
---- no geometry and no way back. Markers are the half of housing that is honest
---- before that verification, and they are genuinely useful on their own.
----
---- Coordinates come from the server's property list, so a catalogue row is the
---- only way a marker appears. There is no marker table in this file that could
---- drift from the database.
+--[[
+  Housing entrances — markers, blips and a prompt. Nothing more.
+
+  This file is **presentation only**, and that is the whole design. It does not
+  know whether a house is free, whether the player may have it, or what it
+  costs. Those are the server's answers (ADR-0013, ADR-0009). The client draws
+  a marker on the map and sends a request when a key is pressed; if the answer
+  is no, the server says no and the client changes nothing.
+
+  It also does not teleport. Teleporting needs a confirmed interior (ADR-0013)
+  and a known interior exit coordinate, and `properties.exit_*` is NULL for
+  every seeded row until Bob74_IPL has proved the interior loads. Teleporting
+  into an IPL that silently failed to load drops the player into the void with
+  no geometry and no way back. Markers are the half of housing that is honest
+  before that verification, and they are genuinely useful on their own.
+
+  Coordinates come from the server's property list, so a catalogue row is the
+  only way a marker appears. There is no marker table in this file that could
+  drift from the database.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

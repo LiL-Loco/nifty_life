@@ -1,13 +1,15 @@
---- Shop (ADR-0009).
----
---- A shop is where money leaves. That makes it the one place where taking money
---- and giving items must be treated as a single act, because half of either is
---- the definition of a dupe or a robbery depending on which half failed.
----
---- Order is deliberate: **charge first, deliver second, refund on failure.**
---- The reverse order (give, then charge) means a player who cannot pay walks
---- away with the goods whenever the debit is refused — and the debit is refused
---- routinely, because that is what "cannot afford it" looks like.
+--[[
+  Shop (ADR-0009).
+
+  A shop is where money leaves. That makes it the one place where taking money
+  and giving items must be treated as a single act, because half of either is
+  the definition of a dupe or a robbery depending on which half failed.
+
+  Order is deliberate: **charge first, deliver second, refund on failure.**
+  The reverse order (give, then charge) means a player who cannot pay walks
+  away with the goods whenever the debit is refused — and the debit is refused
+  routinely, because that is what "cannot afford it" looks like.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

@@ -1,11 +1,13 @@
---- Persistence layer (ADR-0005, ADR-0014 step 2).
----
---- Rules this module exists to enforce:
----   * Every query is parameterised. No caller concatenates a value into SQL.
----     That is what makes "the client is untrusted" implementable rather than
----     aspirational — there is no query in this codebase a client can reshape.
----   * Errors are logged with context, never swallowed. A silent failure here
----     surfaces days later as a player with no money and no explanation.
+--[[
+  Persistence layer (ADR-0005, ADR-0014 step 2).
+
+  Rules this module exists to enforce:
+    * Every query is parameterised. No caller concatenates a value into SQL.
+      That is what makes "the client is untrusted" implementable rather than
+      aspirational — there is no query in this codebase a client can reshape.
+    * Errors are logged with context, never swallowed. A silent failure here
+      surfaces days later as a player with no money and no explanation.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

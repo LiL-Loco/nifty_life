@@ -1,18 +1,20 @@
---- Phone (ADR-0018, ADR-0021).
----
---- Two objects that people constantly conflate:
----
----   * the DEVICE — an ordinary inventory item called `phone`. Any handset opens
----     the menu. It is not identity, it carries nothing, and stealing it steals
----     nothing. That is the point: it removes an entire class of permanent
----     impersonation bug.
----   * the ACCOUNT — the number, the messages, the eventual social profile. It
----     belongs to the character and was created with them.
----
---- Numbers are assigned by the server at character creation and never change
---- (ADR-0021). The player does not choose, so there is nothing to reserve,
---- nothing to trade and no collision to argue about — the UNIQUE constraint is a
---- backstop, not a mechanism.
+--[[
+  Phone (ADR-0018, ADR-0021).
+
+  Two objects that people constantly conflate:
+
+    * the DEVICE — an ordinary inventory item called `phone`. Any handset opens
+      the menu. It is not identity, it carries nothing, and stealing it steals
+      nothing. That is the point: it removes an entire class of permanent
+      impersonation bug.
+    * the ACCOUNT — the number, the messages, the eventual social profile. It
+      belongs to the character and was created with them.
+
+  Numbers are assigned by the server at character creation and never change
+  (ADR-0021). The player does not choose, so there is nothing to reserve,
+  nothing to trade and no collision to argue about — the UNIQUE constraint is a
+  backstop, not a mechanism.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

@@ -1,27 +1,29 @@
---- Chat — the server half.
----
---- This replaces the downloaded `chat` resource, which shipped three hardcoded
---- `http://chat/...` URLs. FiveM serves NUI over HTTPS, so the browser blocked
---- every one of them as mixed content and the resource could not do anything.
---- Two of its files were also a Vue 2.3.3-era layout with no build step, i.e.
---- code that predates the NUI scheme by years.
----
---- What this file decides, and nothing else:
----   - whether a message may be spoken at all
----   - who it is from        (the CHARACTER, resolved server-side)
----   - who may hear it       (the proximity check)
----
---- What it never decides: anything the client asserted. The body arrives as a
---- string and is treated as untrusted text for its whole life here — trimmed,
---- length-capped, stripped of control characters, and rendered by the NUI with
---- `textContent`. There is no path by which a client can choose its own author,
---- its own colour, or a format string.
----
---- The author is read from the CHARACTER, not from the connection's player name.
---- On a whitelisted server the FiveM name is whatever somebody typed in the Rockstar
---- account, and the whole point of the whitelist is that the character is the
---- identity. A player would otherwise be able to speak as anybody simply by
---- renaming.
+--[[
+  Chat — the server half.
+
+  This replaces the downloaded `chat` resource, which shipped three hardcoded
+  `http://chat/...` URLs. FiveM serves NUI over HTTPS, so the browser blocked
+  every one of them as mixed content and the resource could not do anything.
+  Two of its files were also a Vue 2.3.3-era layout with no build step, i.e.
+  code that predates the NUI scheme by years.
+
+  What this file decides, and nothing else:
+    - whether a message may be spoken at all
+    - who it is from        (the CHARACTER, resolved server-side)
+    - who may hear it       (the proximity check)
+
+  What it never decides: anything the client asserted. The body arrives as a
+  string and is treated as untrusted text for its whole life here — trimmed,
+  length-capped, stripped of control characters, and rendered by the NUI with
+  `textContent`. There is no path by which a client can choose its own author,
+  its own colour, or a format string.
+
+  The author is read from the CHARACTER, not from the connection's player name.
+  On a whitelisted server the FiveM name is whatever somebody typed in the Rockstar
+  account, and the whole point of the whitelist is that the character is the
+  identity. A player would otherwise be able to speak as anybody simply by
+  renaming.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

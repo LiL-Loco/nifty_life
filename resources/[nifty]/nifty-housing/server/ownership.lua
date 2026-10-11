@@ -1,18 +1,20 @@
---- The ownership primitive (ADR-0013).
----
---- Properties and vehicles are different things — one is a place with an
---- interior, the other a mobile instance — but "who owns this, and may they sell
---- it" is the same question with the same answer. So it lives here once.
----
---- The rule that makes it worth isolating: ownership is a **row**, never a field
---- on the thing. A property does not have an `owner_id` column that can be
---- half-written; it has an absence or a presence in `property_owners`. There is
---- no state in which a property belongs to someone and to nobody.
----
---- Acquisition is deliberately unconstrained: ADR-0013 makes housing free to
---- obtain, with the tier governing rent and upkeep. Nobody is locked out, so the
---- sink is recurring cost rather than an entry price. Changing that later is a
---- change to `acquire`, not to every call site.
+--[[
+  The ownership primitive (ADR-0013).
+
+  Properties and vehicles are different things — one is a place with an
+  interior, the other a mobile instance — but "who owns this, and may they sell
+  it" is the same question with the same answer. So it lives here once.
+
+  The rule that makes it worth isolating: ownership is a **row**, never a field
+  on the thing. A property does not have an `owner_id` column that can be
+  half-written; it has an absence or a presence in `property_owners`. There is
+  no state in which a property belongs to someone and to nobody.
+
+  Acquisition is deliberately unconstrained: ADR-0013 makes housing free to
+  obtain, with the tier governing rent and upkeep. Nobody is locked out, so the
+  sink is recurring cost rather than an entry price. Changing that later is a
+  change to `acquire`, not to every call site.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

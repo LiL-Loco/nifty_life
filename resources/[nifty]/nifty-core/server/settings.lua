@@ -1,9 +1,11 @@
---- Settings cache (ADR-0009).
----
---- Every tunable number is a row in `settings`, loaded once at start. Nothing
---- else in the codebase is allowed to hardcode a price, a wage or an interval —
---- which is what makes the first economy tuning pass a data change rather than
---- a code change.
+--[[
+  Settings cache (ADR-0009).
+
+  Every tunable number is a row in `settings`, loaded once at start. Nothing
+  else in the codebase is allowed to hardcode a price, a wage or an interval —
+  which is what makes the first economy tuning pass a data change rather than
+  a code change.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

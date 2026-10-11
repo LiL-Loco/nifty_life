@@ -1,16 +1,18 @@
---- Display names for the creator. German, because the website and the whole
---- interface are German (a label the player reads in English and a form they fill
---- in in German is a bug nobody reports).
----
---- EVERY STRING IN THIS FILE IS OURS. Nothing here is copied from a game file, a
---- third-party repository or a label dump. The hair decal mapping and the clothing
---- name database are derived at runtime instead, for exactly this reason - see
---- cl_creator.lua and the note there about why a table nobody licensed cannot be
---- pasted in.
----
---- These are LABELS. The id is the truth. A wrong name here is a cosmetic bug and
---- never becomes a stored value, which is what makes writing our own safe and
---- copying someone else's not necessary.
+--[[
+  Display names for the creator. German, because the website and the whole
+  interface are German (a label the player reads in English and a form they fill
+  in in German is a bug nobody reports).
+
+  EVERY STRING IN THIS FILE IS OURS. Nothing here is copied from a game file, a
+  third-party repository or a label dump. The hair decal mapping and the clothing
+  name database are derived at runtime instead, for exactly this reason - see
+  cl_creator.lua and the note there about why a table nobody licensed cannot be
+  pasted in.
+
+  These are LABELS. The id is the truth. A wrong name here is a cosmetic bug and
+  never becomes a stored value, which is what makes writing our own safe and
+  copying someone else's not necessary.
+]]
 
 local RESOURCE = GetCurrentResourceName()
 

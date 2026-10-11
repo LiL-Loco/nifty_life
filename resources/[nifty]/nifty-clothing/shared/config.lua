@@ -1,10 +1,12 @@
---- Clothing constants and native hashes.
----
---- Shared so that the server-side validation and the client-side toggle agree on
---- what "the top" is, without either of them inventing a number.
----
---- PORTED FROM root-cause/ragemp-hood-up (MIT), see LEARNINGS.md for the
---- licence and for the two places this port deliberately departs from it.
+--[[
+  Clothing constants and native hashes.
+
+  Shared so that the server-side validation and the client-side toggle agree on
+  what "the top" is, without either of them inventing a number.
+
+  PORTED FROM root-cause/ragemp-hood-up (MIT), see LEARNINGS.md for the
+  licence and for the two places this port deliberately departs from it.
+]]
 
 -- The table has to be CREATED before the first field assignment, not opened
 -- as if it already existed. A previous version of this file started with
