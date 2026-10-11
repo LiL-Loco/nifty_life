@@ -21,7 +21,7 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-local Menu = exports['nifty-ui']
+local Menu = exports['nifty-core']
 
 -- Mirrors nifty-creator/client/cl_creator.lua COMPONENT_LABELS / PROP_LABELS.
 local COMPONENT_LABELS = {

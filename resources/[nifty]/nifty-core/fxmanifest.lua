@@ -61,24 +61,25 @@ server_script 'server/sv_facade.lua'
 -- shared/spawn.lua (loaded earlier in the shared_scripts block).
 client_script 'client/cl_spawn.lua'
 
--- nifty-ui (sibling resource). The focus broker (cl_focus) stays here;
--- the menu framework and its NUI page moved to resources/[nifty]/nifty-ui/.
--- nifty-creator, nifty-clothing and nifty-core/cl_spawn call into the
--- nifty-ui namespace the same way they used to call into the in-house
--- nifty-core menu (Menu:menu{}, Menu:button, Menu.pushMenu, etc.) -
--- nifty-ui/client/shim.lua exposes an API-compatible surface, so this
--- file does not change those callers' code.
+-- nifty-ui (absorbed). The focus broker (cl_focus) loads first; the menu
+-- framework (cl_menu) loads after because its openMenu pulls focus through
+-- cl_focus. cl_spawn's menu DSL calls go to the same resource and resolve
+-- against cl_menu's exports.
 client_script 'client/cl_focus.lua'
+client_script 'client/cl_menu.lua'
 client_script 'client/cl_welcome.lua'
 
--- ui/menu.html, ui/menu.css, ui/menu.js moved to nifty-ui (which owns
--- the menu NUI). ui/base.css and ui/base.js stay: chat and phone still
--- load base.js for the Nifty.nui fetch helper, and base.css is the
--- shared colour-token file.
+-- The single NUI surface that every surface-level page renders against.
+-- ui/menu.html is also the ui_page.
 files {
+  'ui/menu.html',
+  'ui/menu.css',
+  'ui/menu.js',
   'ui/base.css',
   'ui/base.js',
 }
+
+ui_page 'ui/menu.html'
 
 -- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker
 -- in cl_spawn.lua uses the same five locations from shared/spawn.lua; these
@@ -117,5 +118,4 @@ spawnpoint 'Flughafen' {
 dependencies {
   '/onesync',
   '/server:4500',
-  'nifty-ui',
 }

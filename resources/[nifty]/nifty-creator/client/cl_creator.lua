@@ -26,11 +26,9 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- The menu framework lives in the sibling nifty-ui resource now. The
---- exports surface is API-compatible with the previous in-house version
---- (Menu.menu{}, Menu:button, Menu:pushMenu, Menu:closeMenu, Menu:isOpen,
---- Menu:input, Menu:submenu) so the body of this file is unchanged.
-local Menu = exports['nifty-ui']
+--- The menu framework. Same resource as the focus broker; one call opens a menu
+--- and takes the keyboard with it.
+local Menu = exports['nifty-core']
 
 --- Our own German display labels, and the vendored item data.
 ---
@@ -1415,13 +1413,13 @@ end
 -- ---------------------------------------------------------------- actions
 
 openRoot = function()
-  if exports['nifty-ui']:openMenu(RESOURCE, buildRootMenu()) then return end
+  if exports['nifty-core']:openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework
   -- thinks another menu is open, or the new menu itself is empty). Print
   -- the actual two states so the next log is unambiguous.
-  local holder = exports['nifty-ui']:holder() or 'nil'
+  local holder = exports['nifty-core']:holder() or 'nil'
   local current = Menu.isOpen() and 'a menu is open' or 'no menu open'
   print(('[%s] could not open the creator menu - holder=%s, %s'):format(RESOURCE, holder, current))
   TriggerServerEvent('nifty:server:cancelCreator')

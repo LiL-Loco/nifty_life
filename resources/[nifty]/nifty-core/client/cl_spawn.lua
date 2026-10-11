@@ -24,7 +24,7 @@
 
 local RESOURCE = GetCurrentResourceName()
 --- Menu DSL lives in the same resource now (was nifty-ui, absorbed into nifty-core).
-local Menu = exports['nifty-ui']
+local Menu = exports['nifty-core']
 
 --- Module state. Set when openSpawnPicker is called, cleared on close.
 local locations   = nil
@@ -69,10 +69,6 @@ end
 
 --- Build a nifty-ui menu for the given locations and open it.
 local function buildAndOpen()
-  if not locations or type(locations) ~= 'table' or #locations == 0 then
-    return
-  end
-
   local m = Menu:menu({
     title    = 'Wo willst du aufwachen?',
     subtitle = 'Waehle einen Ort. Die Kamera fliegt hin. Bestaetige unten.',
