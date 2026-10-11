@@ -187,10 +187,22 @@ SpawnPoints = {
 
 --- Where the character creator stages the player. Outdoors on purpose: the
 --- project buys no MLO (ADR-0012), so there is no bespoke studio interior.
+---
+--- Timing model for the 3-stage flyover in cl_creator.lua's `startCamera`:
+---   t=0       → far/high overview is rendered (stage 1)
+---   t=camMove → mid-range cam lerps in over camInterp ms (stage 2)
+---   t=camMove+camInterp+camSettle → close-up cam lerps in over 600 ms (stage 3)
+--- Total ~camMove + camInterp + camSettle + 600, then the menu opens.
 CreatorScene = {
   x = -812.80, y = 175.31, z = 76.75,   -- Vinewood Hills overlook
   heading = 195.0,
   camHeight = 0.35,
   camRadius = 2.6,
   camPitch = -8.0,
+  camFarFov = 50.0,       -- stage 1, wide overview
+  camNearFov = 35.0,      -- stage 2, mid-range
+  camNearZ = 1.6,         -- stage 2 height
+  camMove = 1500,         -- ms before stage 2 begins
+  camInterp = 1500,       -- ms each stage-to-stage blend lasts
+  camSettle = 400,        -- ms between stage 2 finishing and stage 3 starting
 }
