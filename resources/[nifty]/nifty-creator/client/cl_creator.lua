@@ -1265,14 +1265,20 @@ buildRootMenu = function()
   end
 
   Menu:separator(menu, 'Kleidung')
-  for _, id in ipairs(COMPONENT_ORDER) do
+  -- Iterate the component IDs the actual model exposes, not a hardcoded
+  -- COMPONENT_ORDER. The original list had a 12 that the mp_m_freemode_01
+  -- model does not expose (12 component slots, IDs 0-11), so 1 in 12 submenus
+  -- silently never appeared. Sort the discovered IDs so the menu order is
+  -- stable.
+  local componentIds = {}
+  for id in pairs(slots.components) do componentIds[#componentIds + 1] = id end
+  table.sort(componentIds)
+  for _, id in ipairs(componentIds) do
     local options = slots.components[id]
-    if options then
-      Menu:submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
-        description = ('Slot %d - %d Kollektionen'):format(id, #options),
-        build = function() return buildSlotMenu('components', id) end,
-      })
-    end
+    Menu:submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
+      description = ('Slot %d - %d Kollektionen'):format(id, #options),
+      build = function() return buildSlotMenu('components', id) end,
+    })
   end
 
   local propIds = propIdsSorted()
