@@ -155,16 +155,14 @@ AppearanceConfig = {
     ['multiplayer_overlays'] = true,
   },
 
-  --- How many tattoos one character may wear at once: one per body zone.
+  --- How many tattoos one character may wear at once.
   ---
-  --- This is NOT a storage limit and not a question of taste. Two tattoos on the
-  --- same skin compete, and the game stops drawing the second - so a ped saved
-  --- with two on the left arm comes back wearing one of them, with no error
-  --- anywhere. The creator enforces one per zone, and the bound here is the SAME
-  --- number, because the guarantee we want is that a stored appearance renders
-  --- exactly as it was chosen. A looser bound would accept appearances the engine
-  --- cannot show.
-  MAX_TATTOOS = 6,
+  --- The engine is happy to layer many decals on the same skin; the previous
+  --- "one per zone" rule was a UI choice, not an engine limit. The creator no
+  --- longer enforces it, and the cap here is left in only as a storage sanity
+  --- check against a malicious client that would fill the database with junk.
+  --- 100 is well above any practical tattoo collection.
+  MAX_TATTOOS = 100,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.

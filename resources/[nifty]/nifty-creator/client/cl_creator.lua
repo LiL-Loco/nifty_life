@@ -1605,23 +1605,19 @@ buildTattooMenu = function(zoneId)
     Menu.button(menu, entry.name, {
       description = entry.collection,
       onSelect = function()
-        -- ONE PER ZONE, not one per collection. Two tattoos on the same arm
-        -- compete for the same skin and the second is invisible, so letting the
-        -- player pick another one in the same place would look like a menu that
-        -- does not work. The stored entry keeps its zone precisely so this
-        -- decision can be made on the client, where the data is.
-        local kept = {}
-        for _, other in ipairs(face.tattoos) do
-          if other.zoneId ~= zoneId then kept[#kept + 1] = other end
-        end
-
-        if #kept < AppearanceConfig.MAX_TATTOOS then
-          kept[#kept + 1] = {
+        -- The engine layers decals on top of each other, so multiple tattoos
+        -- on the same zone are allowed. The previous "one per zone" rule was
+        -- a UI choice, not an engine limit; the server caps at MAX_TATTOOS as
+        -- a storage sanity check. We push the new entry at the end so the menu
+        -- order (most recently picked last) is the natural choice for "remove
+        -- the last one I added" via the Keins button if the player changes
+        -- their mind.
+        if #face.tattoos < AppearanceConfig.MAX_TATTOOS then
+          face.tattoos[#face.tattoos + 1] = {
             collection = entry.collection,
             preset = entry.preset,
             zoneId = zoneId,
           }
-          face.tattoos = kept
           applyDecorations()
         end
 
