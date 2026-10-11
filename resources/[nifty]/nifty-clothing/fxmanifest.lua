@@ -25,9 +25,11 @@ shared_scripts {
 
 server_script 'server/sv_clothing.lua'
 server_script 'server/sv_owned.lua'
+server_script 'server/sv_drops.lua'
 
 client_script 'client/cl_hood.lua'
 client_script 'client/cl_targets.lua'
+client_script 'client/cl_drops.lua'
 client_script 'client/cl_wardrobe.lua'
 client_script 'client/cl_store.lua'
 

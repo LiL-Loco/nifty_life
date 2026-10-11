@@ -681,6 +681,7 @@ end
 
 exports('view', Inventory.view)
 exports('add', Inventory.add)
+exports('getDefinition', Inventory.getDefinition)
 exports('remove', Inventory.remove)
 exports('count', Inventory.count)
 exports('has', Inventory.has)
@@ -754,21 +755,14 @@ RegisterNetEvent('nifty:server:discardItemOnGround', function(payload)
   if not matched then return end
 
   Inventory.remove(cid, payload.code, payload.quantity or 1, payload.itemId)
-
-  -- Spawn a placeholder world prop. V1: a single model for every drop.
-  -- Future iterations map (item code) -> representative GTA prop.
-  local PROP_HASH = `hei_prop_carrier_bag_02a`
-  local entity = CreateObject(PROP_HASH, x, y, z, true, true, false)
-  if entity and entity ~= 0 then
-    SetEntityAsMissionEntity(entity, true, true)
-    PlaceObjectOnGroundProperly(entity)
-    -- Despawn timer: 5 minutes is long enough that a player walking
-    -- back to where they dropped finds the prop, short enough that the
-    -- map does not accumulate litter after a busy session.
-    SetTimeout(function()
-      if DoesEntityExist(entity) then DeleteEntity(entity) end
-    end, 5 * 60 * 1000, 'inventory:drop:cleanup')
-  end
+  -- Hand off to nifty-clothing which spawns the world prop and tracks
+  -- it for pickup. The drops subsystem owns ground-item bookkeeping;
+  -- we just translate the inventory row into a drop request.
+  TriggerEvent('drops:create', src, {
+    code = matched.code, name = matched.name,
+    quantity = tonumber(payload.quantity) or 1, itemId = matched.id,
+    x = x, y = y, z = z,
+  })
 
   TriggerClientEvent('nifty:client:discardItemOnGround', src, { ok = true })
 end)
