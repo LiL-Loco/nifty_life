@@ -549,18 +549,18 @@ local slots = { components = {}, props = {} }
 --- wrong label here is a cosmetic bug, never a stored value. They exist because the
 --- alternative is a menu that says "Slot 3" and leaves the player guessing.
 local COMPONENT_LABELS = {
-  [0]  = 'Kopf',
-  [1]  = 'Gesicht',
-  [2]  = 'Haare',
-  [3]  = 'Oberteil',
-  [4]  = 'Hose',
-  [5]  = 'Schuhe',
-  [6]  = 'Handschuhe',
-  [7]  = 'Accessoires',
-  [8]  = 'Unterhemd',
-  [9]  = 'Ruestung',
-  [10] = 'Decal',
-  [11] = 'Tasche',
+  [0]  = 'Kopf',         -- PED_COMPONENT_HEAD        (head)
+  [1]  = 'Gesicht',      -- PED_COMPONENT_BERD        (beard / mask)
+  [2]  = 'Haare',        -- PED_COMPONENT_HAIR        (hair)
+  [3]  = 'Oberteil',     -- PED_COMPONENT_UPPR        (torso / upper body)
+  [4]  = 'Hose',         -- PED_COMPONENT_LOWR        (pants / lower body)
+  [5]  = 'Taschen',      -- PED_COMPONENT_HAND        (bags and parachutes)
+  [6]  = 'Schuhe',       -- PED_COMPONENT_FEET        (shoes)
+  [7]  = 'Accessoires',  -- PED_COMPONENT_TEEF        (teeth / accessories)
+  [8]  = 'Unterhemd',    -- PED_COMPONENT_ACCS        (accessories / undershirts)
+  [9]  = 'Ruestung',     -- PED_COMPONENT_TASK        (body armor / vest)
+  [10] = 'Decal',       -- PED_COMPONENT_DECL        (decals)
+  [11] = 'Jacke',       -- PED_COMPONENT_JBIB        (tops / jacket)
   [12] = 'Hose (2)',
 }
 
