@@ -8,8 +8,9 @@
   and after the resource split there are ten surfaces in this project that want the
   keyboard — chat, creator, phone, panels. If each of them called the native
   itself, last writer wins and the player types into a window they are not looking
-  at. So focus is ARBITRATED by nifty-ui (ADR-0018 made the phone the second
-  surface; the split made it the tenth) and this file only asks.
+  at. So focus is ARBITRATED by nifty-core's cl_focus broker
+  (ADR-0018 made the phone the second surface; the split made it the
+  tenth) and this file only asks.
 
   The rules that fall out of asking rather than taking:
     - The chat input refuses to open while another surface holds focus.
@@ -99,7 +100,7 @@ AddEventHandler('onResourceStop', function(resource)
 end)
 
 --- The broker holds a NAME, and this resource can be restarted while holding it.
---- `onClientResourceStop` in nifty-ui covers the case where WE are the one going
+--- `onClientResourceStop` in nifty-core covers the case where WE are the one going
 --- away, but this covers us coming BACK: clear the local flag so a fresh start does
 --- not believe it already has focus.
 AddEventHandler('onClientResourceStart', function(resource)

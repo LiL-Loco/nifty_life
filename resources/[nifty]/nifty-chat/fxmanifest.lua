@@ -30,18 +30,19 @@ files {
   'ui/app.js',
 }
 
--- The shared base lives in nifty-ui and is loaded by URL, not copied here. That is
--- the whole point of the split: one `nui()` helper, not ten copies that drift.
--- A CSS `@import` of another resource's file works only if THAT resource declares
--- it in its own `files` — which nifty-ui does. If it ever stops, the page renders
--- unstyled rather than erroring, so the boot check looks for the accent variable.
+-- The shared base (base.js, base.css) lives in nifty-core's `files` block
+-- and is loaded by URL from there. The chat page references it via
+-- `https://cfx-nui-nifty-core/ui/base.{js,css}` in the HTML and a CSS
+-- @import in style.css. That resource declares the files in its own
+-- `files` block, so the browser can fetch them. If nifty-core ever stops
+-- the page renders unstyled rather than erroring, so the boot check looks
+-- for the accent variable.
 
 server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/sv_chat.lua'
 client_script 'client/cl_chat.lua'
 
--- `nifty-core` first because shared/core.lua calls into it during load. `nifty-ui`
--- because the chat input is a focus-holding surface like any other.
+-- `nifty-core` first because shared/core.lua calls into it during load.
 dependencies {
   'nifty-core',
 }
