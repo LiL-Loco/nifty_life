@@ -67,15 +67,49 @@ DROP PROCEDURE IF EXISTS create_character_from_web;
 
 DELIMITER //
 
+-- ---------------------------------------------------------------------------
+-- WHY THE STRING PARAMETERS ARE 255 AND NOT THEIR COLUMN WIDTH
+--
+-- A parameter declared exactly as wide as its column makes that column's own
+-- validation unreachable. MariaDB checks the argument against the parameter type
+-- in strict mode while binding it, and raises `Data too long for column
+-- 'p_last_name'` before the body has run a single statement. The
+-- `invalid_last_name` guard further down can therefore never fire - the routine
+-- dies with a driver error instead of the documented contract row, which is the
+-- one thing the RETURN CONTRACT below exists to prevent.
+--
+-- So every text parameter is declared wide enough to receive rubbish, and the
+-- body is what decides whether that rubbish is acceptable. The column widths are
+-- the real limits and they are still enforced - by the guards here and by the
+-- schema itself.
+-- ---------------------------------------------------------------------------
 CREATE PROCEDURE create_character_from_web(
   IN  p_discord_id     CHAR(64),
-  IN  p_first_name     VARCHAR(64),
-  IN  p_last_name      VARCHAR(64),
-  IN  p_gender         VARCHAR(16),
+  IN  p_first_name     VARCHAR(255),
+  IN  p_last_name      VARCHAR(255),
+  IN  p_gender         VARCHAR(64),
   IN  p_date_of_birth  DATE,
-  IN  p_birthplace     VARCHAR(96)
+  IN  p_birthplace     VARCHAR(255)
 )
-BEGIN
+-- ---------------------------------------------------------------------------
+-- WHY THE BODY IS A LABELLED BLOCK
+--
+-- The routine bails out early ten times with LEAVE, so that a rejected field is
+-- reported as a sentence instead of as a constraint violation. LEAVE is only
+-- legal inside a LABELLED block or inside a LOOP - an unlabelled `BEGIN` does
+-- not count, and neither does an `IF` branch. Without this label the routine
+-- does not merely misbehave, it fails to compile: MariaDB raises ER_PARSE_ERROR
+-- at the first `LEAVE proc_main;` and the procedure is never created.
+--
+-- The label must sit in front of BEGIN. The DECLAREs stay directly inside it,
+-- because that is still the first thing a stored program may declare.
+--
+-- This is also why the DELIMITER lines below are only needed for a CLIENT-side
+-- runner. Over the wire the whole CREATE PROCEDURE goes out as one statement and
+-- the server parses the body itself - any GUI that splits on `;` will break this
+-- routine no matter how the SQL is written.
+-- ---------------------------------------------------------------------------
+proc_main: BEGIN
   DECLARE v_account_id  CHAR(36) DEFAULT NULL;
   DECLARE v_character_id CHAR(36) DEFAULT NULL;
   DECLARE v_exists      INT DEFAULT 0;
@@ -112,37 +146,47 @@ BEGIN
   END IF;
 
   IF p_first_name IS NULL OR CHAR_LENGTH(p_first_name) > 64 THEN
-    SELECT 0, NULL, 'invalid_first_name',
-           'Bitte einen Vornamen angeben (maximal 64 Zeichen).';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_first_name' AS code,
+           'Bitte einen Vornamen angeben (maximal 64 Zeichen).' AS message;
+    LEAVE proc_main;
   END IF;
 
   IF p_last_name IS NOT NULL AND CHAR_LENGTH(p_last_name) > 64 THEN
-    SELECT 0, NULL, 'invalid_last_name',
-           'Der Nachname ist zu lang (maximal 64 Zeichen).';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_last_name' AS code,
+           'Der Nachname ist zu lang (maximal 64 Zeichen).' AS message;
+    LEAVE proc_main;
+  END IF;
+
+  -- Same reasoning as the name guards: the parameter is 255 wide so that this
+  -- check is reachable, and the column is VARCHAR(96). Without a guard here a
+  -- long birthplace would fall through to the EXIT HANDLER and come back as the
+  -- useless `error`, instead of naming the field that is wrong.
+  IF p_birthplace IS NOT NULL AND CHAR_LENGTH(p_birthplace) > 96 THEN
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_birthplace' AS code,
+           'Der Geburtsort ist zu lang (maximal 96 Zeichen).' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- The enum is the schema's business, not the caller's. A gender the column
   -- cannot store would abort the INSERT with a driver error, which reads as a
   -- crash rather than as a rejected form field.
   IF p_gender IS NULL OR p_gender NOT IN ('male', 'female', 'nonbinary') THEN
-    SELECT 0, NULL, 'invalid_gender', 'Bitte ein Geschlecht angeben.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_gender' AS code, 'Bitte ein Geschlecht angeben.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- The portal is for adults. Checked here rather than in the website so that the
   -- rule cannot be skipped by calling the procedure directly.
   IF p_date_of_birth IS NULL THEN
-    SELECT 0, NULL, 'invalid_date_of_birth', 'Bitte ein Geburtsdatum angeben.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_date_of_birth' AS code, 'Bitte ein Geburtsdatum angeben.' AS message;
+    LEAVE proc_main;
   END IF;
 
   IF p_date_of_birth > (CURDATE() - INTERVAL 18 YEAR)
      OR p_date_of_birth < '1900-01-01' THEN
-    SELECT 0, NULL, 'invalid_date_of_birth',
-           'Für einen Charakter muss man am Tag der Registrierung volljährig sein.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'invalid_date_of_birth' AS code,
+           'Für einen Charakter muss man am Tag der Registrierung volljährig sein.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- -------------------------------------------------------------------------
@@ -164,9 +208,9 @@ BEGIN
    LIMIT 1;
 
   IF v_account_id IS NULL THEN
-    SELECT 0, NULL, 'no_account',
-           'Dazu wurde kein freigegebenes Konto gefunden.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'no_account' AS code,
+           'Dazu wurde kein freigegebenes Konto gefunden.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- -------------------------------------------------------------------------
@@ -179,9 +223,9 @@ BEGIN
    WHERE c.account_id = v_account_id;
 
   IF v_exists > 0 THEN
-    SELECT 0, NULL, 'already_has_character',
-           'Für dieses Konto existiert bereits ein Charakter.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'already_has_character' AS code,
+           'Für dieses Konto existiert bereits ein Charakter.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- -------------------------------------------------------------------------
@@ -204,9 +248,9 @@ BEGIN
        = CONCAT(p_first_name, '|', COALESCE(p_last_name, ''));
 
   IF v_exists > 0 THEN
-    SELECT 0, NULL, 'name_taken',
-           'Dieser Name ist bereits vergeben. Bitte einen anderen wählen.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'name_taken' AS code,
+           'Dieser Name ist bereits vergeben. Bitte einen anderen wählen.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- -------------------------------------------------------------------------
@@ -237,9 +281,9 @@ BEGIN
   END WHILE;
 
   IF v_number IS NULL THEN
-    SELECT 0, NULL, 'no_number_available',
-           'Es ist gerade keine Telefonnummer frei. Bitte später erneut versuchen.';
-    LEAVE;
+    SELECT 0 AS ok, NULL AS character_id, 'no_number_available' AS code,
+           'Es ist gerade keine Telefonnummer frei. Bitte später erneut versuchen.' AS message;
+    LEAVE proc_main;
   END IF;
 
   -- -------------------------------------------------------------------------
