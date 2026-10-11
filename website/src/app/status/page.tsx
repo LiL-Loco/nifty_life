@@ -54,7 +54,7 @@ export default async function StatusPage({
         <div className="notice error">
           <strong>Auf diesem Konto ist ein aktives Ban hinterlegt.</strong>
           <br />
-          {ban.reason ? <span>{ban.reason} — </span> : null}
+          {ban.reason ? <span>{ban.reason} - </span> : null}
           {ban.expires_at ? `Läuft ab am ${ban.expires_at}.` : 'Ohne Ablaufdatum.'}
         </div>
       ) : null}
@@ -114,7 +114,7 @@ export default async function StatusPage({
 
       <h2>Was diese Seite nicht kann</h2>
       <p className="small muted">
-        Hier gibt es keinen Knopf, um eine Bewerbung freizugeben — der
+        Hier gibt es keinen Knopf, um eine Bewerbung freizugeben - der
         Datenbankzugang dieser Seite besitzt auf keinerlei Tabelle ein UPDATE-Recht.
         Das ist eine Eigenschaft der Rechtevergabe, nicht dieser Oberfläche.
       </p>

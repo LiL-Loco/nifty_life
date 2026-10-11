@@ -8,7 +8,7 @@ import { submitApplication, validateAnswers } from '@/lib/applications';
 export type ApplyState = { error?: string } | undefined;
 
 /**
- * `useActionState` passes (previousState, formData) — in that order. Getting it
+ * `useActionState` passes (previousState, formData) - in that order. Getting it
  * backwards type-checks only if the action is typed loosely, and then silently
  * receives the previous state as the form.
  */

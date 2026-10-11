@@ -6,6 +6,9 @@
 /out
 next-env.d.ts
 
+# compiled output of tools/validation-tests.js and tools/submit-probe.js
+/.tmp-test
+
 # local configuration — NEVER commit
 .env
 .env.*

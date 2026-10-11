@@ -1,5 +1,5 @@
 -- ============================================================================
--- verify-boundary.sql — proof, not a migration.
+-- verify-boundary.sql - proof, not a migration.
 --
 -- ADR-0007 and ADR-0022 make two claims about what the website can and cannot
 -- do. This file is how they are checked rather than believed.
@@ -15,7 +15,7 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- ALLOW — the website must be able to do all of this.
+-- ALLOW - the website must be able to do all of this.
 -- ---------------------------------------------------------------------------
 
 SELECT 'ALLOW: read the feed' AS check_name;
@@ -40,7 +40,7 @@ SELECT 'ALLOW: read the link it resolves to' AS check_name;
 SELECT * FROM web_links WHERE discord_id = '000000000000000001';
 
 -- ---------------------------------------------------------------------------
--- DENY — each of these MUST fail with an access error.
+-- DENY - each of these MUST fail with an access error.
 --
 -- These are run by website/tools/verify-boundary.ps1, which asserts that every
 -- one is refused. If any succeeds, the privilege boundary is gone.

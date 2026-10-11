@@ -12,7 +12,7 @@ export default async function ApplyPage() {
       <h1>Bewerbung</h1>
       <p className="lede">
         Angemeldet als <strong>{session.username}</strong>. Die Bewerbung läuft unter
-        dieser Discord-Kennung — das ist die Identität, die der Server beim Verbinden
+        dieser Discord-Kennung - das ist die Identität, die der Server beim Verbinden
         prüft.
       </p>
 

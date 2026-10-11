@@ -6,7 +6,7 @@
  * someone can read next to the privilege it requires and check by hand.
  *
  * The pool runs as `nifty_website`. If that account ever lacks a privilege the
- * website needs, this file throws — it does not fall back to a more privileged
+ * website needs, this file throws - it does not fall back to a more privileged
  * connection.
  */
 import 'server-only';
@@ -71,7 +71,7 @@ export async function insert(sql: string, params: any[] = []): Promise<number> {
  * Run statements in one transaction.
  *
  * Used wherever a read has to be trusted to describe the same state the write
- * lands on — the Peeper author resolution is the case that matters (ADR-0022).
+ * lands on - the Peeper author resolution is the case that matters (ADR-0022).
  */
 export async function transaction<T>(
   work: (conn: mysql.PoolConnection) => Promise<T>,

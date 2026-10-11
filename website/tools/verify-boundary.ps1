@@ -1,9 +1,9 @@
-# verify-boundary.ps1 — assert that the website database user is powerless.
+# verify-boundary.ps1 - assert that the website database user is powerless.
 #
 # ADR-0007 claims the website can submit an application and never approve one.
 # ADR-0022 claims the website can publish a post and never confirm its own
 # identity binding. Both claims are enforced by GRANTS, not by code, which means
-# they can be revoked by accident — a `GRANT ALL` during debugging, a
+# they can be revoked by accident - a `GRANT ALL` during debugging, a
 # `FLUSH PRIVILEGES` after a restore, a mysqldump replay.
 #
 # This runs as `nifty_website` and asserts every prohibited statement is

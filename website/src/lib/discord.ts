@@ -45,7 +45,7 @@ export function authorizeUrl(state: string): string {
 /**
  * Exchange an authorization code for the identity behind it.
  *
- * Returns null for anything that is not a usable identity — a rejected exchange,
+ * Returns null for anything that is not a usable identity - a rejected exchange,
  * a malformed payload, or an ID that is not a Discord snowflake. A login that
  * half-succeeded must not produce a session.
  */

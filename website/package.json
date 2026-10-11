@@ -2,7 +2,7 @@
   "name": "nifty-life-website",
   "version": "0.1.0",
   "private": true,
-  "description": "Nifty Life 2.0 — application form and Peeper (ADR-0007, ADR-0022)",
+  "description": "Nifty Life 2.0 - application form and Peeper (ADR-0007, ADR-0022)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

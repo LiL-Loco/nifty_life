@@ -3,7 +3,7 @@
  *
  * The binding is the three-table handshake from migration 009:
  *
- *   web_pairing_codes   game server only, no grant here — we cannot even read it
+ *   web_pairing_codes   game server only, no grant here - we cannot even read it
  *   web_link_requests   we INSERT (discord_id, code) and nothing else
  *   web_links           the proven binding, written by the game server
  *
@@ -43,7 +43,7 @@ export async function linkedCharacter(discordId: string): Promise<LinkedCharacte
 /**
  * The display name to publish under.
  *
- * The website has no grant on `characters` — that is deliberate, and it is why
+ * The website has no grant on `characters` - that is deliberate, and it is why
  * posts snapshot their author's name. Until a post exists there is nothing to
  * snapshot, so this reads the name the game server already exposed through the
  * post feed rather than reaching for a table we are not allowed to read.
@@ -72,7 +72,7 @@ export async function latestKnownName(
 /**
  * Submit a pairing request.
  *
- * The code was generated in game and typed here. We store it and nothing else —
+ * The code was generated in game and typed here. We store it and nothing else -
  * there is no follow-up write, because we have no UPDATE. The game server picks
  * the request up when it runs and proves the code by hashing it.
  *

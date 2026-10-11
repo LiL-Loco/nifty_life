@@ -26,7 +26,7 @@ export default async function PeeperPage() {
     <>
       <h1>Peeper</h1>
       <p className="lede">
-        Beiträge gehören Charakteren, nicht Konten — dieselbe Person im Spiel und
+        Beiträge gehören Charakteren, nicht Konten - dieselbe Person im Spiel und
         hier, dieselbe Moderation auf beiden Seiten.
       </p>
 

@@ -12,7 +12,7 @@ export type ActionState = { error?: string; ok?: string } | undefined;
  * Resolve the session to the character it speaks as.
  *
  * Every write needs this. A caller that is not linked gets a message rather than
- * an anonymous write — there is no "post as nobody" on this surface.
+ * an anonymous write - there is no "post as nobody" on this surface.
  */
 async function actor() {
   const session = await requireSession();

@@ -7,7 +7,7 @@
  *     UPDATE grant anywhere, which is what makes "the website can never approve
  *     an application" a property of the database rather than of code someone can
  *     get wrong. Pointing this at `nifty` or `root` removes that boundary
- *     silently — no test fails, no log line appears.
+ *     silently - no test fails, no log line appears.
  *
  *  2. Development auth must never survive into production. It lets anyone claim
  *     any Discord ID, so it is a complete authentication bypass. We refuse to
@@ -27,7 +27,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // `next build` runs with NODE_ENV=production on the machine that will later run
 // the app in development. The guard therefore has to fire when the app SERVES,
-// not when it is compiled — otherwise a developer-auth build cannot be built at
+// not when it is compiled - otherwise a developer-auth build cannot be built at
 // all, and the fix would be to delete the guard.
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 
@@ -42,7 +42,7 @@ if (!isBuildPhase && isProduction && devAuthWanted) {
 
 /**
  * The redirect URI is the address Discord sends the player BACK to, and it must
- * match — exactly, character for character — one of the URLs registered under
+ * match - exactly, character for character - one of the URLs registered under
  * OAuth2 → Redirects in the Developer Portal.
  *
  * The most common mistake by a wide margin is pasting the portal's *bot invite
@@ -112,7 +112,7 @@ export const discordConfigured = Boolean(
   config.discord.clientId && config.discord.clientSecret,
 );
 
-// Only validated when Discord is actually in play — a deployment that has not
+// Only validated when Discord is actually in play - a deployment that has not
 // created an application yet should still start and say so on the login page
 // rather than crash on a placeholder value.
 if (discordConfigured && !isBuildPhase) {

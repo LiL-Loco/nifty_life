@@ -40,7 +40,7 @@ export default async function Home({
             </p>
             <p className="small muted">
               Diese Discord-ID ist deine Identität auf dem Server. Auf dieser Seite
-              kann niemand eine Bewerbung freigeben — das macht ein Mensch.
+              kann niemand eine Bewerbung freigeben - das macht ein Mensch.
             </p>
             <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               <Link className="button" href="/apply">
@@ -84,7 +84,7 @@ export default async function Home({
           <strong>Charakter verknüpfen.</strong> Peer wird von Charakteren
           geschrieben, nicht von Konten. Du erzeugst im Spiel einen Code, gibst ihn
           hier ein, und der Server bestätigt die Verknüpfung. Die Seite kann das
-          nicht selbst bestätigen — das ist Absicht.
+          nicht selbst bestätigen - das ist Absicht.
         </p>
         <p className="small">
           <strong>Freitag bis Sonntag.</strong> Der Server öffnet Freitag um 19:00

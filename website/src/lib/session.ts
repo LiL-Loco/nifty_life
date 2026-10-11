@@ -2,7 +2,7 @@
  * Signed-cookie sessions.
  *
  * The cookie carries the Discord ID and nothing else that matters. It is signed
- * with HMAC-SHA256, so the server can tell whether it was issued here — which is
+ * with HMAC-SHA256, so the server can tell whether it was issued here - which is
  * what stops a visitor editing a cookie to become any Discord account, including
  * an approved one.
  *
