@@ -1049,21 +1049,12 @@ local function overlayStyleCount(id)
   if not ok or type(count) ~= 'number' or count <= 0 then return 1 end
 
   return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
-end
+end--- Removed: colourCount(). buildOverlayMenu and buildHairColourMenu
+--- now use #HAIR_PALETTE / #MAKEUP_PALETTE directly, and OVERLAY_PALETTES
+--- for the per-overlay palette list. No engine lookup needed.
 
---- How many colours a palette holds, bounded. 1 = hair palette, 2 = makeup.
-local function colourCount(colourType)
-  local n = natives()
-  local fn = (colourType == 2) and n.numMakeupColors or n.numHairColors
-  if type(fn) ~= 'function' then return AppearanceConfig.MAX_OVERLAY_COLOUR + 1 end
-
-  local ok, count = pcall(fn)
-  if not ok or type(count) ~= 'number' or count <= 0 then
-    return AppearanceConfig.MAX_OVERLAY_COLOUR + 1
-  end
-
-  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_COLOUR)
-end
+--- colourCount() definition removed in favour of the static palette
+--- sizes baked into HAIR_PALETTE / MAKEUP_PALETTE at the top of the file.
 
 --- One overlay: style, opacity, and its two colours.
 local function buildOverlayMenu(id)
@@ -1347,21 +1338,26 @@ local function buildParentsMenu()
   return menu
 end
 
---- Eye colour: the game's thirty-two, in the engine's own order.
+--- Eye colour: lbg-char pattern. A single CreateListItem with the 32
+--- game colours as entries. The 1-based list index IS the engine colour
+--- index. The OnListChanged sets face.eyeColour and pushes to the engine.
 local function buildEyeColourMenu()
-  local menu = Menu.menu({ title = 'Augenfarbe', dock = 'right' })
+  local menu = NativeUI.CreateMenu(
+    'Augenfarbe', 'Eine von zweiunddreissig Farben.', 1300, 0,
+    'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
+  )
 
-  Menu.slider(menu, 'Farbe', {
-    min = 0, max = AppearanceConfig.MAX_EYE_COLOUR, step = 1, value = face.eyeColour or 0,
-    format = function(value)
-      return Labels.EYE_COLOURS[value + 1] or ('Farbe %d'):format(value)
-    end,
-    onChange = function(value)
-      face.eyeColour = value
-      refresh()
-    end,
-  })
+  local eyeItem = NativeUI.CreateListItem('Augenfarbe', Labels.EYE_COLOURS,
+    (face.eyeColour or 0) + 1,
+    'Waehle die Augenfarbe. Die Liste ist die engine-eigene Reihenfolge.')
 
+  eyeItem.OnListChanged = function(_parent, _item, index)
+    face.eyeColour = index - 1
+    SetPedEyeColor(PlayerPedId(), face.eyeColour, 0, 1)
+    refresh()
+  end
+
+  menu:AddItem(eyeItem)
   return menu
 end
 
@@ -1428,27 +1424,44 @@ end
 
 --- Hair colour: primary and highlight, both from the hair palette.
 local function buildHairColourMenu()
-  local menu = Menu.menu({ title = 'Haarfarbe', dock = 'right' })
-  local max = colourCount(1)
+  -- lbg-char pattern. A list item per colour channel (primary, highlight).
+  -- A NativeUI.CreateColourPanel is attached to each; the OnListChanged
+  -- reads the panel's current selection. The list entry names (1..N) are
+  -- placeholder labels for the colour index; the panel is what carries
+  -- the colour value, not the list.
+  local menu = NativeUI.CreateMenu(
+    'Haarfarbe', 'Hauptfarbe und Strähnen aus der Haar-Palette.', 1300, 0,
+    'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
+  )
 
-  Menu.slider(menu, 'Hauptfarbe', {
-    min = 0, max = max, step = 1, value = math.min(face.hairColour.primary, max),
-    format = function(v) return ('%d / %d'):format(v, max) end,
-    onChange = function(v)
-      face.hairColour.primary = v
-      refresh()
-    end,
-  })
+  local function makeChannel(label, currentIndex)
+    local max = #HAIR_PALETTE
+    local value = math.max(0, math.min(max, currentIndex or 0)) + 1
+    local placeholders = {}
+    for i = 1, max do placeholders[i] = (i .. '.') end
+    local item = NativeUI.CreateListItem(label, placeholders, value, '')
+    local panel = NativeUI.CreateColourPanel(label, HAIR_PALETTE)
+    panel:CurrentSelection(value, true)
+    item:AddPanel(panel)
+    return item
+  end
 
-  Menu.slider(menu, 'Strähnen', {
-    min = 0, max = max, step = 1, value = math.min(face.hairColour.highlight, max),
-    format = function(v) return ('%d / %d'):format(v, max) end,
-    onChange = function(v)
-      face.hairColour.highlight = v
-      refresh()
-    end,
-  })
+  local primaryItem = makeChannel('Hauptfarbe', face.hairColour.primary)
+  local highlightItem = makeChannel('Strähnen', face.hairColour.highlight)
 
+  primaryItem.OnListChanged = function(_p, _i, _idx)
+    face.hairColour.primary = primaryItem.Panels[1]:CurrentSelection() - 1
+    SetPedHairColor(PlayerPedId(), face.hairColour.primary, face.hairColour.highlight or 0)
+    refresh()
+  end
+  highlightItem.OnListChanged = function(_p, _i, _idx)
+    face.hairColour.highlight = highlightItem.Panels[1]:CurrentSelection() - 1
+    SetPedHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight)
+    refresh()
+  end
+
+  menu:AddItem(primaryItem)
+  menu:AddItem(highlightItem)
   return menu
 end
 
