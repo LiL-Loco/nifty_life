@@ -229,12 +229,16 @@ function Menu.gridPanel(menu, label, spec)
       x, y
     )
   elseif kind == 'vertical' then
-    panel = NativeUI.CreateVerticalGridPanel(
-      spec.top or 'Hoch', spec.bottom or 'Niedrig', y
+    -- Vertical: only top/bottom matter; left/right are placeholders.
+    panel = NativeUI.CreateGridPanel(
+      spec.top or 'Hoch', '', '', spec.bottom or 'Niedrig',
+      0.5, y
     )
   else
-    panel = NativeUI.CreateHorizontalGridPanel(
-      spec.left or 'Schmal', spec.right or 'Breit', x
+    -- Horizontal: only left/right matter; top/bottom are placeholders.
+    panel = NativeUI.CreateGridPanel(
+      '', spec.left or 'Schmal', spec.right or 'Breit', '',
+      x, 0.5
     )
   end
   item:AddPanel(panel)
