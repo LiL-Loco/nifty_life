@@ -26,9 +26,229 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- The menu framework. Same resource as the focus broker; one call opens a menu
---- and takes the keyboard with it.
-local Menu = exports['nifty-ui']
+--- Local menu surface.
+---
+--- The menu draws directly to the screen with GTA natives (DrawSprite,
+--- DrawText, DrawRect) and never touches NUI focus, so the focus broker
+--- is irrelevant for it. We use the same NativeUI-Lua-Reloaded library
+--- nifty-ui does, but loaded locally via @nifty-ui/... paths in the
+--- manifest. Within this resource the export-proxy quirks (drop-first-arg,
+--- deep-copy-return) do not apply, so the builders can use the menu
+--- argument as-is and the menu can keep its metatable.
+---
+--- API shape matches the call sites below:
+---   Menu.menu({title=, subtitle=, dock=, onClose=})  -> UIMenu
+---   Menu.separator(menu, label)
+---   Menu.button(menu, label, spec)
+---   Menu.submenu(menu, label, {build=, description=, disabled=})
+---   Menu.slider(menu, label, {min=, max=, step=, value=, onChange=, onSelect=, description=, disabled=})
+---   Menu.select(menu, label, {items=, index=, onChange=, onSelect=, description=, disabled=})
+---   Menu.input(menu, label, {value=, onChange=, placeholder=, maxLength=, description=})
+---   Menu.openMenu(_RESOURCE_, menu)   - add to pool, show
+---   Menu.pushMenu(_RESOURCE_, menu)   - close current, show new
+---   Menu.closeMenu(_RESOURCE_, reason) - close the visible menu
+---   Menu.isOpen()                     - any menu visible?
+---   Menu.itemsCount(menu)             - #Items on the real menu
+---
+--- The first arg of openMenu / pushMenu / closeMenu is a resource name in
+--- the cross-resource shim; here it is ignored, but accepting the shape
+--- keeps the call sites identical.
+local _pool = NativeUI.CreatePool()
+_pool:MouseControlsEnabled(true)
+_pool:ControlDisablingEnabled(true)
+
+local Menu = {}
+
+function Menu.menu(spec)
+  spec = spec or {}
+  -- dock: 'right' pushes the panel to the right side of the screen so the
+  -- player's character stays visible in the middle. 'left' is the GTA
+  -- default at X=0. NativeUI's CreateMenu does not honour `dock`, so we
+  -- translate it to X.
+  local x = (spec.dock == 'right') and 1300 or 0
+  local m = NativeUI.CreateMenu(
+    spec.title or '',
+    spec.subtitle or '',
+    x, 0,
+    'commonmenu', 'interaction_bgd',
+    0,
+    255, 255, 255, 255
+  )
+  if type(spec.onClose) == 'function' then
+    m.OnMenuClose = function(_) pcall(spec.onClose) end
+  end
+  return m
+end
+
+function Menu.separator(menu, label)
+  -- NativeUI exposes UIMenuSeparatorItem as a global. Its New() has a
+  -- bug in the upstream library where Text/Description are not
+  -- parameter names but undef globals, so the label is hardcoded
+  -- "N/A" until we set it via :Text().
+  local item = UIMenuSeparatorItem.New()
+  item:Text(label or '')
+  menu:AddItem(item)
+end
+
+function Menu.button(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  if spec.rightLabel then item:RightLabel(tostring(spec.rightLabel)) end
+  -- NativeUI's UIMenu:SelectItem fires the per-item Activated(menu, item)
+  -- for generic UIMenuItem rows (UIMenu.lua:1027).
+  item.Activated = function(_, _) pcall(spec.onSelect) end
+  menu:AddItem(item)
+end
+
+function Menu.submenu(menu, label, spec)
+  spec = spec or {}
+  -- We build a UIMenuItem trigger row whose Activated builds and shows
+  -- the child menu. The build function is caller code (no proxy in
+  -- this resource), so the menu it returns is a real UIMenu with
+  -- its metatable intact - we can bind it directly without the
+  -- metatable-via-id lookup the cross-resource shim needs.
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _)
+    if not spec.build then return end
+    local child = spec.build()
+    if not child or type(child) ~= 'table' then return end
+    menu:BindMenuToItem(child, item)
+    _pool:Add(child)
+    child:Visible(true)
+  end
+  menu:AddItem(item)
+end
+
+function Menu.slider(menu, label, spec)
+  spec = spec or {}
+  local min = tonumber(spec.min) or 0
+  local max = tonumber(spec.max) or 100
+  local step = tonumber(spec.step) or 1
+  local value = math.floor(((tonumber(spec.value) or min) - min) / step + 0.5) * step + min
+  -- NativeUI's UIMenuSliderHeritageItem uses an indexed list, not a
+  -- numeric range. We build the synthetic index list of size
+  -- (max-min)/step+1 so OnSliderChanged delivers a numeric value.
+  local values = {}
+  for i = min, max, step do values[#values + 1] = i end
+  local index = math.floor((value - min) / step) + 1
+  if index < 1 then index = 1 end
+  if index > #values then index = #values end
+  local item = NativeUI.CreateSliderHeritageItem(
+    label or '',
+    index, #values,
+    spec.description or '',
+    { R = 57, G = 119, B = 200, A = 255 },
+    { R = 4,  G = 32,  B = 57,  A = 255 }
+  )
+  if spec.disabled then item:Enabled(false) end
+  -- spec.format(value) -> string. Rendered as the right-aligned label on
+  -- the row, so "Opacitaet" reads as "42 %" rather than as the raw 42.
+  -- Without a format, the raw value is shown.
+  if type(spec.format) == 'function' then
+    item:RightLabel(spec.format(value))
+  end
+  -- OnSliderChanged fires on every arrow-key nudge (the "live" path).
+  -- OnSliderSelected fires on Enter/click (the "confirm" path).
+  -- NativeUI's menu passes only the index to OnSliderSelected, not
+  -- (menu, item, index) - we look the value up in our values table.
+  item.OnSliderChanged = function(_, _, newIndex)
+    local v = values[newIndex] or value
+    if type(spec.format) == 'function' then
+      item:RightLabel(spec.format(v))
+    end
+    pcall(spec.onChange, v)
+  end
+  item.OnSliderSelected = function(newIndex)
+    pcall(spec.onSelect, values[newIndex] or value)
+  end
+  menu:AddItem(item)
+end
+
+function Menu.select(menu, label, spec)
+  spec = spec or {}
+  local items = spec.items or {}
+  local index = tonumber(spec.index) or 1
+  if index < 1 then index = 1 end
+  if index > #items then index = math.max(1, #items) end
+  local item = NativeUI.CreateListItem(label or '', items, index, spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.OnListChanged = function(_, _, newIndex)
+    pcall(spec.onChange, newIndex, items[newIndex])
+  end
+  item.OnListSelected = function(_, _, newIndex)
+    pcall(spec.onSelect, newIndex, items[newIndex])
+  end
+  menu:AddItem(item)
+end
+
+function Menu.input(menu, label, spec)
+  spec = spec or {}
+  -- Text input via FiveM's DisplayOnscreenKeyboard. NativeUI has no
+  -- text input widget of its own. The typed value is stored on the
+  -- menu as `_input_value`; the caller reads it on click of the
+  -- "save" button (closure pattern from promptOutfitName / similar).
+  if not menu._input_value then
+    menu._input_value = tostring(spec.value or '')
+  end
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _)
+    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', menu._input_value or '', '', '', '', 64)
+    Citizen.CreateThread(function()
+      while UpdateOnscreenKeyboard() == 0 do Citizen.Wait(0) end
+      if UpdateOnscreenKeyboard() == 1 then
+        menu._input_value = tostring(GetOnscreenKeyboardResult() or '')
+        pcall(spec.onChange, menu._input_value)
+      end
+    end)
+  end
+  menu:AddItem(item)
+end
+
+function Menu.openMenu(_RESOURCE, menu)
+  _pool:Add(menu)
+  menu:Visible(true)
+  return true
+end
+
+function Menu.pushMenu(_RESOURCE, menu)
+  -- The nifty-ui shim's pushMenu closed the current menu first to mirror
+  -- the original in-house framework's "navigate to new menu" behaviour.
+  -- We do the same here so back-and-forth navigation works the same way.
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then other.Visible(false) end
+  end
+  _pool:Add(menu)
+  menu:Visible(true)
+  return true
+end
+
+function Menu.closeMenu(_RESOURCE, _reason)
+  -- Close every visible menu. NativeUI's close does not pass a reason
+  -- to OnMenuClose, so the reason the shim accepts is dropped here -
+  -- callers read the reason from module-local state (e.g. `confirmed`)
+  -- the same way they did before.
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then other.Visible(false) end
+  end
+end
+
+function Menu.isOpen()
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then return true end
+  end
+  return false
+end
+
+function Menu.itemsCount(menu)
+  -- The menu argument is the real UIMenu (no proxy, same resource), so
+  -- reading #menu.Items works directly. The cross-resource shim needs
+  -- a side-table lookup for the same thing; we do not.
+  if type(menu) ~= 'table' or not menu.Items then return 0 end
+  return #menu.Items
+end
 
 --- Our own German display labels, and the vendored item data.
 ---
@@ -1417,7 +1637,7 @@ end
 -- ---------------------------------------------------------------- actions
 
 openRoot = function()
-  if exports['nifty-ui']:openMenu(RESOURCE, buildRootMenu()) then return end
+  if Menu.openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework
@@ -1573,4 +1793,21 @@ RegisterNetEvent('nifty:client:creatorError', function(message)
   -- The creator deliberately stays open: the player has to be able to press Fertig
   -- again, and closing on an error would turn "try once more" into "start over".
   print(('[%s] creator refused: %s'):format(RESOURCE, tostring(message)))
+end)
+
+-- ---------------------------------------------------------------- render thread
+--
+-- NativeUI menus need ProcessControl / ProcessMouse / Draw every frame.
+-- MenuPool:ProcessMenus() runs all three in the documented order. The
+-- lbg-char reference uses the same single-line pattern.
+--
+-- This thread is the only place the menu library's render loop runs in
+-- this resource. nifty-ui runs a parallel render thread for its own
+-- pool (used by wardrobe, store, spawn) - two pools, two threads, no
+-- interference because they draw to separate UIMenu instances.
+Citizen.CreateThread(function()
+  while true do
+    _pool:ProcessMenus()
+    Citizen.Wait(0)
+  end
 end)
