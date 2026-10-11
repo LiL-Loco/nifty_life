@@ -1,20 +1,53 @@
 --[[
-  The "mp_intro_concat" welcome cutscene.
+  The welcome flow.
 
-  Plays once, right after the character creator finishes, before the
-  world is loaded. Concat is the CEO (organization) onboarding cutscene
-  in GTA Online - a cinematic of the new character flying in a jet over
-  Los Santos at sunset. It works here for any player (not just CEOs) and
-  is short enough (~26s) to not feel like a barrier.
-
-  After the cutscene ends, the client triggers the standard
-  nifty:client:enterWorld so the rest of the post-creation flow runs
-  exactly the same as it does for any other character login.
-
-  No on-screen text. The original JS implementation in client_packages/
-  drew a welcome message between t=12s and t=22s; that text is gone
-  here. The cutscene is a cinematic, not an info card.
+  Two parts:
+    1. The pre-welcome hook (`playerSpawned`). The instant a player
+       exists, this fades the screen to black and parks the ped at
+       CreatorScene. Without this, the player sees the Cfx-config default
+       spawn (Legion, Vespucci or Paleto) for a tick before the server
+       tells the client what to do next — which is the opposite of
+       "first time, in the creator".
+    2. The "mp_intro_concat" welcome cutscene. Plays once, right after
+       the character creator finishes, before the world is loaded.
+       Concat is the CEO (organization) onboarding cutscene in GTA
+       Online - a cinematic of the new character flying in a jet over
+       Los Santos at sunset. It works here for any player (not just
+       CEOs) and is short enough (~26s) to not feel like a barrier.
 ]]
+
+-- Pre-welcome hook: blackout + park.
+
+-- `playerSpawned` fires for every spawn this client sees, including
+-- death respawns later in the session. The pre-welcome behaviour only
+-- belongs on the FIRST spawn; subsequent ones are world respawns which
+-- spawnmanager handles. The flag short-circuits all later invocations.
+local firstSpawn = true
+
+AddEventHandler('playerSpawned', function()
+  if not firstSpawn then return end
+  firstSpawn = false
+
+  -- Instant fade to black. Anything after this is invisible until one of
+  -- the two paths below explicitly calls `DoScreenFadeIn`:
+  --   * creator (fresh player) → `startCamera` in nifty-creator
+  --   * world   (returning)    → `doEnterWorldSpawn` in nifty-world
+  -- The hook does NOT pick between them — the server does, ~50-500 ms
+  -- later, via `nifty:client:openCreator` or `nifty:client:enterWorld`.
+  DoScreenFadeOut(0)
+  while not IsScreenFadedOut() do Wait(0) end
+
+  -- Park at the creator stage. CreatorScene is loaded as a shared
+  -- script, so it is available wherever nifty-core runs. Freezing
+  -- prevents a death-from-falling during the wait for the server.
+  local scene = CreatorScene
+  if scene then
+    local ped = PlayerPedId()
+    SetEntityCoords(ped, scene.x, scene.y, scene.z, false, false, false, false)
+    SetEntityHeading(ped, scene.heading)
+    FreezeEntityPosition(ped, true)
+  end
+end)
 
 local cutsceneName = 'mp_intro_concat'
 local JET_HASH = `p_cs_mp_jet_01_s`

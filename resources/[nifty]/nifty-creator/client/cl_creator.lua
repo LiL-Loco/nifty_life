@@ -411,6 +411,12 @@ local function startCamera()
   creatorCam = far
   RenderScriptCams(far, true, false, 0)
 
+  -- The screen was held black by nifty-core's pre-welcome hook, which
+  -- parked the player at the creator scene before this fires. Fade in
+  -- NOW (over the cinematic) so the player sees the flyover start rather
+  -- than having the menu pop on a fully-revealed stage.
+  DoScreenFadeIn(500)
+
   -- Firing off so a player cannot shoot themselves while posing.
   DisablePlayerFiring(PlayerId(), true)
 
