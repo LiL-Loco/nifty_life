@@ -25,7 +25,7 @@ local Db = Nifty.Db
 local GetSetting = Nifty.GetSetting
 
 --- Buying a property moves money, so the economy system owns that part of it.
-local Economy = exports['nifty-economy']
+local Economy = Nifty.Economy
 
 Ownership = {}
 

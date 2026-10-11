@@ -20,6 +20,4 @@ client_script 'client/cl_housing.lua'
 
 dependencies {
   'nifty-core',
-  'nifty-economy',
-  'nifty-ui',
 }

@@ -21,7 +21,7 @@ local GetSetting = Nifty.GetSetting
 --- This resource moves money AND items, so both owning systems are reached by
 --- export rather than through the facade. The facade deliberately carries data
 --- access, not behaviour — `Inventory:add` is not the base's to hand out.
-local Economy = exports['nifty-economy']
+local Economy = Nifty.Economy
 local Inventory = exports['nifty-inventory']
 
 local Shop = {}

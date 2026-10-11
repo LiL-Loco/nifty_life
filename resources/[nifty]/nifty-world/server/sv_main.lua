@@ -43,9 +43,9 @@ local SessionGuard = Nifty.SessionGuard
 -- Fetched once at load. An export call per player connect would be a cross-resource
 -- round trip on the hot path, and a resource that is stopped mid-session would make
 -- it fail at the worst moment.
-local Economy   = exports['nifty-economy']
+local Economy   = Nifty.Economy
 local Inventory = exports['nifty-inventory']
-local Stuetze   = exports['nifty-economy']   -- same resource, a second export
+local Stuetze   = Nifty.Stuetze
 local Phone     = exports['nifty-phone']
 
 -- How many times a client may ask for bootstrap before we treat it as hostile.

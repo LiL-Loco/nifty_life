@@ -33,3 +33,11 @@ Nifty.Identity = Nifty.core.Identity
 --- (economy stops the Stuetze, jobs settles wages, world clears bootstrap state), and a
 --- global that only the base could see would leave all three silently nil.
 Nifty.SessionGuard = Nifty.core.SessionGuard
+
+--- Economy, Stuetze and Jobs (the absorbed resources' globals) are exposed
+--- through the same facade as Db/Identity/etc. so server-side consumers can
+--- use `Nifty.Economy:round(...)` etc. without round-tripping through exports
+--- per call.
+Nifty.Economy = Nifty.core.Economy
+Nifty.Stuetze = Nifty.core.Stuetze
+Nifty.Jobs    = Nifty.core.Jobs

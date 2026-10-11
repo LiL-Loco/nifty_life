@@ -26,9 +26,9 @@ local Db = Nifty.Db
 local GetSetting = Nifty.GetSetting
 
 --- Item weights are DECIMAL money values, so rounding belongs to the economy system.
---- Reached by export, not through the facade: the facade carries data access,
---- not behaviour.
-local Economy = exports['nifty-economy']
+--- Reached through the facade: nifty-economy was absorbed into nifty-core, so
+--- the table is now a field on the bridge.
+local Economy = Nifty.Economy
 
 Inventory = {}
 

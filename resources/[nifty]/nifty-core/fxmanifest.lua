@@ -38,6 +38,15 @@ server_script 'server/sv_session_guard.lua'
 
 server_script 'server/identity.lua'
 
+-- Economy (was nifty-economy, absorbed). Loads before facade so the facade can
+-- publish Economy and Stuetze by reference.
+server_script 'server/economy/economy.lua'
+server_script 'server/economy/stuetze.lua'
+
+-- Jobs (was nifty-jobs, absorbed). Loads after economy because Jobs.startDuty
+-- debits a payslip fee via Economy.debit; needs Economy already in scope.
+server_script 'server/jobs.lua'
+
 -- LAST. It captures Db, GetSetting, Identity and the rest as they are at this
 -- moment, so loading it earlier would publish a facade containing nil.
 server_script 'server/sv_facade.lua'

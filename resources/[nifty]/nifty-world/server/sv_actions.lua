@@ -32,9 +32,9 @@ local SessionGuard = Nifty.SessionGuard
 --- owning resources themselves, reached by export — the resource object IS the
 --- public interface, which is why every system keeps exporting what a PLAYER can
 --- do, not only what its own internals happen to use.
-local Economy   = exports['nifty-economy']
+local Economy   = Nifty.Economy
 local Inventory = exports['nifty-inventory']
-local Jobs      = exports['nifty-jobs']
+local Jobs      = Nifty.Jobs
 local Shop      = exports['nifty-shop']
 local Phone     = exports['nifty-phone']
 local Ownership = exports['nifty-housing']

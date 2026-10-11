@@ -33,3 +33,6 @@ Nifty.Identity = Nifty.core.Identity
 --- (economy stops the Stuetze, jobs settles wages, world clears bootstrap state), and a
 --- global that only the base could see would leave all three silently nil.
 Nifty.SessionGuard = Nifty.core.SessionGuard
+
+--- Economy was its own resource (nifty-economy) until absorbed into nifty-core.
+Nifty.Economy = Nifty.core.Economy

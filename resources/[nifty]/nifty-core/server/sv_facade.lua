@@ -41,6 +41,8 @@ exports('facade', function()
     Nifty = Nifty,
     SessionGuard = SessionGuard,
     Validate = Validate,
+    Economy = Economy,
+    Stuetze = Stuetze,
   }
 end)
 

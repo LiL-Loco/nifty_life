@@ -17,5 +17,4 @@ server_script 'server/inventory.lua'
 
 dependencies {
   'nifty-core',
-  'nifty-economy',
 }

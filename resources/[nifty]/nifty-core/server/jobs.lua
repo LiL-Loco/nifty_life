@@ -8,7 +8,7 @@
       A department that is empty because nobody qualified for it is a dead
       server on a 48-slot weekend, and 48 slots is the entire population.
     * It is not a job you hold. You may hold as many as you like, and be on
-      duty for at most one at a time — being two places at once is not a
+      duty for at most one at a time - being two places at once is not a
       clever exploit, it is just not a thing that can be paid for honestly.
 
   What a job *is*: a wage table, a duty flag, and somewhere to stand.
@@ -16,18 +16,14 @@
 
 local RESOURCE = GetCurrentResourceName()
 
---- From the base facade, fetched by shared/core.lua at load. These were globals
---- when this file lived inside nifty-core; see the note in shared/core.lua about
---- why a local in fxmanifest would not have survived the chunk boundary.
-local Db = Nifty.Db
-local SessionGuard = Nifty.SessionGuard
-local GetSetting = Nifty.GetSetting
-local Identity = Nifty.Identity
-local SessionGuard = Nifty.SessionGuard
-
---- Wages are money, so they are the economy system's decision. Reached by export,
---- not through the facade — the facade carries data access, not behaviour.
-local Economy = exports['nifty-economy']
+--- Same-resource state. Db, GetSetting, Identity, SessionGuard are globals
+--- set up by earlier files in the load chain. Economy is the global set by
+--- server/economy/economy.lua earlier in this same resource.
+local Db = Db
+local SessionGuard = SessionGuard
+local GetSetting = GetSetting
+local Identity = Identity
+local Economy = Economy
 
 Jobs = {}
 
@@ -54,7 +50,7 @@ local function loadDefinitions()
   print(('[%s] loaded %d job definitions'):format(RESOURCE, #rows))
 end
 
---- Hourly wage for a job. Missing setting means zero, not a fallback guess —
+--- Hourly wage for a job. Missing setting means zero, not a fallback guess -
 --- an unknown job must pay nothing rather than pay something plausible.
 function Jobs.wagePerHour(code)
   local def = Definitions[code]
@@ -90,7 +86,7 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Sign up. Open to everyone by ADR-0008, so there is nothing to check beyond
---- "does this job exist" — a job nobody can reach is a dead feature, not a
+--- "does this job exist" - a job nobody can reach is a dead feature, not a
 --- gated one.
 function Jobs.join(characterId, code)
   if not Definitions[code] then return false, 'unknown job' end
@@ -185,7 +181,7 @@ function Jobs.isOnDuty(characterId, code)
 end
 
 --- One character, one shift. Enforced here rather than by a partial unique
---- index because MariaDB has no such thing — a constraint that would need a
+--- index because MariaDB has no such thing - a constraint that would need a
 --- second table and a trigger is not worth it for a rule this easy to state.
 local function isOnAnyDuty(characterId)
   local row = Db.one([[
@@ -231,8 +227,8 @@ end
 
 --- Finish a shift and pay for the time actually worked.
 ---
---- The wage is pro-rated by real elapsed seconds, because the alternative —
---- paying a flat rate per shift — turns "clock in, stand in a corner" into the
+--- The wage is pro-rated by real elapsed seconds, because the alternative -
+--- paying a flat rate per shift - turns "clock in, stand in a corner" into the
 --- optimal strategy. Minimum seconds guards the opposite abuse: clocking in and
 --- out repeatedly to farm a tiny payout per transaction.
 function Jobs.endDuty(characterId, code)
@@ -269,7 +265,7 @@ function Jobs.endDuty(characterId, code)
   if seconds < minimum then
     -- Below the minimum the shift pays nothing at all. The fee is already gone;
     -- that is the cost of a shift too short to count, and it is visible.
-    print(('[%s] %s worked %s for %ds — under the %ds minimum, unpaid'):format(
+    print(('[%s] %s worked %s for %ds - under the %ds minimum, unpaid'):format(
       RESOURCE, characterId, code, seconds, minimum))
   else
     local hourly = Jobs.wagePerHour(code)
@@ -291,7 +287,7 @@ end
 --- On boot, nobody is on duty.
 ---
 --- ADR-0004 freezes the server Monday to Thursday, so a character left flagged
---- on duty across a shutdown was not working — the world did not exist. Clearing
+--- on duty across a shutdown was not working - the world did not exist. Clearing
 --- it is not a convenience, it is the same reasoning that keeps parked vehicles
 --- where they were: the freeze preserves the world, it does not preserve an
 --- open timesheet.
@@ -309,7 +305,7 @@ AddEventHandler('onResourceStart', function(resource)
 end)
 
 --- Leaving a job that pays out is the last chance to settle up, so it happens
---- here rather than in `Jobs.leave` — which may be called from anywhere.
+--- here rather than in `Jobs.leave` - which may be called from anywhere.
 ---
 --- Registered with the session guard, not hooked to `playerDropped`: in OneSync
 --- big mode a distant disconnect delivers no event, and an unsettled shift means
