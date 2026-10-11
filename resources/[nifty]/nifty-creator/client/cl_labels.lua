@@ -152,8 +152,31 @@ Labels.EYE_COLOURS = {
 --- English first names that mean nothing to a German player - "Timothy" and
 --- "Victor" are the same blend. "Vater 7" is honest about what it is; a borrowed
 --- name would be decoration pretending to be information.
-Labels.FATHER = function(index) return ('Vater %d'):format(index + 1) end
-Labels.MOTHER = function(index) return ('Mutter %d'):format(index + 1) end
+-- Real parent names, lifted from the in-game character creator and
+-- shared with lbg-char. The 22 mother names and 24 father names are
+-- the GTA-internal labels, so a "Mutter 1" placeholder would be both
+-- ugly and a lie. The third-person list reuses the union of both
+-- (Labels.THIRDPERSON further down).
+local Labels_MOTHER_NAMES = {
+  'Hannah', 'Audrey', 'Jasmine', 'Giselle', 'Amelia', 'Isabella', 'Zoe',
+  'Ava', 'Camila', 'Violet', 'Sophia', 'Evelyn', 'Nicole', 'Ashley',
+  'Grace', 'Brianna', 'Natalie', 'Olivia', 'Elizabeth', 'Charlotte',
+  'Emma', 'Misty',
+}
+local Labels_FATHER_NAMES = {
+  'Benjamin', 'Daniel', 'Joshua', 'Noah', 'Andrew', 'Juan', 'Alex',
+  'Isaac', 'Evan', 'Ethan', 'Vincent', 'Angel', 'Diego', 'Adrian',
+  'Gabriel', 'Michael', 'Santiago', 'Kevin', 'Louis', 'Samuel',
+  'Anthony', 'Claude', 'Niko', 'John',
+}
+Labels.MOTHER = function(index)
+  local n = Labels_MOTHER_NAMES[index + 1]
+  return n or ('Mutter %d'):format(index + 1)
+end
+Labels.FATHER = function(index)
+  local n = Labels_FATHER_NAMES[index + 1]
+  return n or ('Vater %d'):format(index + 1)
+end
 
 -- Real parent names for the third-person pick. GTA's head_blend_data
 -- takes any of the 47 presets (the same presets that populate the
