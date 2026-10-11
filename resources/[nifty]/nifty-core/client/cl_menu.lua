@@ -83,6 +83,57 @@ local Current = nil
 --- late cannot close a menu that merely happens to have the same content.
 local MenuSerial = 0
 
+--- The menu the most recent `menu` export call created and returned to its
+--- caller. The builders below use this as a fallback when the proxy on this
+--- build of FiveM is dropping the leading user arg (the menu table) before
+--- the registered function sees it - the diagnostic in separator (and the
+--- cascade of `push: ERROR menu is string` errors that follows) is the
+--- symptom. The menu the caller's local points at is the SAME table this
+--- upvalue points at (the menu export returns the table it stored here), so
+--- pushing items through this fallback puts them in the caller's menu.
+local LastBuiltMenu = nil
+
+--- Pick the menu from the args the proxy sent, or fall back to the most
+--- recently built menu. The caller's local and this fallback are the same
+--- table, so adding items via either path lands in the caller's menu.
+local function resolveMenu(args)
+  for i = 1, args.n do
+    if type(args[i]) == 'table' and args[i].items ~= nil then
+      return args[i]
+    end
+  end
+  return LastBuiltMenu
+end
+
+--- Resolve the (menu, label, spec) triple from whatever the proxy sent.
+--- Works for all four call shapes the proxy might be using:
+---
+---   (namespace, menu, label, spec)   - menu has items, label is string, spec is the other table
+---   (menu, label, spec)              - same
+---   (label, spec)                    - menu is LastBuiltMenu (proxy dropped it)
+---   (label)                          - menu is LastBuiltMenu, no spec
+---
+--- `LastBuiltMenu` is the menu the most recent `menu` export call returned,
+--- so this is the caller's menu in all three "missing menu" cases.
+local function resolveArgs(args)
+  local menu = LastBuiltMenu
+  local label, spec
+  for i = 1, args.n do
+    local v = args[i]
+    if type(v) == 'string' then
+      if not label then label = v end
+    elseif type(v) == 'table' then
+      if v.items ~= nil and menu == LastBuiltMenu then
+        -- A table with items is the menu, not the spec.
+        menu = v
+      elseif not spec then
+        spec = v
+      end
+    end
+  end
+  return menu, label, spec
+end
+
 -- ---------------------------------------------------------------------------
 -- Menu construction
 --
@@ -135,7 +186,9 @@ end
 
 exports('menu', function(...)
   local spec = stripSelf(...)
-  return newMenu(type(spec) == 'table' and spec or {})
+  local m = newMenu(type(spec) == 'table' and spec or {})
+  LastBuiltMenu = m
+  return m
 end)
 
 --- A row that is drawn and does nothing. Used to break a long menu into readable
@@ -145,23 +198,18 @@ exports('separator', function(...)
     local args = table.pack(...)
     print(('[nifty-core] separator: n_args=%d, raw[1]=%s (%s)'):format(
       args.n, tostring(args[1]), type(args[1])))
-    -- The proxy may be passing fewer args than the dot-syntax call site
-    -- supplies. Whatever the count, treat the first TABLE arg as the menu
-    -- and the first STRING arg as the label; if neither is present, the
-    -- call is unrecoverable.
-    local menu, label
+    local menu = resolveMenu(args)
+    -- The first STRING arg is the label; if there are several (the spec
+    -- is also a table, not a string, so this only fires for the label),
+    -- the leftmost wins.
+    local label
     for i = 1, args.n do
-      local v = args[i]
-      if type(v) == 'table' and menu == nil then
-        menu = v
-      elseif type(v) == 'string' and label == nil then
-        label = v
-      end
+      if type(args[i]) == 'string' and label == nil then label = args[i] end
     end
     print(('[nifty-core] separator: resolved menu=%s (%s), label=%s (%s)'):format(
       tostring(menu), type(menu), tostring(label), type(label)))
     if type(menu) ~= 'table' then
-      error(('separator: no menu table in args, got menu=%s label=%s'):format(tostring(menu), tostring(label)))
+      error(('separator: no menu table in args or LastBuiltMenu, got menu=%s label=%s'):format(tostring(menu), tostring(label)))
     end
     return push(menu, { kind = 'separator', label = label or '' })
   end, ...)
@@ -174,7 +222,8 @@ end)
 
 --- A button. `onSelect` fires on click and on Enter while the row is selected.
 exports('button', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   return push(menu, {
     kind = 'button',
@@ -187,7 +236,8 @@ end)
 
 --- A checkbox. One boolean, toggled in place.
 exports('checkbox', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   return push(menu, {
     kind = 'checkbox',
@@ -205,7 +255,8 @@ end)
 --- step of 5 is only right where the underlying value is coarse — and the caller
 --- knows that, which is why it is a parameter and not a guess.
 exports('slider', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   local min = tonumber(spec.min) or 0
   local max = tonumber(spec.max) or 100
@@ -240,7 +291,8 @@ end)
 --- the menu, and on the server, not the widget. All this does is carry characters
 --- a player typed to whoever asked for them.
 exports('input', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   return push(menu, {
     kind = 'input',
@@ -256,7 +308,8 @@ end)
 --- One of N, chosen from a list. Different from a list item in that it does not
 --- open anything: it changes a value in place, like a checkbox changes a boolean.
 exports('select', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   local items = {}
 
@@ -283,7 +336,8 @@ end)
 --- construction — and a submenu whose contents depend on state reads that state at
 --- open time rather than at construction time.
 exports('submenu', function(...)
-  local menu, label, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu, label, spec = resolveArgs(args)
   spec = spec or {}
   return push(menu, {
     kind = 'submenu',
@@ -298,7 +352,17 @@ end)
 --- the payload: it hands it back untouched, so a caller can put a drawable index,
 --- a phone number or a property id in there without this file knowing which.
 exports('list', function(...)
-  local menu, spec = stripSelf(...)
+  local args = table.pack(...)
+  local menu = resolveMenu(args) or LastBuiltMenu
+  -- For list, the spec is the FIRST table in args that is not the menu
+  -- (the list spec has `items` too, so the menu-by-items-field rule
+  -- cannot pick it out of a pair).
+  local spec
+  for i = 1, args.n do
+    if type(args[i]) == 'table' and args[i] ~= menu and not spec then
+      spec = args[i]
+    end
+  end
   spec = spec or {}
   local rows = {}
 
