@@ -558,8 +558,8 @@ local COMPONENT_LABELS = {
   [6]  = 'Handschuhe',
   [7]  = 'Accessoires',
   [8]  = 'Unterhemd',
-  [9]  = 'Jacke',
-  [10] = 'Shirt',
+  [9]  = 'Ruestung',
+  [10] = 'Decal',
   [11] = 'Tasche',
   [12] = 'Hose (2)',
 }
