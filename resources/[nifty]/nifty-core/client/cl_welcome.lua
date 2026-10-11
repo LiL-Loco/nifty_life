@@ -27,7 +27,6 @@ local firstSpawn = true
 AddEventHandler('playerSpawned', function()
   if not firstSpawn then return end
   firstSpawn = false
-  print('[nifty-core] welcome.hook playerSpawned (firstSpawn), starting fadeout+park')
 
   -- Instant fade to black. Anything after this is invisible until one of
   -- the two paths below explicitly calls `DoScreenFadeIn`:
@@ -47,10 +46,6 @@ AddEventHandler('playerSpawned', function()
     SetEntityCoords(ped, scene.x, scene.y, scene.z, false, false, false, false)
     SetEntityHeading(ped, scene.heading)
     FreezeEntityPosition(ped, true)
-    print(('[nifty-core] welcome.hook parked at scene=(%.2f,%.2f,%.2f) h=%.2f, waiting for server'):format(
-      scene.x, scene.y, scene.z, scene.heading))
-  else
-    print('[nifty-core] welcome.hook scene is nil; NOT parking')
   end
 end)
 

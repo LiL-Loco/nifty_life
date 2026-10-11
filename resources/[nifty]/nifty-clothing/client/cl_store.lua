@@ -61,11 +61,11 @@ end
 -- ----------------------------------------------------------------------------
 
 local function buildItemMenu(kind, slot, items)
-  local menu = Menu:menu({ title = labelFor(kind, slot) .. ' kaufen' })
+  local menu = Menu.menu({ title = labelFor(kind, slot) .. ' kaufen' })
   menu.dock = 'right'
 
   if #items == 0 then
-    Menu:button(menu, 'Aktuell nichts im Angebot', {
+    Menu.button(menu, 'Aktuell nichts im Angebot', {
       disabled = true,
       description = 'Kein Preis fuer diese Stuecke gesetzt.',
     })
@@ -74,7 +74,7 @@ local function buildItemMenu(kind, slot, items)
       local buttonLabel = (item.name or ('T-Shirt #' .. item.drawable))
         .. '  -$' .. tostring(item.price or 0)
       local itemCopy = item
-      Menu:button(menu, buttonLabel, {
+      Menu.button(menu, buttonLabel, {
         description = ('Kauf und ziehe dieses Stueck direkt an.'),
         onSelect = function()
           local payload = {
@@ -92,7 +92,7 @@ local function buildItemMenu(kind, slot, items)
             RemoveEventHandler(listener)
             if data and data.ok then
               notify(('Gekauft fuer $' .. tostring(data.price or 0)))
-              Menu:closeMenu(RESOURCE, 'purchased')
+              Menu.closeMenu(RESOURCE, 'purchased')
             else
               notify(('Kauf fehlgeschlagen: ' .. tostring(data and data.reason or 'unbekannt')))
             end
@@ -102,9 +102,9 @@ local function buildItemMenu(kind, slot, items)
     end
   end
 
-  Menu:button(menu, 'Zurueck', {
+  Menu.button(menu, 'Zurueck', {
     onSelect = function()
-      Menu:closeMenu(RESOURCE, 'back')
+      Menu.closeMenu(RESOURCE, 'back')
     end,
   })
 
@@ -118,12 +118,12 @@ end
 local function openSlotPicker(kind)
   local slots = (kind == 'component') and COMPONENT_SLOTS or PROP_SLOTS
 
-  local menu = Menu:menu({ title = 'Klamottenladen' })
+  local menu = Menu.menu({ title = 'Klamottenladen' })
   menu.dock = 'right'
 
   for _, slot in ipairs(slots) do
     local pickedKind, pickedSlot = kind, slot
-    Menu:submenu(menu, labelFor(kind, slot), {
+    Menu.submenu(menu, labelFor(kind, slot), {
       build = function()
         -- Ask the server for the items, push the response when it arrives.
         TriggerServerEvent('nifty:server:storeListForSlot', {
@@ -141,25 +141,25 @@ local function openSlotPicker(kind)
           then return end
 
           RemoveEventHandler(listener)
-          Menu:pushMenu(RESOURCE, buildItemMenu(pickedKind, pickedSlot, data.items or {}))
+          Menu.pushMenu(RESOURCE, buildItemMenu(pickedKind, pickedSlot, data.items or {}))
         end)
 
         -- While the server's round-trip is in flight, push an empty menu
         -- so the submenu opens immediately. The fetch response above will
         -- replace it. A real "loading" row keeps the user confident
         -- something is happening.
-        local placeholder = Menu:menu({ title = labelFor(pickedKind, pickedSlot) })
-        Menu:button(placeholder, 'Lade ...', { disabled = true })
+        local placeholder = Menu.menu({ title = labelFor(pickedKind, pickedSlot) })
+        Menu.button(placeholder, 'Lade ...', { disabled = true })
         return placeholder
       end,
     })
   end
 
-  Menu:button(menu, 'Schliessen', {
-    onSelect = function() Menu:closeMenu(RESOURCE, 'closed') end,
+  Menu.button(menu, 'Schliessen', {
+    onSelect = function() Menu.closeMenu(RESOURCE, 'closed') end,
   })
 
-  Menu:separator(menu, 'Oberteile sind der haeufigste Slot.')
+  Menu.separator(menu, 'Oberteile sind der haeufigste Slot.')
 
   return menu
 end
@@ -170,11 +170,11 @@ end
 
 RegisterNetEvent('nifty:client:openStore', function(storeId)
   if type(storeId) ~= 'number' then return end
-  Menu:openMenu(RESOURCE, openSlotPicker('component'))
+  Menu.openMenu(RESOURCE, openSlotPicker('component'))
 end)
 
 RegisterCommand('+niftyclotheshop', function()
-  Menu:openMenu(RESOURCE, openSlotPicker('component'))
+  Menu.openMenu(RESOURCE, openSlotPicker('component'))
 end, false)
 RegisterCommand('-niftyclotheshop', function() end, false)
 RegisterKeyMapping('+niftyclotheshop', 'Nifty Life - Klamottenladen (debug)', 'keyboard', 'F7')

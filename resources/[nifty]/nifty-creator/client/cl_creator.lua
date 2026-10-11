@@ -763,7 +763,7 @@ local function buildOverlayMenu(id)
   }
 
   local maxStyle = overlayStyleCount(id)
-  local menu = Menu:menu({ title = label, dock = 'right' })
+  local menu = Menu.menu({ title = label, dock = 'right' })
 
   -- "Kein" as a button rather than as slider position 0.
   --
@@ -772,20 +772,20 @@ local function buildOverlayMenu(id)
   -- see or undo. Style 0 at zero opacity is the same result and is a real value
   -- the sliders can express. This is why the label list below is read one entry
   -- LATER than the native style: its first entry is that off-state, not style 0.
-  Menu:button(menu, 'Kein', {
+  Menu.button(menu, 'Kein', {
     description = 'Dieses Merkmal ausschalten.',
     onSelect = function()
       face.overlays[tostring(id)] = {
         style = 0, opacity = 0.0, colourType = 1, colour = 0, secondColour = 0,
       }
       refresh()
-      Menu:pushMenu(RESOURCE, buildOverlayMenu(id))
+      Menu.pushMenu(RESOURCE, buildOverlayMenu(id))
     end,
   })
 
-  Menu:separator(menu, 'Stil')
+  Menu.separator(menu, 'Stil')
 
-  Menu:slider(menu, 'Stil', {
+  Menu.slider(menu, 'Stil', {
     min = 0, max = maxStyle, step = 1, value = math.min(current.style, maxStyle),
     format = function(value)
       -- One entry later, because the list starts with the off-state.
@@ -805,7 +805,7 @@ local function buildOverlayMenu(id)
 
   -- Opacity in percent, because the native takes 0.0..1.0 and a slider that shows
   -- "0.42" for a beard reads as a fault rather than as a setting.
-  Menu:slider(menu, 'Deckkraft', {
+  Menu.slider(menu, 'Deckkraft', {
     min = 0, max = 100, step = 1, value = math.floor((current.opacity or 1.0) * 100 + 0.5),
     format = function(value) return ('%d %%'):format(value) end,
     onChange = function(value)
@@ -821,7 +821,7 @@ local function buildOverlayMenu(id)
     end,
   })
 
-  Menu:separator(menu, 'Farbe')
+  Menu.separator(menu, 'Farbe')
 
   -- Palette 0 is a fixed grey and has no indices to choose; only 1 and 2 do.
   for _, entry in ipairs({ { 1, 'Haarfarben' }, { 2, 'Make-up-Farben' } }) do
@@ -829,7 +829,7 @@ local function buildOverlayMenu(id)
     local max = colourCount(colourType)
     local value = (current.colourType == colourType) and current.colour or 0
 
-    Menu:slider(menu, entry[2], {
+    Menu.slider(menu, entry[2], {
       min = 0, max = max, step = 1, value = math.min(value, max),
       format = function(v) return ('%d / %d'):format(v, max) end,
       onChange = function(v)
@@ -884,35 +884,35 @@ local FATHER_COUNT = 21
 local MOTHER_COUNT = 22
 
 local function buildParentsMenu()
-  local menu = Menu:menu({
+  local menu = Menu.menu({
     title = 'Eltern',
     subtitle = parentsSummary(),
     dock = 'right',
   })
 
-  Menu:separator(menu, 'Praesets')
+  Menu.separator(menu, 'Praesets')
 
-  Menu:slider(menu, 'Mutter', {
+  Menu.slider(menu, 'Mutter', {
     min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
     format = function(value) return Labels.MOTHER(value) end,
     onChange = function(value)
       face.headBlend.mother = value
       refresh()
-      Menu:pushMenu(RESOURCE, buildParentsMenu())
+      Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
   })
 
-  Menu:slider(menu, 'Vater', {
+  Menu.slider(menu, 'Vater', {
     min = 0, max = FATHER_COUNT - 1, step = 1, value = face.headBlend.father,
     format = function(value) return Labels.FATHER(value) end,
     onChange = function(value)
       face.headBlend.father = value
       refresh()
-      Menu:pushMenu(RESOURCE, buildParentsMenu())
+      Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
   })
 
-  Menu:slider(menu, 'Dritte Person', {
+  Menu.slider(menu, 'Dritte Person', {
     -- The whole preset range, not just the mother block. That is the point of a
     -- third face: it can be whoever, including a preset the "mother" list also
     -- contains, and the engine does not care which list a name came from.
@@ -921,11 +921,11 @@ local function buildParentsMenu()
     onChange = function(value)
       face.headBlend.third = value
       refresh()
-      Menu:pushMenu(RESOURCE, buildParentsMenu())
+      Menu.pushMenu(RESOURCE, buildParentsMenu())
     end,
   })
 
-  Menu:separator(menu, 'Anteile')
+  Menu.separator(menu, 'Anteile')
 
   -- THREE weights, not one resemblance slider.
   --
@@ -942,20 +942,20 @@ local function buildParentsMenu()
 
   for _, weight in ipairs(weights) do
     local key = weight.key
-    Menu:slider(menu, weight.label, {
+    Menu.slider(menu, weight.label, {
       min = 0, max = 100, step = 1, value = math.floor((face.headBlend[key] or 0.0) * 100 + 0.5),
       format = function(value) return ('%d'):format(value) end,
       onChange = function(value)
         face.headBlend[key] = value / 100
         refresh()
-        Menu:pushMenu(RESOURCE, buildParentsMenu())
+        Menu.pushMenu(RESOURCE, buildParentsMenu())
       end,
     })
   end
 
-  Menu:separator(menu, 'Hautton')
+  Menu.separator(menu, 'Hautton')
 
-  Menu:slider(menu, 'Hautton', {
+  Menu.slider(menu, 'Hautton', {
     min = 0, max = 100, step = 1, value = math.floor((face.headBlend.skinTone or 0.5) * 100 + 0.5),
     format = function(value) return ('%d %%'):format(value) end,
     onChange = function(value)
@@ -967,7 +967,7 @@ local function buildParentsMenu()
   -- One-touch presets for the shapes players actually ask for. Without these,
   -- "give me a face that is a bit of everyone" means dragging three sliders and
   -- watching a number that is not the number they are setting.
-  Menu:separator(menu, 'Schnellwahl')
+  Menu.separator(menu, 'Schnellwahl')
   for _, preset in ipairs({
     { label = 'Nur Mutter', w = { 1.0, 0.0, 0.0 } },
     { label = 'Nur Vater', w = { 0.0, 1.0, 0.0 } },
@@ -976,14 +976,14 @@ local function buildParentsMenu()
     { label = 'Alle drei gleich', w = { 1 / 3, 1 / 3, 1 / 3 } },
   }) do
     local weightsToSet = preset.w
-    Menu:button(menu, preset.label, {
+    Menu.button(menu, preset.label, {
       description = 'Anteile setzen.',
       onSelect = function()
         face.headBlend.motherWeight = weightsToSet[1]
         face.headBlend.fatherWeight = weightsToSet[2]
         face.headBlend.thirdWeight = weightsToSet[3]
         refresh()
-        Menu:pushMenu(RESOURCE, buildParentsMenu())
+        Menu.pushMenu(RESOURCE, buildParentsMenu())
       end,
     })
   end
@@ -993,9 +993,9 @@ end
 
 --- Eye colour: the game's thirty-two, in the engine's own order.
 local function buildEyeColourMenu()
-  local menu = Menu:menu({ title = 'Augenfarbe', dock = 'right' })
+  local menu = Menu.menu({ title = 'Augenfarbe', dock = 'right' })
 
-  Menu:slider(menu, 'Farbe', {
+  Menu.slider(menu, 'Farbe', {
     min = 0, max = AppearanceConfig.MAX_EYE_COLOUR, step = 1, value = face.eyeColour or 0,
     format = function(value)
       return Labels.EYE_COLOURS[value + 1] or ('Farbe %d'):format(value)
@@ -1011,7 +1011,7 @@ end
 
 --- Face features: twenty sliders, each -1.0..1.0.
 local function buildFaceMenu()
-  local menu = Menu:menu({
+  local menu = Menu.menu({
     title = 'Gesichtsform',
     subtitle = 'Zwanzig Schieberegler.',
     dock = 'right',
@@ -1020,7 +1020,7 @@ local function buildFaceMenu()
   for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
     local value = face.features[tostring(id)] or 0.0
 
-    Menu:slider(menu, Labels.FEATURES[id + 1] or ('Merkmal %d'):format(id), {
+    Menu.slider(menu, Labels.FEATURES[id + 1] or ('Merkmal %d'):format(id), {
       min = FEATURE_SLIDER_MIN, max = FEATURE_SLIDER_MAX, step = 0.05, value = value,
       format = function(v) return ('%+.2f'):format(v) end,
       onChange = function(v)
@@ -1042,10 +1042,10 @@ end
 
 --- Hair colour: primary and highlight, both from the hair palette.
 local function buildHairColourMenu()
-  local menu = Menu:menu({ title = 'Haarfarbe', dock = 'right' })
+  local menu = Menu.menu({ title = 'Haarfarbe', dock = 'right' })
   local max = colourCount(1)
 
-  Menu:slider(menu, 'Hauptfarbe', {
+  Menu.slider(menu, 'Hauptfarbe', {
     min = 0, max = max, step = 1, value = math.min(face.hairColour.primary, max),
     format = function(v) return ('%d / %d'):format(v, max) end,
     onChange = function(v)
@@ -1054,7 +1054,7 @@ local function buildHairColourMenu()
     end,
   })
 
-  Menu:slider(menu, 'Strähnen', {
+  Menu.slider(menu, 'Strähnen', {
     min = 0, max = max, step = 1, value = math.min(face.hairColour.highlight, max),
     format = function(v) return ('%d / %d'):format(v, max) end,
     onChange = function(v)
@@ -1084,13 +1084,13 @@ buildTattooMenu = function(zoneId)
   local tattoos = GameData.tattoosByZone(zoneId)
   if #tattoos == 0 then return nil end
 
-  local menu = Menu:menu({
+  local menu = Menu.menu({
     title = ZONE_LABELS[zoneId] or ('Zone ' .. zoneId),
     subtitle = ('%d Tattoo(s)'):format(#tattoos),
     dock = 'right',
   })
 
-  Menu:button(menu, 'Keins', {
+  Menu.button(menu, 'Keins', {
     description = 'Alle Tattoos dieser Zone entfernen.',
     onSelect = function()
       local kept = {}
@@ -1099,15 +1099,15 @@ buildTattooMenu = function(zoneId)
       end
       face.tattoos = kept
       applyDecorations()
-      Menu:pushMenu(RESOURCE, buildRootMenu())
+      Menu.pushMenu(RESOURCE, buildRootMenu())
     end,
   })
 
-  Menu:separator(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId))
+  Menu.separator(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId))
 
   for _, tattoo in ipairs(tattoos) do
     local entry = tattoo
-    Menu:button(menu, entry.name, {
+    Menu.button(menu, entry.name, {
       description = entry.collection,
       onSelect = function()
         -- ONE PER ZONE, not one per collection. Two tattoos on the same arm
@@ -1130,7 +1130,7 @@ buildTattooMenu = function(zoneId)
           applyDecorations()
         end
 
-        Menu:pushMenu(RESOURCE, buildRootMenu())
+        Menu.pushMenu(RESOURCE, buildRootMenu())
       end,
     })
   end
@@ -1181,7 +1181,7 @@ buildSlotMenu = function(kind, id)
   local currentName = nameFor(drawable, texture)
   local currentTags = GameData.itemTags(isProp, id, option.name, drawable, texture, option.drawables)
 
-  local menu = Menu:menu({
+  local menu = Menu.menu({
     title = currentName and ('%s - %s'):format(label, currentName) or label,
     subtitle = #currentTags > 0 and ('Merkmale: ' .. table.concat(currentTags, ', ')) or nil,
     -- Section bar updates to the slot name (e.g. "Brow 1 / 11") so the
@@ -1197,7 +1197,7 @@ buildSlotMenu = function(kind, id)
     labels[i] = (opt.name == '') and 'Standard' or opt.name
   end
 
-  Menu:select(menu, 'Kollektion', {
+  Menu.select(menu, 'Kollektion', {
     items       = labels,
     index       = index,
     description = 'Gibt an, welche DLC die Kleidung liefert.',
@@ -1218,11 +1218,11 @@ buildSlotMenu = function(kind, id)
 
       -- Re-present with the new bounds. Without it the two sliders keep the old
       -- maximum and a drawable past the end of the new collection is reachable.
-      Menu:pushMenu(RESOURCE, buildSlotMenu(kind, id))
+      Menu.pushMenu(RESOURCE, buildSlotMenu(kind, id))
     end,
   })
 
-  Menu:slider(menu, 'Modell', {
+  Menu.slider(menu, 'Modell', {
     min = 0, max = option.drawables - 1, step = 1, value = drawable,
     format = function(value)
       -- The name of the item under the cursor, not the number it happens to have.
@@ -1240,7 +1240,7 @@ buildSlotMenu = function(kind, id)
     end,
   })
 
-  Menu:slider(menu, 'Textur', {
+  Menu.slider(menu, 'Textur', {
     min = 0, max = option.textures - 1, step = 1, value = texture,
     format = function(value)
       -- The texture is a COLOUR VARIATION, not a fabric index - "Tan" against
@@ -1263,8 +1263,7 @@ end
 
 --- The root menu: one row per available slot, then the actions.
 buildRootMenu = function()
-  print('[nifty-creator] buildRootMenu: enter')
-  local menu = Menu:menu({
+  local menu = Menu.menu({
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
     dock     = 'right',
@@ -1289,10 +1288,10 @@ buildRootMenu = function()
   -- inventing a body for it here would be the server deciding something the player
   -- is entitled to say about themselves.
   if modelIsUndecided then
-    Menu:separator(menu, 'Modell')
+    Menu.separator(menu, 'Modell')
     for _, entry in ipairs({ { 'mp_m_freemode_01', 'Maennlich' },
                              { 'mp_f_freemode_01', 'Weiblich' } }) do
-      Menu:button(menu, entry[2], {
+      Menu.button(menu, entry[2], {
         description = 'Freemode-Modell waehlen.',
         onSelect = function()
           currentModel = entry[1]
@@ -1305,13 +1304,13 @@ buildRootMenu = function()
           respawnModel()
           discoverSlots()
           resolveHairOverlay()
-          applyDecorations()          Menu:pushMenu(RESOURCE, buildRootMenu())
+          applyDecorations()          Menu.pushMenu(RESOURCE, buildRootMenu())
         end,
       })
     end
   end
 
-  Menu:separator(menu, 'Kleidung')
+  Menu.separator(menu, 'Kleidung')
   -- Iterate the component IDs the actual model exposes, not a hardcoded
   -- COMPONENT_ORDER. The original list had a 12 that the mp_m_freemode_01
   -- model does not expose (12 component slots, IDs 0-11), so 1 in 12 submenus
@@ -1322,7 +1321,7 @@ buildRootMenu = function()
   table.sort(componentIds)
   for _, id in ipairs(componentIds) do
     local options = slots.components[id]
-    Menu:submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
+    Menu.submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
       description = ('Slot %d - %d Kollektionen'):format(id, #options),
       build = function() return buildSlotMenu('components', id) end,
     })
@@ -1330,41 +1329,41 @@ buildRootMenu = function()
 
   local propIds = propIdsSorted()
   if #propIds > 0 then
-    Menu:separator(menu, 'Accessoires')
+    Menu.separator(menu, 'Accessoires')
     for _, id in ipairs(propIds) do
-      Menu:submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
+      Menu.submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
         description = ('Prop %d - %d Kollektionen'):format(id, #slots.props[id]),
         build = function() return buildSlotMenu('props', id) end,
       })
     end
   end
 
-  Menu:separator(menu, 'Gesicht')
-  Menu:submenu(menu, 'Eltern', {
+  Menu.separator(menu, 'Gesicht')
+  Menu.submenu(menu, 'Eltern', {
     description = 'Vater, Mutter und die beiden Mischungen.',
     build = buildParentsMenu,
   })
 
-  Menu:submenu(menu, 'Augenfarbe', {
+  Menu.submenu(menu, 'Augenfarbe', {
     description = 'Eine von dreissigzwei.',
     build = buildEyeColourMenu,
   })
 
-  Menu:separator(menu, 'Merkmale')
+  Menu.separator(menu, 'Merkmale')
 
   for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
-    Menu:submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
+    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
       description = 'Stil, Deckkraft und Farbe.',
       build = function() return buildOverlayMenu(id) end,
     })
   end
 
-  Menu:submenu(menu, 'Haarfarbe', {
+  Menu.submenu(menu, 'Haarfarbe', {
     description = 'Hauptfarbe und Strähnen.',
     build = buildHairColourMenu,
   })
 
-  Menu:submenu(menu, 'Gesichtsform', {
+  Menu.submenu(menu, 'Gesichtsform', {
     description = 'Die zwanzig Gesichtsschieberegler.',
     build = buildFaceMenu,
   })
@@ -1375,33 +1374,33 @@ buildRootMenu = function()
   -- way to draw.
   local tattooZones = GameData.tattooZones()
   if #tattooZones > 0 then
-    Menu:separator(menu, 'Tattoos')
+    Menu.separator(menu, 'Tattoos')
     for _, zoneId in ipairs(tattooZones) do
-      Menu:submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
+      Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
         description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
         build = function() return buildTattooMenu(zoneId) end,
       })
     end
   end
 
-  Menu:separator(menu, 'Aktionen')
+  Menu.separator(menu, 'Aktionen')
 
-  Menu:button(menu, 'Zufallsaufzug', {
+  Menu.button(menu, 'Zufallsaufzug', {
     description = 'Zufaellige Kleidung. A/D dreht die Kamera.',
     onSelect = function() randomise() end,
   })
 
-  Menu:button(menu, 'Zuruecksetzen', {
+  Menu.button(menu, 'Zuruecksetzen', {
     description = 'Alle Auswaehle verwerfen und das Modell neu laden.',
     onSelect = function() reset() end,
   })
 
-  Menu:button(menu, 'Fertig', {
+  Menu.button(menu, 'Fertig', {
     description = 'Aussehen speichern und die Welt betreten.',
     onSelect = function() submit() end,
   })
 
-  Menu:button(menu, 'Abbrechen', {
+  Menu.button(menu, 'Abbrechen', {
     description = 'Verlassen. Beim naechsten Verbinden geht es hier weiter.',
     onSelect = function() cancel() end,
   })
@@ -1413,18 +1412,15 @@ end
 -- ---------------------------------------------------------------- actions
 
 local function openRoot()
-  local menu = buildRootMenu()
-  local items = type(menu) == 'table' and #menu.items or -1
-  print(('[%s] openRoot: items=%s, title=%s'):format(RESOURCE, tostring(items), type(menu) == 'table' and tostring(menu.title) or 'nil'))
-  if Menu:openMenu(RESOURCE, menu) then return end
+  if Menu.openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework
   -- thinks another menu is open, or the new menu itself is empty). Print
   -- the actual two states so the next log is unambiguous.
   local holder = exports['nifty-core']:holder() or 'nil'
-  local current = Menu:isOpen() and 'a menu is open' or 'no menu open'
-  print(('[%s] could not open the creator menu - holder=%s, %s, items=%s'):format(RESOURCE, holder, current, tostring(items)))
+  local current = Menu.isOpen() and 'a menu is open' or 'no menu open'
+  print(('[%s] could not open the creator menu - holder=%s, %s'):format(RESOURCE, holder, current))
   TriggerServerEvent('nifty:server:cancelCreator')
 end
 
@@ -1454,7 +1450,7 @@ randomise = function()
     end
   end
 
-  if Menu:isOpen() then Menu:pushMenu(RESOURCE, buildRootMenu()) end
+  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
 
 reset = function()
@@ -1478,7 +1474,7 @@ reset = function()
   resolveHairOverlay()
   applyDecorations()
 
-  if Menu:isOpen() then Menu:pushMenu(RESOURCE, buildRootMenu()) end
+  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
 
 submit = function()
@@ -1500,7 +1496,7 @@ closeCreator = function(reason)
   if not creatorOpen then return end
   creatorOpen = false
   stopCamera()
-  Menu:closeMenu(RESOURCE, reason or 'closed')
+  Menu.closeMenu(RESOURCE, reason or 'closed')
 end
 
 exports('openCreator', function(data)

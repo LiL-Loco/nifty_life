@@ -350,8 +350,6 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
 end)
 
 RegisterNetEvent('nifty:client:openCreator', function(data)
-  print(('[nifty-world] received nifty:client:openCreator, gender=%s'):format(data and data.gender or 'male'))
-
   -- The character row already exists; this is the second half of making it
   -- playable. Held frozen and invisible so nobody walks around the city as an
   -- unowned ped, but VISIBLE - the creator has to show the player their own face
@@ -362,7 +360,6 @@ RegisterNetEvent('nifty:client:openCreator', function(data)
   local ped = PlayerPedId()
   FreezeEntityPosition(ped, true)
   SetEntityVisible(ped, true)
-  print(('[nifty-world] openCreator: ped frozen+visible, calling exports'))
 
   exports['nifty-creator']:openCreator({
     gender = data and data.gender or 'male',
