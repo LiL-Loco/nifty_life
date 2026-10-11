@@ -61,6 +61,7 @@ local resolveHairOverlay
 local applyDecorations
 local buildTattooMenu
 local slotOf
+local openRoot
 
 local creatorOpen = false
 local currentModel = 'mp_m_freemode_01'
