@@ -116,14 +116,21 @@ $websiteDenied = @(
   @{ name = 'un-delete a post';                sql = "UPDATE peeper_posts SET deleted_at=NOW() WHERE id='nobody'" },
   @{ name = 'resolve a report';                sql = "UPDATE peeper_reports SET status='dismissed' WHERE id='nobody'" },
   @{ name = 'remove another like';             sql = "DELETE FROM peeper_likes WHERE character_id<>'nobody'" },
-  @{ name = 'delete an application';           sql = "DELETE FROM applications WHERE discord_id='nobody'" }
+  @{ name = 'delete an application';           sql = "DELETE FROM applications WHERE discord_id='nobody'" },
+  # The staff mirror. BOTH web accounts hold SELECT only — the bot in `bot/` is
+  # the sole writer, using the GAME account. If any of these three ever pass, a
+  # website account can appoint itself moderator, and the Discord role stops
+  # being the source of truth.
+  @{ name = 'appoint themselves staff';        sql = "INSERT INTO staff (discord_id, role_id) VALUES ('nobody','1')" },
+  @{ name = 'promote a staff row';             sql = "UPDATE staff SET role_id='1' WHERE discord_id='nobody'" },
+  @{ name = 'demote a moderator';              sql = "DELETE FROM staff WHERE discord_id='nobody'" }
 )
 
 $websiteAllowed = @(
   @{ name = 'read the feed';          sql = "SELECT id FROM peeper_posts WHERE deleted_at IS NULL LIMIT 1" },
   @{ name = 'read own application';   sql = "SELECT id FROM applications WHERE discord_id='nobody' LIMIT 1" },
   @{ name = 'read own link';          sql = "SELECT character_id FROM web_links WHERE discord_id='nobody' LIMIT 1" },
-  @{ name = 'read staff flags';       sql = 'SELECT id, is_staff FROM characters LIMIT 1' }
+  @{ name = 'read the staff mirror';  sql = 'SELECT discord_id FROM staff LIMIT 1' }
 )
 
 # What the ADMIN pool may do, and what it still may not do.
@@ -145,14 +152,20 @@ $adminDenied = @(
   # purpose, because deciding whether to trust the privileged connection must not
   # itself require the privileged connection. Feed moderation stays in game (ADR-0022).
   @{ name = 'read the feed';                   sql = "SELECT id FROM peeper_posts WHERE deleted_at IS NULL LIMIT 1" },
-  @{ name = 'read own link';                   sql = "SELECT character_id FROM web_links WHERE discord_id='nobody' LIMIT 1" }
+  @{ name = 'read own link';                   sql = "SELECT character_id FROM web_links WHERE discord_id='nobody' LIMIT 1" },
+  # Admin decides applications. It does NOT appoint staff: `isStaff()` runs on
+  # the public pool and reads a mirror only the bot can write.
+  @{ name = 'appoint themselves staff';        sql = "INSERT INTO staff (discord_id, role_id) VALUES ('nobody','1')" },
+  @{ name = 'promote a staff row';             sql = "UPDATE staff SET role_id='1' WHERE discord_id='nobody'" },
+  @{ name = 'demote a moderator';              sql = "DELETE FROM staff WHERE discord_id='nobody'" }
 )
 
 $adminAllowed = @(
   @{ name = 'read characters';            sql = 'SELECT id, is_staff FROM characters LIMIT 1' },
   @{ name = 'read accounts';              sql = 'SELECT id, status FROM accounts LIMIT 1' },
   @{ name = 'read bans';                  sql = 'SELECT id, discord_id FROM bans LIMIT 1' },
-  @{ name = 'approve an application';     sql = "UPDATE applications SET status='approved', reviewed_at=NOW(), reviewed_by=NULL, decision_note=NULL WHERE discord_id='nobody'" }
+  @{ name = 'read the staff mirror';      sql = 'SELECT discord_id FROM staff LIMIT 1' },
+  @{ name = 'approve an application';     sql = "UPDATE applications SET status='approved', reviewed_at=NOW(), reviewed_by_discord_id='1', decision_note=NULL WHERE discord_id='nobody'" }
 )
 
 switch ($Section) {

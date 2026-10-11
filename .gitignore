@@ -38,6 +38,10 @@ build/
 npm-debug.log*
 yarn-error.log*
 .pnpm-store/
+
+# `*.local.*` does not cover this: the bot's .env holds the only token that can
+# change who is staff, so it must never be committable even by accident.
+/bot/.env
 # Next.js build output. Without this, `.next/` alone is tens of megabytes of
 # generated code and would swamp every diff.
 .next/

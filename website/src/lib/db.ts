@@ -111,7 +111,7 @@ export async function adminQuery<T = Record<string, unknown>>(
 const ADMIN_WRITABLE_APPLICATION_COLUMNS = [
   'status',
   'reviewed_at',
-  'reviewed_by',
+  'reviewed_by_discord_id',
   'decision_note',
 ] as const;
 

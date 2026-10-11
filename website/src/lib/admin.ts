@@ -23,6 +23,7 @@ export interface QueueEntry {
   status: ApplicationStatus;
   submitted_at: string;
   reviewed_at: string | null;
+  reviewed_by_discord_id: string | null;
 }
 
 export type AdminResult = { ok: true } | { ok: false; error: string };
@@ -37,13 +38,16 @@ const STATUSES: ApplicationStatus[] = ['submitted', 'under_review', 'approved', 
  * list, so if the grant is ever tightened, this view is already on the account
  * that would still have it.
  */
-export async function queue(status?: ApplicationStatus, limit = 50): Promise<QueueEntry[]> {
+export async function queue(
+  status?: ApplicationStatus | null,
+  limit = 50,
+): Promise<QueueEntry[]> {
   if (status && !STATUSES.includes(status)) return [];
 
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
 
   return adminQuery<QueueEntry>(
-    `SELECT id, discord_id, status, submitted_at, reviewed_at
+    `SELECT id, discord_id, status, submitted_at, reviewed_at, reviewed_by_discord_id
        FROM applications
       WHERE (? IS NULL OR status = ?)
       ORDER BY submitted_at ASC
@@ -52,12 +56,26 @@ export async function queue(status?: ApplicationStatus, limit = 50): Promise<Que
   );
 }
 
+export interface ApplicationRow {
+  id: string;
+  discord_id: string;
+  status: ApplicationStatus;
+  /** JSON column. The driver may hand this over already parsed, so the shape is
+   *  asserted at the render boundary rather than here. */
+  answers: unknown;
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by_discord_id: string | null;
+  decision_note: string | null;
+}
+
 /** One application in full, for the review screen. */
-export async function application(id: string) {
+export async function application(id: string): Promise<ApplicationRow | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
 
-  const rows = await adminQuery(
-    `SELECT id, discord_id, status, answers, submitted_at, reviewed_at, reviewed_by, decision_note
+  const rows = await adminQuery<ApplicationRow>(
+    `SELECT id, discord_id, status, answers, submitted_at, reviewed_at,
+            reviewed_by_discord_id, decision_note
        FROM applications
       WHERE id = ?
       LIMIT 1`,
@@ -82,9 +100,10 @@ export async function queueCounts(): Promise<Record<string, number>> {
 /**
  * Approve or reject an application.
  *
- * `reviewed_by` is the CHARACTER id, not the Discord ID: the decision belongs to
- * a member of the team, and a staff flag on a character is what that means here.
- * It is resolved from the session, never accepted as an argument.
+ * `reviewed_by_discord_id` is the DECIDER'S DISCORD ID, taken from the signed
+ * session and from nowhere else. It used to be a character id, which forced the
+ * decision through `web_links` — meaning nobody could decide anything until they
+ * had already played the game. A moderator is appointed; a character is created.
  */
 export async function decide(
   id: string,
@@ -108,20 +127,10 @@ export async function decide(
   }
 
   try {
-    const { linkedCharacter } = await import('./identity');
-    const link = await linkedCharacter(staff.discordId);
-
-    if (!link) {
-      return {
-        ok: false,
-        error: 'Dein Charakter ist nicht verknüpft, daher kann keine Entscheidung zugeordnet werden.',
-      };
-    }
-
     const affected = await adminUpdateApplication(id, {
       status,
       reviewed_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      reviewed_by: link.characterId,
+      reviewed_by_discord_id: staff.discordId,
       decision_note: note,
     });
 

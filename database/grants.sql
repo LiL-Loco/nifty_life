@@ -118,19 +118,37 @@ FLUSH PRIVILEGES;
 CREATE USER IF NOT EXISTS 'nifty_admin'@'localhost' IDENTIFIED BY 'CHANGE_ME_ADMIN';
 
 GRANT SELECT ON nifty_life.applications TO 'nifty_admin'@'localhost';
-GRANT UPDATE (status, reviewed_at, reviewed_by, decision_note)
+GRANT UPDATE (status, reviewed_at, reviewed_by_discord_id, decision_note)
   ON nifty_life.applications TO 'nifty_admin'@'localhost';
 GRANT SELECT ON nifty_life.characters TO 'nifty_admin'@'localhost';
 GRANT SELECT ON nifty_life.bans      TO 'nifty_admin'@'localhost';
 GRANT SELECT ON nifty_life.accounts  TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.staff     TO 'nifty_admin'@'localhost';
+
+-- ---------------------------------------------------------------------------
+-- `staff` — the Discord role mirror (migration 011).
+--
+-- READ-ONLY for both website accounts, for both web connections. The bot in
+-- `bot/` is the ONLY writer, and it writes with the GAME account, not with
+-- either of these. That is the point of mirroring rather than asking: the
+-- website never has the token that could change who is staff.
+--
+-- `isStaff()` deliberately runs on the PUBLIC pool. Deciding whether to trust
+-- the admin connection must not itself require the admin connection.
+-- ---------------------------------------------------------------------------
+GRANT SELECT ON nifty_life.staff TO 'nifty_website'@'localhost';
 
 -- Verification, alongside the ones below:
---   INSERT INTO applications (...)          -- denied: no INSERT
---   UPDATE applications SET answers='{}'   -- denied: column not granted
---   UPDATE applications SET discord_id='1' -- denied: column not granted
---   DELETE FROM applications WHERE id='x'  -- denied: no DELETE
---   UPDATE peeper_posts SET deleted_at=NOW -- denied: no grant at all
---   SELECT * FROM wallets                   -- denied: no grant at all
+--   INSERT INTO applications (...)                    -- denied: no INSERT
+--   UPDATE applications SET answers='{}'             -- denied: column not granted
+--   UPDATE applications SET discord_id='1'           -- denied: column not granted
+--   UPDATE applications SET reviewed_by_discord_id=x  -- PERMITTED: this is the decision
+--   DELETE FROM applications WHERE id='x'            -- denied: no DELETE
+--   UPDATE peeper_posts SET deleted_at=NOW           -- denied: no grant at all
+--   SELECT * FROM wallets                            -- denied: no grant at all
+--   INSERT INTO staff (...)                          -- denied: no INSERT on either web account
+--   UPDATE staff SET role_id='1'                     -- denied: no UPDATE on either web account
+--   DELETE FROM staff WHERE discord_id='1'           -- denied: no DELETE on either web account
 
 FLUSH PRIVILEGES;
 

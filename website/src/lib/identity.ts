@@ -72,31 +72,31 @@ export async function latestKnownName(
 /**
  * Is this Discord account a member of the moderation team?
  *
- * The flag lives on `characters` (migration 009), deliberately NOT derived from a
- * job: an officer who could delete posts on a server with one moderator would be
- * a second moderator nobody appointed.
+ * Staff is a DISCORD ROLE, mirrored into the `staff` table by the bot in `bot/`.
  *
- * So staff is a property of the CHARACTER, and the character is reached through
- * the same `web_links` binding everything else uses. Staff must therefore link
- * their character like anyone else before the admin area opens for them — which
- * is a small price for not having two independent notions of who you are.
+ * It used to be `characters.is_staff` reached through `web_links`, which was
+ * backwards in a way that only showed up in practice: the moderation team is
+ * appointed by whoever owns the server, and the first person to be appointed is
+ * by definition the one who has played the longest. It also meant nobody could
+ * open /admin until the first client ever connected, so the approval path would
+ * have shipped unexercised.
+ *
+ * The website only SELECTs `staff`. The bot is the sole writer, and it writes
+ * with the GAME account — neither web connection holds a token that could change
+ * who is staff, which is the whole reason for mirroring instead of asking.
  *
  * This runs on the PUBLIC connection on purpose. Deciding whether to trust the
  * admin connection cannot itself depend on the admin connection.
  */
 export async function isStaff(discordId: string): Promise<boolean> {
-  if (!discordId) return false;
+  if (!/^\d{5,32}$/.test(discordId)) return false;
 
-  const row = await one<{ is_staff: number }>(
-    `SELECT c.is_staff
-       FROM web_links w
-       JOIN characters c ON c.id = w.character_id
-      WHERE w.discord_id = ?
-      LIMIT 1`,
+  const row = await one<{ discord_id: string }>(
+    'SELECT discord_id FROM staff WHERE discord_id = ? LIMIT 1',
     [discordId],
   );
 
-  return row?.is_staff === 1;
+  return row !== null;
 }
 
 /**
