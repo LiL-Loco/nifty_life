@@ -98,6 +98,15 @@ export const config = {
   sessionSecret: required('SESSION_SECRET', process.env.SESSION_SECRET),
 
   /**
+   * The public Discord invite, for the landing page.
+   *
+   * Optional on purpose: until it is set there is nothing to send a visitor to,
+   * and the button says so rather than linking to nothing. A dead "JOIN DISCORD"
+   * in the middle of the screen is the first thing anybody notices.
+   */
+  discordInvite: process.env.DISCORD_INVITE_URL ?? '',
+
+  /**
    * This site's own base URL, absolute and without a trailing slash.
    *
    * It exists because a confirmation link is read in an EMAIL CLIENT, not in a
