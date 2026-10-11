@@ -1,0 +1,36 @@
+ ⨯ Error: DISCORD_REDIRECT_URI points at discord.com. That is the bot invite link from the Developer Portal, not a redirect. Use your own address, e.g. http://localhost:3000/auth/callback, and add it under OAuth2 → Redirects.
+    at validateRedirectUri (src\lib\config.ts:69:11)
+    at eval (src\lib\config.ts:119:3)
+    at <unknown> (rsc)/./src/lib/config.ts (F:\GTA5\website\.next\server\app\page.js:107:1)
+    at eval (webpack-internal:///(rsc)/./src/lib/session.ts:12:65)
+    at <unknown> (rsc)/./src/lib/session.ts (F:\GTA5\website\.next\server\app\page.js:118:1)
+    at eval (webpack-internal:///(rsc)/./src/lib/auth.ts:7:66)
+    at <unknown> (rsc)/./src/lib/auth.ts (F:\GTA5\website\.next\server\app\page.js:96:1)
+    at eval (webpack-internal:///(rsc)/./src/app/page.tsx:9:67)
+    at <unknown> (rsc)/./src/app/page.tsx (F:\GTA5\website\.next\server\app\page.js:85:1)
+  67 |
+  68 |   if (parsed.hostname === 'discord.com' || parsed.hostname.endsWith('.discord.com')) {
+> 69 |     throw new Error(
+     |           ^
+  70 |       'DISCORD_REDIRECT_URI points at discord.com. That is the bot invite link ' +
+  71 |         'from the Developer Portal, not a redirect. Use your own address, e.g. ' +
+  72 |         'http://localhost:3000/auth/callback, and add it under OAuth2 → Redirects.',
+ ⨯ Error: DISCORD_REDIRECT_URI points at discord.com. That is the bot invite link from the Developer Portal, not a redirect. Use your own address, e.g. http://localhost:3000/auth/callback, and add it under OAuth2 → Redirects.
+    at validateRedirectUri (src\lib\config.ts:69:11)
+    at eval (src\lib\config.ts:119:3)
+    at <unknown> (rsc)/./src/lib/config.ts (F:\GTA5\website\.next\server\app\page.js:107:1)
+    at eval (webpack-internal:///(rsc)/./src/lib/session.ts:12:65)
+    at <unknown> (rsc)/./src/lib/session.ts (F:\GTA5\website\.next\server\app\page.js:118:1)
+    at eval (webpack-internal:///(rsc)/./src/lib/auth.ts:7:66)
+    at <unknown> (rsc)/./src/lib/auth.ts (F:\GTA5\website\.next\server\app\page.js:96:1)
+    at eval (webpack-internal:///(rsc)/./src/app/page.tsx:9:67)
+    at <unknown> (rsc)/./src/app/page.tsx (F:\GTA5\website\.next\server\app\page.js:85:1)
+  67 |
+  68 |   if (parsed.hostname === 'discord.com' || parsed.hostname.endsWith('.discord.com')) {
+> 69 |     throw new Error(
+     |           ^
+  70 |       'DISCORD_REDIRECT_URI points at discord.com. That is the bot invite link ' +
+  71 |         'from the Developer Portal, not a redirect. Use your own address, e.g. ' +
+  72 |         'http://localhost:3000/auth/callback, and add it under OAuth2 → Redirects.', {
+  page: '/'
+}

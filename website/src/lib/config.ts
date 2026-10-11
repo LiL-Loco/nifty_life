@@ -40,6 +40,49 @@ if (!isBuildPhase && isProduction && devAuthWanted) {
   );
 }
 
+/**
+ * The redirect URI is the address Discord sends the player BACK to, and it must
+ * match — exactly, character for character — one of the URLs registered under
+ * OAuth2 → Redirects in the Developer Portal.
+ *
+ * The most common mistake by a wide margin is pasting the portal's *bot invite
+ * link* here, because that is the other URL the portal shows you and it also
+ * starts with `https://discord.com/oauth2/authorize`. Discord then answers
+ * "invalid redirect_uri", which names neither the app, nor the URL, nor the
+ * setting at fault.
+ *
+ * So we check the shape of it here rather than letting a confusing error travel
+ * halfway to another company and back.
+ */
+function validateRedirectUri(uri: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    throw new Error(
+      `DISCORD_REDIRECT_URI is not a URL: "${uri}". It must be the address ` +
+        'Discord returns to, e.g. http://localhost:3000/auth/callback',
+    );
+  }
+
+  if (parsed.hostname === 'discord.com' || parsed.hostname.endsWith('.discord.com')) {
+    throw new Error(
+      'DISCORD_REDIRECT_URI points at discord.com. That is the bot invite link ' +
+        'from the Developer Portal, not a redirect. Use your own address, e.g. ' +
+        'http://localhost:3000/auth/callback, and add it under OAuth2 → Redirects.',
+    );
+  }
+
+  if (parsed.search || parsed.hash) {
+    throw new Error(
+      'DISCORD_REDIRECT_URI must not contain a query string or fragment. ' +
+        'Discord compares it literally against the registered value.',
+    );
+  }
+
+  return uri;
+}
+
 export const config = {
   isProduction,
   devAuth: devAuthWanted,
@@ -68,6 +111,13 @@ export const config = {
 export const discordConfigured = Boolean(
   config.discord.clientId && config.discord.clientSecret,
 );
+
+// Only validated when Discord is actually in play — a deployment that has not
+// created an application yet should still start and say so on the login page
+// rather than crash on a placeholder value.
+if (discordConfigured && !isBuildPhase) {
+  validateRedirectUri(config.discord.redirectUri);
+}
 
 /** Which login paths this instance will actually offer. */
 export function loginMode(): 'discord' | 'dev' | 'unavailable' {
