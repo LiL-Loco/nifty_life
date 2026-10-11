@@ -59,11 +59,36 @@ function check(name, condition, detail) {
 function probeForm() {
   const form = new FormData();
   form.set('rulebook_read', 'on');
+
+  // Distinct per question, not "Submit-Probe Antwort N ...". The copy check in
+  // `validateAnswers` is real and a fixture of twenty near-identical sentences is
+  // exactly what it is meant to reject — the probe was failing on its own filler
+  // before it ever reached the database.
+  const OPENERS = [
+    'Auf dem Server kann man sich mit allen unterhalten und dabei ganz in die Rolle gehen.',
+    'Ein Changelog sagt nur etwas ueber den Spielstand und nicht ueber unsere Geschichte.',
+    'Ohne Ansage hat das Opfer keine Chance und genau das macht den Unterschied aus.',
+    'Ein Motorrad ist lebensgefaehrlich, deshalb muss man dort doppelt vorsichtig sein.',
+    'Informationen zu benutzen, die die Figur gar nicht haben kann, ist Meta-Gaming.',
+    'Dem Partner etwas vorschreiben, was er nicht mitmacht, ist Power-RP.',
+    'Einen Absturz melde ich sofort und warte, bis die Szene sauber weitergeht.',
+    'Ich sage freundlich nein und biete an, es beim naechsten Mal anders zu machen.',
+    'Wer im Spiel ist, gehoert auch auf den Teamspeak und benimmt sich dort genauso.',
+    'Ohne abgesprochenes Einverstaendnis ist es kein genehmigter Antrag, sondern Zwang.',
+    'Offene Straenge klare ich vorher mit allen Beteiligten, damit nichts haengenbleibt.',
+    'Der Wasted-Timer heisst, dass niemand eingreifen soll, weil die Szene so geplant war.',
+    'Nach dem Aufwachen weiss die Figur nichts und darf nicht in die Szene zurueckkehren.',
+    'Wer den Fall aufloest, darf die Szene sauber beenden, die Figur selbst bleibt bestehen.',
+    'Eine Geiselnahme ist bei Bankraub verboten, weil man sonst keine Ausnahme mehr hat.',
+    'Vier pro Seite, und nicht alle vier gleichzeitig bei derselbenillegalen Taetigkeit.',
+    'Die Zugehoerigkeit muss sichtbar sein, damit jeder im Bild weiss, wer zu wem gehoert.',
+    'Ab dem Moment bin ich raus und der andere hat das Sagen in dieser Szene.',
+    'Im OOC darf ich fragen, aber nicht lenken, und nicht absprechen, wie wir es angehen.',
+    'Streamen darf ich das Spiel, aber keine Chats und nichts, was der Server nicht zeigen soll.',
+  ];
+
   RULEBOOK_QUESTIONS.forEach((question, index) => {
-    form.set(
-      `answer_${question.id}`,
-      `Submit-Probe Antwort ${index + 1} auf ${question.ref}. Wird nach dem Test wieder gelöscht.`,
-    );
+    form.set(`answer_${question.id}`, OPENERS[index % OPENERS.length] + ` (${index + 1})`);
   });
   return form;
 }

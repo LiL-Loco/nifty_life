@@ -172,3 +172,22 @@ export const RULEBOOK_QUESTIONS: RulebookQuestion[] = [
 ];
 
 export const RULEBOOK_QUESTION_IDS = RULEBOOK_QUESTIONS.map((q) => q.id);
+
+/**
+ * The rulebook wording, for the copied-answer check — EMPTY ON PURPOSE.
+ *
+ * `src/lib/copycheck.ts` can compare an answer against the actual rule text and
+ * find a sentence lifted verbatim out of it. That is the check that matters most
+ * and it does not run unless this string has content.
+ *
+ * It stays empty because the rulebook lives in one Google Doc and a copy here
+ * would be a copy that drifts out of date silently — a detector comparing
+ * against last year's wording is worse than no detector, because it still
+ * reports success. Filling it in is a decision, not a chore: it means putting the
+ * rule text in the repo, and it should be a deliberate act with a version
+ * stamp next to it.
+ *
+ * Until then `copycheck` reports `rulebookTextAvailable: false` and the warning
+ * text says only what was actually checked.
+ */
+export const RULEBOOK_REFERENCE_TEXT = '';

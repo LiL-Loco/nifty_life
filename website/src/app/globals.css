@@ -250,6 +250,19 @@ button:hover,
   border-color: var(--accent);
 }
 
+/* A button that looks like a link and behaves like one. Used for a destructive
+   inline action ("Alles verwerfen") that must not read as the primary button. */
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+}
+
 /* ---------------------------------------------------------------------------
    The application answer list (admin review screen).
 

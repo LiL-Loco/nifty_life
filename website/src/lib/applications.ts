@@ -12,7 +12,8 @@
 import 'server-only';
 
 import { insert, one, query, newUuid } from './db';
-import { RULEBOOK_QUESTIONS } from './rulebook';
+import { RULEBOOK_QUESTIONS, RULEBOOK_REFERENCE_TEXT } from './rulebook';
+import { checkForCopying, copyWarningMessage } from './copycheck';
 
 export type ApplicationStatus = 'submitted' | 'under_review' | 'approved' | 'rejected';
 
@@ -106,6 +107,11 @@ function clean(value: FormDataEntryValue | null, max: number): string | null {
  * the rulebook does not answer, and every question is answerable only from the
  * rulebook. That is the whole selection test - if the applicant could answer it
  * without opening the document, it is not a rulebook question.
+ *
+ * EMPTY ANSWERS. `validateAnswers` requires all twenty. The wizard lets an empty
+ * box be stepped over, because a twenty-screen form that traps you on screen
+ * nine is a form people abandon - but the form as a whole cannot be submitted
+ * until every question has an answer. Navigation is forgiving, submission is not.
  */
 export function validateAnswers(form: FormData): ApplicationAnswers | string {
   // The "I have read it" box. It is kept as a separate tick rather than implied
@@ -116,16 +122,23 @@ export function validateAnswers(form: FormData): ApplicationAnswers | string {
   }
 
   const answers: StoredAnswer[] = [];
+  const missing: number[] = [];
 
   for (const item of RULEBOOK_QUESTIONS) {
+    const index = answers.length + 1;
     const answer = clean(form.get(`answer_${item.id}`), LIMITS.answerMax);
 
     if (!answer) {
-      return `Bitte beantworte Frage ${answers.length + 1} von ${RULEBOOK_QUESTIONS.length}.`;
+      // Collect them all rather than stopping at the first: being told "Frage 3
+      // fehlt" twenty times in a row is the kind of friction that makes somebody
+      // give up on the form entirely.
+      missing.push(index);
+      answers.push({ id: item.id, question: `${item.ref} ${item.question}`, answer: '' });
+      continue;
     }
 
     if (answer.length < LIMITS.answerMin) {
-      return `Bitte antworte auf Frage ${answers.length + 1} ausführlicher. Ein Satz in eigenen Worten reicht.`;
+      return `Bitte antworte auf Frage ${index} ausführlicher. Ein Satz in eigenen Worten reicht.`;
     }
 
     answers.push({
@@ -135,6 +148,29 @@ export function validateAnswers(form: FormData): ApplicationAnswers | string {
       question: `${item.ref} ${item.question}`,
       answer,
     });
+  }
+
+  if (missing.length > 0) {
+    return `Es fehlen noch ${missing.length} Antwort${missing.length === 1 ? '' : 'en'}: Frage ${missing.join(', ')}.`;
+  }
+
+  // --- Own words, or a copy -----------------------------------------------
+  // Warned about, not refused. Refusing outright would be wrong for the honest
+  // applicant who happens to quote a rule to make a point; and warning without
+  // any way past it would just be a refusal with worse manners. So the first
+  // submission is held, told what was observed, and the second is accepted once
+  // they say they stand behind it — a moderator reads the answers and decides.
+  const copyResult = checkForCopying({
+    answers: answers.map((entry) => ({
+      id: entry.id,
+      question: entry.question,
+      answer: entry.answer,
+    })),
+    rulebookReferenceText: RULEBOOK_REFERENCE_TEXT,
+  });
+
+  if (copyResult.suspicious && form.get('own_words_ack') !== 'on') {
+    return copyWarningMessage(copyResult, RULEBOOK_QUESTIONS.map((q) => q.id));
   }
 
   return {
