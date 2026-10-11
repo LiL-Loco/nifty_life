@@ -66,6 +66,7 @@ end
 --- but not to this function is invisible until somebody opens that menu.
 local function push(menu, item)
   item.kind = item.kind or 'button'
+  print(('[nifty-core] push: kind=%s items-before=%d'):format(item.kind, menu.items and #menu.items or -1))
   menu.items[#menu.items + 1] = item
   return menu
 end
