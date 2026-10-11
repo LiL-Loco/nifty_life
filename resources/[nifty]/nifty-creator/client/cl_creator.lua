@@ -74,6 +74,19 @@ function Menu.menu(spec)
     0,
     255, 255, 255, 255
   )
+  -- Disable the camera-rotation that NativeUI's MouseEdgeEnabled would
+  -- otherwise do when the cursor is near the screen edge (UIMenu.lua
+  -- lines 1249-1257). The player only uses the mouse for the menu;
+  -- the camera should not turn because the cursor is at the rim.
+  m.Settings.MouseEdgeEnabled = false
+  -- Disable the Back control. NativeUI binds Escape / Backspace to
+  -- UIMenu:GoBack via Controls.Back (UIMenu.lua line 662), and GoBack
+  -- closes the root menu. The creator is meant to be a deliberate
+  -- multi-step flow with a single 'Abbrechen' exit, not a menu that
+  -- Escape accidentally tears down. Submenus still navigate by their
+  -- own back/forward keys (UIMenu:BindMenuToItem / GoBack on the
+  -- child), so this only affects the top-level dismissal path.
+  m.Controls.Back.Enabled = false
   if type(spec.onClose) == 'function' then
     m.OnMenuClose = function(_) pcall(spec.onClose) end
   end
