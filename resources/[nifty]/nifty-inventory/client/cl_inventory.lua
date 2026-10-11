@@ -71,7 +71,12 @@ RegisterCommand('+niftyinventory', function()
 end, false)
 RegisterCommand('-niftyinventory', function() end, false)
 RegisterKeyMapping('+niftyinventory', 'Nifty Life — Inventar', 'keyboard', 'F1')
-RegisterKeyMapping('+niftyinventoryclose', 'Nifty Life — Inventar schliessen', 'keyboard', 'ESC')
+
+-- ESC zum Schliessen: RegisterKeyMapping akzeptiert "ESC" nicht als
+-- gueltigen Key-Namen (FiveM-Liste: nur A-Z, 0-9, F1-F12, Tab, Space,
+-- Arrow, Numpad, Modifier). Der NUI-Keydown-Handler in ui/index.html
+-- faengt die Taste selbst ab und ruft ueber das bestehende
+-- closePanel-Callback closePanel() auf.
 
 -- Direct command form for /inventory.
 RegisterCommand('inventory', function()

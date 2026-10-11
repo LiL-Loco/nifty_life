@@ -528,6 +528,18 @@
   // -------------------------------------------------------------- close
   $('closeBtn').addEventListener('click', () => fetchNui('closePanel'));
 
+  // ESC schliesst das Panel. RegisterKeyMapping akzeptiert "ESC" nicht
+  // als gueltigen Key-Namen, also faengt das NUI die Taste hier selbst
+  // ab und ruft den gleichen Callback wie der Close-Button. Wenn ein
+  // anderes Modal (Kontextmenue, Mengen-Picker) offen ist, schluckt
+  // dessen eigener onKeyDown-Handler die Taste - dieser Listener feuert
+  // dann erst, wenn das Modal weg ist.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.querySelector('.inv__menu, .inv__picker')) return;
+    fetchNui('closePanel');
+  });
+
   // -------------------------------------------------------------- lua -> js
   window.addEventListener('message', (e) => {
     const { action, data } = e.data || {};
