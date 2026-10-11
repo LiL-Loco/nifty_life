@@ -1,0 +1,20 @@
+[
+  {
+    "Name": "TAT_OVER_001",
+    "LocalizedName": "MP_2024_02_Hair_000",
+    "HashNameMale": "",
+    "HashNameFemale": "MP_2024_02_Hair_000_F",
+    "Zone": "ZONE_HEAD",
+    "ZoneID": 1,
+    "Price": -1
+  },
+  {
+    "Name": "TAT_OVER_002",
+    "LocalizedName": "MP_2024_02_Hair_001",
+    "HashNameMale": "MP_2024_02_Hair_001_M",
+    "HashNameFemale": "",
+    "Zone": "ZONE_HEAD",
+    "ZoneID": 1,
+    "Price": -1
+  }
+]

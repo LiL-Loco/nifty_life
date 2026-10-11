@@ -129,7 +129,9 @@ AppearanceConfig = {
   --- gets added, and the check that keeps them in step is that a tattoo the server
   --- accepts but no data file describes simply never appears in the menu.
   ALLOWED_TATTOO_COLLECTIONS = {
+    ['mp2023_01_overlays'] = true,
     ['mp2023_02_overlays'] = true,
+    ['mp2024_02_overlays'] = true,
     ['mpairraces_overlays'] = true,
     ['mpbeach_overlays'] = true,
     ['mpbiker_overlays'] = true,
@@ -151,7 +153,9 @@ AppearanceConfig = {
     ['mpsmuggler_overlays'] = true,
     ['mpstunt_overlays'] = true,
     ['mpsum2_overlays'] = true,
+    ['mptuner_overlays'] = true,
     ['mpvinewood_overlays'] = true,
+    ['mpxmas_604490_overlays'] = true,
     ['multiplayer_overlays'] = true,
   },
 
@@ -162,7 +166,7 @@ AppearanceConfig = {
   --- longer enforces it, and the cap here is left in only as a storage sanity
   --- check against a malicious client that would fill the database with junk.
   --- 100 is well above any practical tattoo collection.
-  MAX_TATTOOS = 100,
+  MAX_TATTOOS = 20,
 }
 
 --- Spawn points, referenced by `characters.spawn_point`.
