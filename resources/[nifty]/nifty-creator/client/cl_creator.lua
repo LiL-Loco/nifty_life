@@ -242,6 +242,53 @@ function Menu.colourPicker(menu, label, spec)
   menu:AddItem(item)
 end
 
+-- Visual 1D/2D grid panel. The row looks like a normal item; activating
+-- it expands a `UIMenuGridPanel` / `HorizontalOneLine` / `VerticalOneLine`
+-- with a 2D / 1D-horizontal / 1D-vertical range indicator and a movable
+-- cursor. Arrows or mouse drag move the cursor; every move fires
+-- onChange with the new normalised position.
+--
+-- spec.kind: 'horizontal' (default) | 'vertical' | 'grid'
+-- spec.x, spec.y: initial 0..1 cursor position (clamped)
+-- spec.left, spec.right, spec.top, spec.bottom: panel direction labels
+-- spec.onChange: function(position) - position is {X=0..1} (horizontal),
+--                {Y=0..1} (vertical), or {X=0..1, Y=0..1} (grid).
+--                The caller maps the 0..1 space to its own value range
+--                (face features use -1..1, so onChange does pos.X*2-1).
+function Menu.gridPanel(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  local kind = spec.kind or 'horizontal'
+  local x = math.max(0, math.min(1, tonumber(spec.x) or 0.5))
+  local y = math.max(0, math.min(1, tonumber(spec.y) or 0.5))
+  local panel
+  if kind == 'grid' then
+    panel = NativeUI.CreateGridPanel(
+      spec.top or 'Hoch', spec.left or 'Schmal',
+      spec.right or 'Breit', spec.bottom or 'Niedrig',
+      x, y
+    )
+  elseif kind == 'vertical' then
+    panel = NativeUI.CreateVerticalGridPanel(
+      spec.top or 'Hoch', spec.bottom or 'Niedrig', y
+    )
+  else
+    panel = NativeUI.CreateHorizontalGridPanel(
+      spec.left or 'Schmal', spec.right or 'Breit', x
+    )
+  end
+  item:AddPanel(panel)
+  -- ActivatedPanel fires every time the cursor moves. The library passes
+  -- (menu, item, panel, position) where position is a table of {X=...,Y=...}
+  -- (UIMenuGridPanel.lua:132, UIMenuHorizontalOneLineGridPanel.lua:125).
+  -- For 1D panels only one of X/Y is set.
+  item.ActivatedPanel = function(_, _, _, position)
+    pcall(spec.onChange, position)
+  end
+  menu:AddItem(item)
+end
+
 function Menu.openMenu(_RESOURCE, menu)
   _pool:Add(menu)
   menu:Visible(true)
@@ -354,6 +401,67 @@ local MAKEUP_PALETTE = {
   { 120, 60,  170, 255 },  -- 25 lila
   { 80,  20,  140, 255 },  -- 26 dunkellila
   { 240, 240, 240, 255 },  -- 27 weiss-zart
+}
+
+--- Which palettes a given overlay id accepts.
+---
+--- GTA's `_SetPedHeadOverlayColor` takes a `colourType` per overlay:
+--- 1 = hair palette, 2 = makeup palette. Most overlays only support
+--- one of the two; only Makeup (id 4) supports both. Overlays that
+--- have no colour at all (blemishes, ageing, complexion, moles, body
+--- blemishes) are absent from this table - the Farbe section is then
+--- omitted in their menu.
+local OVERLAY_PALETTES = {
+  [1]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Bart
+  [2]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Augenbrauen
+  [4]  = {                                                       -- Makeup
+    { 1, 'Haarfarbe',     HAIR_PALETTE   },
+    { 2, 'Make-up-Farbe', MAKEUP_PALETTE },
+  },
+  [5]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Rouge
+  [7]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Sonnenbrand
+  [8]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Lippenstift
+  [10] = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Brustbehaarung
+}
+
+--- Face-feature groups.
+---
+--- Each entry pairs two face-feature indices so a single 2D grid panel
+--- controls both at once (X = first feature, Y = second). The remaining
+--- indices get their own 1D horizontal grid panel. Face features are
+--- GTA-internal: 0..19, value -1.0..1.0, addressed by `SetPedFaceFeature`.
+---   0  Nose Width           10 Cheeks Width
+---   1  Nose Peak Height     11 Eye Opening
+---   2  Nose Peak Length     12 Lips Thickness
+---   3  Nose Bone Height     13 Jaw Bone Width
+---   4  Nose Peak Lowering   14 Jaw Bone Depth
+---   5  Nose Bone Twist      15 Chin Height
+---   6  Eyebrows Depth       16 Chin Depth
+---   7  Eyebrows Height      17 Chin Width
+---   8  Cheekbones Height    18 Chin Hole Size
+---   9  Cheekbones Width     19 Neck Thickness
+local FACE_2D_GROUPS = {
+  { title = 'Nasenspitze',   top = 'Spitz',  bottom = 'Flach', left = 'Kurz', right = 'Lang',  xId = 2, yId = 1 },
+  { title = 'Augenbrauen',   top = 'Hoch',   bottom = 'Tief',  left = 'Flach', right = 'Tief', xId = 7, yId = 6 },
+  { title = 'Wangen',        top = 'Hoch',   bottom = 'Tief',  left = 'Schmal', right = 'Breit', xId = 9, yId = 8 },
+  { title = 'Kiefer',        top = 'Tief',   bottom = 'Hervor', left = 'Schmal', right = 'Breit', xId = 13, yId = 14 },
+  { title = 'Kinn',          top = 'Hervor', bottom = 'Flach', left = 'Schmal', right = 'Breit', xId = 17, yId = 15 },
+}
+
+--- Face-feature indices that get a 1D horizontal grid panel.
+--- The 2D groups above consume {1, 2, 6, 7, 8, 9, 13, 14, 15, 17};
+--- everything else is single-axis and goes on a horizontal panel.
+local FACE_1D_GROUPS = {
+  { id = 0,  title = 'Nasenbreite',     left = 'Schmal', right = 'Breit' },
+  { id = 3,  title = 'Nasenbeinhoehe',  left = 'Tief',   right = 'Hoch'  },
+  { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
+  { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
+  { id = 10, title = 'Wangenspalt',     left = 'Schmal', right = 'Breit' },
+  { id = 11, title = 'Augenoeffnung',   left = 'Eng',    right = 'Weit'  },
+  { id = 12, title = 'Lippendicke',     left = 'Duenn',  right = 'Dick'  },
+  { id = 16, title = 'Kinn-Tiefe',      left = 'Flach',  right = 'Hervor' },
+  { id = 18, title = 'Kinn-Loch',       left = 'Klein',  right = 'Gross' },
+  { id = 19, title = 'Hals-Dicke',      left = 'Duenn',  right = 'Dick'  },
 }
 
 --- Our own German display labels, and the vendored item data.
@@ -837,11 +945,6 @@ local OVERLAY_LABELS = {
   [12] = 'Koerperpickel (additiv)',
 }
 
---- Face sliders 0..19. The engine gives them no names worth shipping; the player
---- sees a number, which is what every creator shows anyway.
-local FEATURE_SLIDER_MIN = -1.0
-local FEATURE_SLIDER_MAX = 1.0
-
 --- Face sliders, head overlays, hair colour and the hair overlay decoration.
 local face = {
   features = {},
@@ -1136,37 +1239,37 @@ local function buildOverlayMenu(id)
 
   Menu.separator(menu, 'Farbe')
 
-  -- Palette 0 is a fixed grey and has no indices to choose; only 1 and 2 do.
-  -- Each row is a UIMenuItem with a UIMenuColourPanel - the player sees a
-  -- strip of swatches and clicks one instead of dragging a slider to "27".
-  -- The value is the 1-based swatch index the panel reports on every
-  -- change, which we store as the 0-based overlay colour.
-  for _, entry in ipairs({
-    { colourType = 1, label = 'Haarfarben',  palette = HAIR_PALETTE },
-    { colourType = 2, label = 'Make-up-Farben', palette = MAKEUP_PALETTE },
-  }) do
-    local colourType = entry.colourType
-    local palette = entry.palette
-    local value = (current.colourType == colourType) and (current.colour + 1) or 1
-    if value < 1 then value = 1 end
-    if value > #palette then value = #palette end
+  -- Only overlays that have a colour get pickers, and only the palettes
+  -- the engine accepts for them. Beard (1) is hair-only; Lipstick (8) is
+  -- makeup-only; Makeup (4) accepts both. OVERLAY_PALETTES encodes this
+  -- once so the menu reflects the engine, not the player's reading of it.
+  local palettes = OVERLAY_PALETTES[id]
+  if palettes then
+    for _, entry in ipairs(palettes) do
+      local colourType = entry[1]
+      local pickerLabel = entry[2]
+      local palette = entry[3]
+      local value = (current.colourType == colourType) and (current.colour + 1) or 1
+      if value < 1 then value = 1 end
+      if value > #palette then value = #palette end
 
-    Menu.colourPicker(menu, entry.label, {
-      palette = palette,
-      panelTitle = entry.label,
-      value = value,
-      onChange = function(colour)
-        local live = face.overlays[tostring(id)] or {}
-        face.overlays[tostring(id)] = {
-          style = live.style or 0,
-          opacity = live.opacity or 1.0,
-          colourType = colourType,
-          colour = colour - 1,
-          secondColour = live.secondColour or 0,
-        }
-        refresh()
-      end,
-    })
+      Menu.colourPicker(menu, pickerLabel, {
+        palette = palette,
+        panelTitle = pickerLabel,
+        value = value,
+        onChange = function(colour)
+          local live = face.overlays[tostring(id)] or {}
+          face.overlays[tostring(id)] = {
+            style = live.style or 0,
+            opacity = live.opacity or 1.0,
+            colourType = colourType,
+            colour = colour - 1,
+            secondColour = live.secondColour or 0,
+          }
+          refresh()
+        end,
+      })
+    end
   end
 
   return menu
@@ -1347,25 +1450,50 @@ end
 local function buildFaceMenu()
   local menu = Menu.menu({
     title = 'Gesichtsform',
-    subtitle = 'Zwanzig Schieberegler.',
+    subtitle = 'Ziehen, um das Gesicht zu formen.',
     dock = 'right',
   })
 
-  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
-    local value = face.features[tostring(id)] or 0.0
+  -- Sparse storage: an untouched feature is not stored. A ped whose stored
+  -- face is full of zeros and a ped whose stored face has no entries are
+  -- the same ped, but only one of them round-trips through the database
+  -- identically. We snap to 0 inside the dead zone and clear the entry
+  -- there so the JSON we save is as small as the player chose.
+  local function setFeature(id, value)
+    if math.abs(value) < 0.001 then
+      face.features[tostring(id)] = nil
+    else
+      face.features[tostring(id)] = value
+    end
+  end
 
-    Menu.slider(menu, Labels.FEATURES[id + 1] or ('Merkmal %d'):format(id), {
-      min = FEATURE_SLIDER_MIN, max = FEATURE_SLIDER_MAX, step = 0.05, value = value,
-      format = function(v) return ('%+.2f'):format(v) end,
-      onChange = function(v)
-        -- Sparse: an untouched slider is not stored. A ped whose stored face is
-        -- full of zeros and a ped whose stored face has no entries are the same
-        -- ped, but only one of them round-trips through the database identically.
-        if math.abs(v) < 0.001 then
-          face.features[tostring(id)] = nil
-        else
-          face.features[tostring(id)] = v
-        end
+  -- 2D groups: one grid panel covers two features at once. X axis is the
+  -- first index in the group, Y axis is the second (see FACE_2D_GROUPS).
+  for _, g in ipairs(FACE_2D_GROUPS) do
+    local xv = face.features[tostring(g.xId)] or 0.0
+    local yv = face.features[tostring(g.yId)] or 0.0
+    Menu.gridPanel(menu, g.title, {
+      kind = 'grid',
+      top = g.top, bottom = g.bottom, left = g.left, right = g.right,
+      x = (xv + 1) / 2,  -- -1..1 -> 0..1
+      y = (yv + 1) / 2,
+      onChange = function(pos)
+        setFeature(g.xId, (pos.X or 0.5) * 2 - 1)
+        setFeature(g.yId, (pos.Y or 0.5) * 2 - 1)
+        refresh()
+      end,
+    })
+  end
+
+  -- 1D groups: horizontal panel, X position is the value.
+  for _, g in ipairs(FACE_1D_GROUPS) do
+    local v = face.features[tostring(g.id)] or 0.0
+    Menu.gridPanel(menu, g.title, {
+      kind = 'horizontal',
+      left = g.left, right = g.right,
+      x = (v + 1) / 2,
+      onChange = function(pos)
+        setFeature(g.id, (pos.X or 0.5) * 2 - 1)
         refresh()
       end,
     })
