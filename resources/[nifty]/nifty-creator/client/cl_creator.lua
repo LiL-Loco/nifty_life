@@ -2017,6 +2017,10 @@ exports('openCreator', function(data)
   if creatorOpen then return end
   creatorOpen = true
 
+  -- Dismiss the FiveM loading overlay the instant the character creator
+  -- appears on screen. Without this the spinner persists indefinitely.
+  ShutdownLoadingScreen()
+
   -- The model comes from the gender the SERVER sent, not from a picker. A player
   -- does not choose a ped model; the character has one, the website recorded which,
   -- and offering a free choice here would be offering a choice the server silently

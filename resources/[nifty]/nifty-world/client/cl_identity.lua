@@ -288,6 +288,8 @@ local function doEnterWorldSpawn(x, y, z, heading, appearance, firstName, lastNa
     x, y, z, heading or 0.0, appearance and appearance.model
   )
 
+  -- Dismiss the FiveM loading overlay before the world fades in.
+  ShutdownLoadingScreen()
   DoScreenFadeIn(500)
   while not IsScreenFadedIn() do Wait(0) end
 
