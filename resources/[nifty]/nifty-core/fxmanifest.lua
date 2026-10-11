@@ -63,6 +63,7 @@ client_script 'client/cl_spawn.lua'
 -- against cl_menu's exports.
 client_script 'client/cl_focus.lua'
 client_script 'client/cl_menu.lua'
+client_script 'client/cl_welcome.lua'
 
 -- The single NUI surface that every surface-level page renders against.
 -- ui/menu.html is also the ui_page.
