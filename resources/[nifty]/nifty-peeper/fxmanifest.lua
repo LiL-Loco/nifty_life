@@ -23,5 +23,3 @@ server_script 'server/sv_peeper.lua'
 dependencies {
   'nifty-core',
 }
-
-server_only 'no'

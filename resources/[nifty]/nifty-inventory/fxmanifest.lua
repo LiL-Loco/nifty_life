@@ -18,5 +18,3 @@ dependencies {
   'nifty-core',
   'nifty-economy',
 }
-
-server_only 'no'

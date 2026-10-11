@@ -21,5 +21,3 @@ server_script 'server/stuetze.lua'
 dependencies {
   'nifty-core',
 }
-
-server_only 'no'

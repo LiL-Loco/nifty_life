@@ -28,5 +28,3 @@ dependencies {
   'nifty-world',
   'nifty-chat',
 }
-
-server_only 'no'

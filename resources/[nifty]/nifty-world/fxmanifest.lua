@@ -55,5 +55,3 @@ dependencies {
   'nifty-clothing',
   'nifty-ui',
 }
-
-server_only 'no'

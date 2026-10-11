@@ -54,5 +54,3 @@ dependencies {
   '/server:4500',
   'nifty-ui',
 }
-
-server_only 'no'

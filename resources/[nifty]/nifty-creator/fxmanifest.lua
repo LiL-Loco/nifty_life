@@ -70,5 +70,3 @@ dependencies {
   'nifty-core',
   'nifty-ui',
 }
-
-server_only 'no'

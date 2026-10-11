@@ -21,5 +21,3 @@ dependencies {
   'nifty-economy',
   'nifty-inventory',
 }
-
-server_only 'no'

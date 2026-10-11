@@ -22,5 +22,3 @@ dependencies {
   'nifty-economy',
   'nifty-ui',
 }
-
-server_only 'no'

@@ -28,5 +28,3 @@ dependencies {
   'nifty-inventory',
   'nifty-ui',
 }
-
-server_only 'no'
