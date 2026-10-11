@@ -2192,26 +2192,33 @@ Citizen.CreateThread(function()
     -- Mouse lock. The visible menu (if any) defines a draw rectangle
     -- from (menu.Position.X, menu.Position.Y) of width menu.Width and
     -- height menu.Height. We snap the cursor back inside whenever it
-    -- crosses the border. The lock only fires while a menu is open;
-    -- otherwise the cursor is free.
+    -- crosses the border.
+    --
+    -- GetCursorPos / SetCursorPos are not always present in the runtime
+    -- (depends on the FiveM build). Wrap them in pcall so a missing
+    -- native falls back to a no-op rather than crashing the render
+    -- thread. When they are available the cursor is constrained to the
+    -- visible menu; when they are not, the cursor is free.
     if Menu.isOpen() then
-      local cursorX, cursorY = GetCursorPos()
-      for _, m in ipairs(_pool.Menus) do
-        if m.Visible then
-          local rectX = m.Position.X
-          local rectY = m.Position.Y
-          local rectW = m.Width
-          local rectH = m.Height
-          local margin = 2
-          if cursorX < rectX + margin then
-            SetCursorPos(rectX + margin, cursorY)
-          elseif cursorX > rectX + rectW - margin then
-            SetCursorPos(rectX + rectW - margin, cursorY)
-          end
-          if cursorY < rectY + margin then
-            SetCursorPos(GetCursorPos(), rectY + margin)
-          elseif cursorY > rectY + rectH - margin then
-            SetCursorPos(GetCursorPos(), rectY + rectH - margin)
+      local ok, cursorX, cursorY = pcall(GetCursorPos)
+      if ok and type(cursorX) == 'number' and type(cursorY) == 'number' then
+        for _, m in ipairs(_pool.Menus) do
+          if m.Visible then
+            local rectX = m.Position.X
+            local rectY = m.Position.Y
+            local rectW = m.Width
+            local rectH = m.Height
+            local margin = 2
+            if cursorX < rectX + margin then
+              pcall(SetCursorPos, rectX + margin, cursorY)
+            elseif cursorX > rectX + rectW - margin then
+              pcall(SetCursorPos, rectX + rectW - margin, cursorY)
+            end
+            if cursorY < rectY + margin then
+              pcall(SetCursorPos, cursorX, rectY + margin)
+            elseif cursorY > rectY + rectH - margin then
+              pcall(SetCursorPos, cursorX, rectY + rectH - margin)
+            end
           end
         end
       end
