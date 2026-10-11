@@ -30,6 +30,15 @@ export interface BotConfig {
   };
   /** Safety-net resync interval. Events handle the common case. */
   resyncMs: number;
+  /**
+   * Where the team area lives.
+   *
+   * Not cosmetic. The team link is deliberately NOT in the site's navigation —
+   * it is reached from a pinned Discord message. That makes the bot the natural
+   * place to know the address, and it prints it on every startup so the operator
+   * never has to go looking for it.
+   */
+  adminUrl: string;
 }
 
 function required(name: string): string {
@@ -74,11 +83,17 @@ export function loadConfig(): BotConfig {
     );
   }
 
+  const rawAdminUrl = (process.env.WEB_ADMIN_URL ?? '').trim();
+  if (rawAdminUrl && !/^https?:\/\/[^\s]+$/.test(rawAdminUrl)) {
+    throw new Error(`WEB_ADMIN_URL is not a valid http(s) URL: ${rawAdminUrl}`);
+  }
+
   return {
     token: required('DISCORD_BOT_TOKEN'),
     guildId: required('DISCORD_GUILD_ID'),
     staffRoleIds,
     botRoleId,
+    adminUrl: rawAdminUrl,
     db: {
       host: process.env.DB_HOST ?? '127.0.0.1',
       port: Number(process.env.DB_PORT ?? 3306),

@@ -81,6 +81,15 @@ async function main(): Promise<void> {
     try {
       await fullSync(guild);
       console.log(`[ready] staff mirror holds ${await mirror.count()} row(s)`);
+
+      if (config.adminUrl) {
+        console.log(`[ready] team area: ${config.adminUrl}`);
+      } else {
+        console.log(
+          '[ready] WEB_ADMIN_URL is not set. The team link is not in the site navigation, ' +
+            'so set it and share this address in a pinned Discord message.',
+        );
+      }
     } catch (error) {
       console.error('[fatal] initial sync failed:', error);
       process.exit(1);

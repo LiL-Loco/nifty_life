@@ -1,9 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { currentSession } from '@/lib/auth';
-import { isStaff } from '@/lib/identity';
-
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,14 +9,21 @@ export const metadata: Metadata = {
     'Ein Roleplay-Server fürs Wochenende. Bewerben, Status prüfen, P&R lesen.',
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // The team link is rendered only for staff, not merely hidden behind a URL.
-  // A nav entry nobody can click tells a stranger the admin area exists; the
-  // refusal page under /admin already covers a moderator who goes there
-  // directly.
-  const session = await currentSession();
-  const showTeamLink = session ? await isStaff(session.discordId) : false;
-
+/**
+ * No session check, no database, and deliberately no link to /admin here.
+ *
+ * The team area is reached from a pinned Discord message or by typing the URL —
+ * not from the public navigation. Two reasons:
+ *
+ * 1. A nav entry a stranger can see but not click advertises that a moderation
+ *    area exists. That is information nobody needs, and the refusal page under
+ *    /admin already handles a moderator who arrives directly.
+ * 2. It costs nothing. Showing that link meant an `isStaff()` query on EVERY page
+ *    for every signed-in visitor, on a site that is otherwise public and
+ *    read-mostly. One indexed lookup per request, to decide about one link that
+ *    is now not there.
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de">
       <body>
@@ -31,7 +35,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/apply">Bewerbung</Link>
             <Link href="/status">Status</Link>
             <Link href="/peeper">P&amp;R</Link>
-            {showTeamLink ? <Link href="/admin">Team</Link> : null}
           </nav>
         </header>
 
