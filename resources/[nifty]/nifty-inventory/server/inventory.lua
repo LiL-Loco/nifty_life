@@ -465,6 +465,154 @@ function Inventory.use(characterId, code, quantity, itemId)
   return Inventory.remove(characterId, code, quantity or 1)
 end
 
+--- Move items between two characters. Used for trade / give flows.
+---
+--- The behaviour is "remove from src, add to target" - the source's row is
+--- decremented and the destination receives the same code (and metadata,
+--- when an itemId was given). Refuses if the source does not have enough,
+--- if the target cannot carry the weight or slots, or if metadata does not
+--- exist on either side. Both sides must be live characters on the server.
+---
+--- Atomicity: the existing Inventory.remove / Inventory.add are themselves
+--- transactional at the row level, but a `transfer` failing between
+--- remove and add would leave a removed item the receiver never got. We
+--- run remove and add inside a single transaction so either both happen
+--- or neither does.
+---
+-- @return boolean ok, string|nil error, table|nil placedSnapshot
+-- where placedSnapshot is `{ code, quantity, metadata }` for the new
+-- destination row.
+
+-- Free-slot search for the destination side of a transfer. Mirrors
+-- findTargetSlot but does not stack-merge - the destination gets its
+-- own stack of the same item. Must be declared before Inventory.transferBetween
+-- because the call site binds to the local at parse time.
+local function findFreeTargetSlot(characterId, def, metadataKey)
+  local rows
+  if metadataKey ~= nil then
+    rows = Db.all([[
+      SELECT slot FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata = ?
+    ]], { characterId, def.code, metadataKey }, 'inventory:transfer:slot')
+  else
+    rows = Db.all([[
+      SELECT slot FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND metadata IS NULL
+    ]], { characterId, def.code }, 'inventory:transfer:slot')
+  end
+
+  local used = {}
+  for _, row in ipairs(rows or {}) do
+    used[tonumber(row.slot)] = true
+  end
+
+  for slot = 0, slotCapacity() - 1 do
+    if not used[slot] then
+      return slot, nil
+    end
+  end
+
+  return nil, 'no free slot'
+end
+
+function Inventory.transferBetween(srcCid, targetCid, code, quantity, itemId)
+  quantity = math.floor(tonumber(quantity) or 0)
+  if quantity <= 0 then return false, 'bad quantity' end
+
+  if type(srcCid) ~= 'string' or srcCid == '' then return false, 'no source' end
+  if type(targetCid) ~= 'string' or targetCid == '' then return false, 'no target' end
+  if srcCid == targetCid then return false, 'self' end
+
+  local def = Inventory.getDefinition(code)
+  if not def then return false, 'unknown item' end
+
+  -- Capacity preflight on the destination. A full bag should not cause
+  -- the source to lose the item.
+  local view = Inventory.view(targetCid)
+  if view.usedWeight + (def.weight * quantity) > weightLimit() then
+    return false, 'recipient too heavy'
+  end
+  if view.usedSlots >= slotCapacity() and not def.stackable then
+    return false, 'recipient bag full'
+  end
+
+  if not Inventory.has(srcCid, code, quantity) then
+    return false, 'not enough'
+  end
+
+  -- Read the source row, including metadata, for the destination insert.
+  local srcRow
+  if itemId ~= nil then
+    srcRow = Db.one([[
+      SELECT id, character_id, item_code, quantity, metadata
+        FROM inventory_items
+       WHERE character_id = ? AND item_code = ? AND id = ?
+       LIMIT 1
+    ]], { srcCid, code, tostring(itemId) }, 'inventory:transfer:read')
+  else
+    srcRow = Db.one([[
+      SELECT id, character_id, item_code, quantity, metadata
+        FROM inventory_items
+       WHERE character_id = ? AND item_code = ?
+       ORDER BY slot LIMIT 1
+    ]], { srcCid, code }, 'inventory:transfer:read')
+  end
+
+  if not srcRow then return false, 'source row missing' end
+
+  local currentView = Inventory.view(targetCid)
+  if currentView.usedWeight + (def.weight * quantity) > weightLimit() then
+    return false, 'recipient too heavy'
+  end
+  if currentView.usedSlots >= slotCapacity() and not def.stackable then
+    return false, 'recipient bag full'
+  end
+
+  local metadataEnc = srcRow.metadata
+  if metadataEnc == '' then metadataEnc = nil end
+
+  local newId = Nifty.newUuid()
+  local slot = findFreeTargetSlot(targetCid, def, metadataEnc)
+
+  -- Build the insert SQL once, parameterised either way.
+  local insertSql
+  local insertParams
+  if metadataEnc ~= nil then
+    insertSql = [[INSERT INTO inventory_items
+                   (id, character_id, slot, item_code, quantity, metadata)
+                 VALUES (?, ?, ?, ?, ?, ?)]]
+    insertParams = { newId, targetCid, tostring(slot), code,
+                     tostring(quantity), metadataEnc }
+  else
+    insertSql = [[INSERT INTO inventory_items
+                   (id, character_id, slot, item_code, quantity)
+                 VALUES (?, ?, ?, ?, ?)]]
+    insertParams = { newId, targetCid, tostring(slot), code,
+                     tostring(quantity) }
+  end
+
+  -- Atomic delete + insert. Source row goes away; destination row appears.
+  -- If either fails the transaction rolls back, the source keeps the item.
+  local okTxn = Db.transaction({
+    {
+      sql = [[DELETE FROM inventory_items WHERE id = ? AND character_id = ?]],
+      params = { srcRow.id, srcCid },
+    },
+    {
+      sql    = insertSql,
+      params = insertParams,
+    },
+  }, 'inventory:transfer:tx')
+
+  if not okTxn then return false, 'transfer failed' end
+
+  return true, nil, {
+    code     = code,
+    quantity = quantity,
+    metadata = metadataEnc and json.decode(metadataEnc) or nil,
+  }
+end
+
 -- ---------------------------------------------------------------------------
 -- Life cycle
 -- ---------------------------------------------------------------------------
@@ -502,3 +650,4 @@ exports('move', Inventory.move)
 exports('push', Inventory.push)
 exports('registerUseHandler', Inventory.registerUseHandler)
 exports('unregisterUseHandler', Inventory.unregisterUseHandler)
+exports('transferBetween', Inventory.transferBetween)

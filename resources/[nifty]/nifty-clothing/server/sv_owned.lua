@@ -902,6 +902,105 @@ RegisterNetEvent('nifty:server:outfitUseFromInventory', function(payload)
   TriggerClientEvent('nifty:client:outfitUseFromInventory', src, { ok = true })
 end)
 
+-- ----------------------------------------------------------------------------
+-- Cross-player give
+--
+-- The player's inventory UI right-clicks an item to arm the "give" intent,
+-- then the player right-clicks a target player in the world. The UI sends
+-- `nifty:server:inventoryGive` with the target src and the inventory row
+-- id. We do the proximity check here (two peds within ~4 metres) and call
+-- `Inventory.transferBetween`.
+--
+-- The right-click-on-player path is on the client: the player MUST NOT
+-- end up attacking. The hook on the client side intercepts the click on
+-- a player ped and triggers this event instead of any GTA Online
+-- "MPx_Male_Character" attack. The native GTA target select menu does
+-- not run a punch by itself - that is a UI choice on top of the same
+-- right-click; we own that UI and choose "Geben".
+-- ----------------------------------------------------------------------------
+
+-- Proximity threshold in metres. Beyond this we refuse the give so the
+-- "right-click a stranger halfway across the map to give them something"
+-- attack is impossible.
+local GIVE_PROXIMITY = 4.0
+
+RegisterNetEvent('nifty:server:inventoryGive', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  if not allowBurst(src) then return end
+
+  local targetSrc = tonumber(payload.targetSrc)
+  local itemId = payload.itemId
+  local quantity = tonumber(payload.quantity) or 1
+  local code = payload.code
+
+  if not targetSrc or targetSrc == src then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = 'no target' })
+    return
+  end
+  if type(itemId) ~= 'string' or type(code) ~= 'string' then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = 'bad payload' })
+    return
+  end
+
+  local srcCid = characterOf(src)
+  local targetCid = characterOf(targetSrc)
+  if not srcCid or not targetCid then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = 'no character' })
+    return
+  end
+
+  -- Proximity. Both peds must be standing close enough to plausibly be
+  -- the targeted player. Without this, a hostile client could choose
+  -- anyone on the server and give them inventory items.
+  local srcPed = GetPlayerPed(src)
+  local targetPed = GetPlayerPed(targetSrc)
+  if not srcPed or srcPed == 0 or not targetPed or targetPed == 0 then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = 'no ped' })
+    return
+  end
+  local srcPos = GetEntityCoords(srcPed)
+  local targetPos = GetEntityCoords(targetPed)
+  local dx = srcPos.x - targetPos.x
+  local dy = srcPos.y - targetPos.y
+  local dz = srcPos.z - targetPos.z
+  if (dx * dx + dy * dy + dz * dz) > (GIVE_PROXIMITY * GIVE_PROXIMITY) then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = 'too far' })
+    return
+  end
+
+  -- The transfer handles metadata via itemId lookup; metadata carries the
+  -- row's identity (the (kind, slot, drawable, texture) tuple for
+  -- accessories, the outfit_id for outfits). The receiver's
+  -- clothingSaveInventoryItem reads metadata.giver_name when present to
+  -- compose the wardrobe suffix; we leave that stamping to the client UI
+  -- that armed the give, because the name is a player-visible string.
+  local ok, err = Inventory.transferBetween(srcCid, targetCid, code,
+                                            quantity, itemId)
+  if not ok then
+    TriggerClientEvent('nifty:client:inventoryGive', src,
+                       { ok = false, reason = err })
+    return
+  end
+
+  TriggerClientEvent('nifty:client:inventoryGive', src, {
+    ok = true, code = code, targetSrc = targetSrc,
+  })
+  TriggerClientEvent('nifty:client:inventoryReceive', targetSrc, {
+    ok = true, code = code,
+  })
+end)
+
+-- NB: the inventoryGive event handler above is the single entry point
+-- for both the NUI flow and any future scripted give. A debug command is
+-- not registered here on purpose - debug tests should live in test land,
+-- not the live server.
+
 RegisterNetEvent('nifty:server:outfitApply', function(payload)
   local src = source
   if type(payload) ~= 'table' or type(payload.outfitId) ~= 'string' then return end
