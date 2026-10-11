@@ -1626,13 +1626,21 @@ buildSlotMenu = function(kind, id)
   -- Hair slot (2) replaces this with a colour picker for Hauptfarbe.
   local isHairSlot = (kind == 'components' and tonumber(id) == 2)
   if isHairSlot then
-    local hairItem = makeHairChannel('Haarfarbe', face.hairColour.primary)
-    hairItem.OnListChanged = function(_p, _i, _idx)
-      face.hairColour.primary = hairItem.Panels[1]:CurrentSelection() - 1
+    local primaryItem = makeHairChannel('Hauptfarbe', face.hairColour.primary)
+    primaryItem.OnListChanged = function(_p, _i, _idx)
+      face.hairColour.primary = primaryItem.Panels[1]:CurrentSelection() - 1
       SetPedHairColor(PlayerPedId(), face.hairColour.primary, face.hairColour.highlight or 0)
       refresh()
     end
-    menu:AddItem(hairItem)
+    menu:AddItem(primaryItem)
+
+    local highlightItem = makeHairChannel('Strähnen', face.hairColour.highlight)
+    highlightItem.OnListChanged = function(_p, _i, _idx)
+      face.hairColour.highlight = highlightItem.Panels[1]:CurrentSelection() - 1
+      SetPedHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight)
+      refresh()
+    end
+    menu:AddItem(highlightItem)
   else
     local texLabels = {}
     for t = 0, option.textures - 1 do
