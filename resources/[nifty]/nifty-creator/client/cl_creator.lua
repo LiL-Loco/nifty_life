@@ -65,6 +65,15 @@ local slotOf
 local creatorOpen = false
 local currentModel = 'mp_m_freemode_01'
 
+--- Reverse map of AppearanceConfig.PED_MODELS, which is keyed by model name and
+--- valued by gender ('male' / 'female' / 'nonbinary'). The openCreator lookup
+--- wants gender -> model, so we flip the table once at load. Any other code that
+--- needs model -> gender still reads AppearanceConfig.PED_MODELS directly.
+local PED_MODEL_FOR_GENDER = {}
+for model, gender in pairs(AppearanceConfig.PED_MODELS) do
+  PED_MODEL_FOR_GENDER[gender] = model
+end
+
 --- True when the stored gender has no single freemode model attached to it
 --- (`nonbinary`). Then the player picks, because there is nothing to derive.
 local modelIsUndecided = false
@@ -1417,7 +1426,7 @@ exports('openCreator', function(data)
   -- overrides.
   local gender = (type(data) == 'table' and data.gender) or 'male'
   characterGender = gender
-  local derived = AppearanceConfig.PED_MODELS[gender]
+  local derived = PED_MODEL_FOR_GENDER[gender]
 
   modelIsUndecided = (derived == nil)
   currentModel = derived or 'mp_m_freemode_01'
