@@ -433,7 +433,7 @@ RegisterNUICallback('select', function(data, cb)
             state.setNuiFocus(false)
         end
 
-        currentTarget.zone = zone?.id
+        currentTarget.zone = zone and zone.id
 
         if option.onSelect then
             option.onSelect(option.qtarget and currentTarget.entity or getResponse(option))
@@ -450,7 +450,7 @@ RegisterNUICallback('select', function(data, cb)
         if option.menuName == 'home' then return end
     end
 
-    if not option?.openMenu and IsNuiFocused() then
+    if not (option and option.openMenu) and IsNuiFocused() then
         state.setActive(false)
     end
 end)

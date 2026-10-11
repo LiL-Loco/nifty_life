@@ -24,7 +24,7 @@
 
 local RESOURCE = GetCurrentResourceName()
 --- Menu DSL lives in the same resource now (was nifty-ui, absorbed into nifty-core).
-local Menu = exports['nifty-core']
+local Menu = exports['nifty-ui']
 
 --- Module state. Set when openSpawnPicker is called, cleared on close.
 local locations   = nil

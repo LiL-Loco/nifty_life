@@ -28,7 +28,7 @@ local RESOURCE = GetCurrentResourceName()
 
 --- The menu framework. Same resource as the focus broker; one call opens a menu
 --- and takes the keyboard with it.
-local Menu = exports['nifty-core']
+local Menu = exports['nifty-ui']
 
 --- Our own German display labels, and the vendored item data.
 ---
@@ -1413,7 +1413,7 @@ end
 -- ---------------------------------------------------------------- actions
 
 openRoot = function()
-  if exports['nifty-core']:openMenu(RESOURCE, buildRootMenu()) then return end
+  if exports['nifty-ui']:openMenu(RESOURCE, buildRootMenu()) then return end
 
   -- The single-line 'focus is held elsewhere' message used to conflate three
   -- different causes (Focus held by something else, the menu framework

@@ -61,25 +61,24 @@ server_script 'server/sv_facade.lua'
 -- shared/spawn.lua (loaded earlier in the shared_scripts block).
 client_script 'client/cl_spawn.lua'
 
--- nifty-ui (absorbed). The focus broker (cl_focus) loads first; the menu
--- framework (cl_menu) loads after because its openMenu pulls focus through
--- cl_focus. cl_spawn's menu DSL calls go to the same resource and resolve
--- against cl_menu's exports.
+-- nifty-ui (sibling resource). The focus broker (cl_focus) stays here
+-- so chat and phone can keep using it. The menu moved to nifty-ui,
+-- which is a real Lua menu library (NativeUI-Lua-Reloaded) that draws
+-- directly to the screen with GTA natives - no NUI, no CEF, no focus
+-- to arbitrate against chat/phone. cl_spawn and the four other caller
+-- files (creator, wardrobe, store, spawn) now import
+-- exports['nifty-ui'] instead of exports['nifty-core'].
 client_script 'client/cl_focus.lua'
-client_script 'client/cl_menu.lua'
 client_script 'client/cl_welcome.lua'
 
--- The single NUI surface that every surface-level page renders against.
--- ui/menu.html is also the ui_page.
+-- ui/menu.html, ui/menu.css, ui/menu.js moved to nifty-ui (the native
+-- menu has no NUI page). ui/base.css and ui/base.js stay: chat and
+-- phone still load base.js for the Nifty.nui fetch helper, and base.css
+-- is the shared colour-token file.
 files {
-  'ui/menu.html',
-  'ui/menu.css',
-  'ui/menu.js',
   'ui/base.css',
   'ui/base.js',
 }
-
-ui_page 'ui/menu.html'
 
 -- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker
 -- in cl_spawn.lua uses the same five locations from shared/spawn.lua; these
@@ -118,4 +117,5 @@ spawnpoint 'Flughafen' {
 dependencies {
   '/onesync',
   '/server:4500',
+  'nifty-ui',
 }
