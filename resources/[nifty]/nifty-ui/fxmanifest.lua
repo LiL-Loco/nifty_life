@@ -4,13 +4,26 @@ lua54 'yes'
 
 name 'nifty-ui'
 author 'Nifty Life 2.0 (vendor: dhawton/NativeUILua_Reloaded)'
-description 'Native-UI menu library for FiveM (GTA V native rendering, no NUI). Bridges NativeUILua-Reloaded into the nifty system.'
-version '1.0.0'
+description 'NativeUI-Lua-Reloaded library. Vendored so other resources can load it via @nifty-ui/... paths. No exports, no client logic - just the library files and texture atlases.'
+version '2.0.0'
 
--- nifty-core owns the focus broker (for chat and phone). The native-UI
--- menu does not need SetNuiFocus because it draws directly to the screen
--- with DrawSprite / DrawText / DrawRect, so there is no CEF to take focus
--- from. The broker stays in nifty-core/client/cl_focus.lua untouched.
+-- Pure library resource. Other nifty resources (nifty-creator, nifty-core,
+-- nifty-clothing) consume the NativeUI library directly via @nifty-ui/...
+-- paths in their client_scripts. The export shim used to live here but
+-- was removed when every caller moved to the lbg-char pattern of
+-- loading the library in-process (no cross-resource boundary).
+--
+-- The nifty-chat page still references a base.js that used to come from
+-- this resource. That file was a CSS / NUI helper, not a menu concern;
+-- chat and phone have their own NUI pages and do not need anything from
+-- nifty-ui anymore.
+--
+-- FiveM's require resolver walks a resource-relative path; the @ prefix
+-- means "starting from another resource's directory". So the consumer
+-- reads
+--   client_script '@nifty-ui/UIMenu/UIMenu.lua'
+-- and FiveM looks at resources/[nifty]/nifty-ui/UIMenu/UIMenu.lua. The
+-- consumer must list nifty-ui in its dependencies block for this to load.
 dependencies { 'nifty-core' }
 
 files {
@@ -71,10 +84,4 @@ client_scripts {
   'UIProgressBar/items/UIProgressBarItem.lua',
 
   'NativeUI.lua',
-
-  -- nifty's wrapper lives last so it can reach every global the library
-  -- exposes. It re-exports the API in the same shape nifty's caller files
-  -- already use (Menu.menu, Menu.button, ...) and provides the render
-  -- thread that drives MenuPool.
-  'client/nifty_wrap.lua',
 }
