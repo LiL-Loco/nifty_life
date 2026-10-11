@@ -1,0 +1,31 @@
+# Everything the image does not need. Keeping node_modules out is the point:
+# `npm ci` inside the image must start from the lockfile, not from whatever the
+# host machine happens to have installed.
+node_modules
+.next
+.git
+.gitignore
+
+# Local secrets. The image gets its values from the environment at run time.
+.env
+.env.local
+.env.*.local
+
+# Host clutter
+.vscode
+.tmp-test
+*.log
+*.err
+*.tsbuildinfo
+
+# The deployment itself
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md
+LEARNINGS.md
+
+# The validation harness is a host-side tool: it drives a PowerShell script and
+# reads database/.credentials.local. It must not be in the runtime image.
+tools/
+sql/

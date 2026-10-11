@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   // try to bundle it into a browser bundle.
   serverExternalPackages: ['mysql2'],
   poweredByHeader: false,
+
+  // The Docker image copies `.next/standalone`, which only exists because of
+  // this. Without it the image would ship node_modules and a second copy of
+  // every dependency. `next start` still works locally — standalone is an
+  // additional output, not a replacement.
+  output: 'standalone',
 };
 
 export default nextConfig;

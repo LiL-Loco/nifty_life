@@ -1,0 +1,125 @@
+# =============================================================================
+# The website and its database, as one deployable unit.
+#
+# This is what the owner chose over "keep MariaDB bare-metal and let the
+# container reach it". MariaDB is therefore a service here, not a system
+# service on the host. Two consequences are deliberate and recorded in
+# docs/adr/0024-database-in-the-deploy.md:
+#
+#   1. The web accounts in grants.sql are bound to the compose subnet, not to
+#      'localhost', because 'localhost' matches no container on any network.
+#   2. Binary logging is switched back on below so point-in-time recovery from
+#      ADR-0006 is still POSSIBLE. The dump schedule, the offsite copies and
+#      the restore drill are NOT provided here — see the ADR.
+#
+# THE DATABASE PORT IS NOT PUBLISHED TO THE WORLD.
+#
+# It is bound to 127.0.0.1 because the game server on the host still needs it.
+# That binding is what makes GAME_DB_HOST='%' acceptable below: nothing but the
+# host itself can open a TCP connection to it. Publishing this on 0.0.0.0 would
+# put the entire player database one password away from the internet.
+# =============================================================================
+
+name: nifty-life-website
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+
+    environment:
+      MARIADB_DATABASE: nifty_life
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
+
+      # Consumed by docker/initdb/900-grants.sh, which creates the three
+      # accounts from database/grants.sql. The entrypoint passes NO of these to
+      # a .sql file, which is exactly why that script exists.
+      GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?GAME_DB_PASSWORD must be set}
+      WEB_DB_PASSWORD: ${WEB_DB_PASSWORD:?WEB_DB_PASSWORD must be set}
+      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD must be set}
+
+      # Host patterns for the GRANT statements. 'localhost' is wrong here: the
+      # app connects from a container address. WEB_DB_HOST stays on the compose
+      # subnet so only containers on this network match; GAME_DB_HOST is '%'
+      # because the game server's apparent source address depends on how the
+      # published port is NATted, which is not something we control.
+      WEB_DB_HOST: ${WEB_DB_HOST:-172.30.%}
+      GAME_DB_HOST: ${GAME_DB_HOST:-%}
+
+    command:
+      - --log-bin=/var/lib/mysql/mysql-bin
+      - --binlog-format=ROW
+      - --binlog-expire-logs-seconds=604800
+      - --server-id=1
+
+    volumes:
+      - db_data:/var/lib/mysql
+      # Read-only. The entrypoint runs everything in here once, on an empty
+      # data directory. On an existing volume it is skipped — which is correct:
+      # re-running the migrations against live data is not something this
+      # container is allowed to do behind your back.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+
+    ports:
+      # Loopback only — for the FiveM server on this host. Never 0.0.0.0.
+      - "127.0.0.1:3307:3306"
+
+    networks:
+      nifty:
+        ipv4_address: 172.30.0.20
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      # Generous: on a first boot this container is loading 30 migrations, and
+      # a failure here must not be reported as "the database is down".
+      retries: 30
+      start_period: 120s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+    # Local development convenience only. On the deploy host this file does not
+    # exist and the values come from the platform's own secret store.
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      # The service name, not 127.0.0.1. Inside this container 127.0.0.1 is the
+      # container itself, which is the bug that made the first deploy unable to
+      # reach a database at all.
+      DB_HOST: mariadb
+      DB_PORT: "3306"
+      DB_NAME: nifty_life
+      DB_USER: nifty_website
+      DB_PASSWORD: ${WEB_DB_PASSWORD:?WEB_DB_PASSWORD must be set}
+      DB_ADMIN_USER: nifty_admin
+      DB_ADMIN_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD must be set}
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      nifty:
+        ipv4_address: 172.30.0.10
+
+networks:
+  nifty:
+    ipam:
+      config:
+        # Fixed, because WEB_DB_HOST above grants the web accounts to this
+        # subnet. A random Docker-assigned network would silently break every
+        # grant the moment the subnet moved.
+        - subnet: 172.30.0.0/24
+
+volumes:
+  db_data:
