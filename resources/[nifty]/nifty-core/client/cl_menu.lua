@@ -125,9 +125,20 @@ end)
 --- A row that is drawn and does nothing. Used to break a long menu into readable
 --- groups; it carries no state and no callback.
 exports('separator', function(...)
+  print(('[nifty-core] separator: n_args=%d'):format(select('#', ...)))
   local menu, label = stripSelf(...)
-  print(('[nifty-core] separator: menu=%s, label=%s'):format(tostring(menu), tostring(label)))
-  return push(menu, { kind = 'separator', label = label or '' })
+  print(('[nifty-core] separator: menu=%s (%s), label=%s (%s)'):format(
+    tostring(menu), type(menu), tostring(label), type(label)))
+  if type(menu) ~= 'table' then
+    print(('[nifty-core] separator: ERROR menu is not a table, returning nil'):format())
+    return nil
+  end
+  local ok, result = pcall(push, menu, { kind = 'separator', label = label or '' })
+  if not ok then
+    print(('[nifty-core] separator: push FAILED err=%s'):format(tostring(result)))
+    return menu
+  end
+  return result
 end)
 
 --- A button. `onSelect` fires on click and on Enter while the row is selected.
