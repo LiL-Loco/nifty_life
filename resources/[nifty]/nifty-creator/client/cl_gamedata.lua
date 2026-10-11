@@ -71,10 +71,12 @@ end
 
 --- Which file holds the names for a component.
 ---
---- Only ten of the thirteen freemode components have names, because those are the
---- ones the game ever sold. Slots 0, 9, 10 and 12 - masks are component 1, hats
---- are a PROP - simply have no table, and the menu falls back to a number.
+--- Slots 12 is the only one without a file: the engine has no drawables
+--- there for either freemode ped. Everything else gets a names file,
+--- even the ones that are short on content (Head / Armor / Decal) - the
+--- menu falls back to a number when a slot has no table.
 local COMPONENT_FILE = {
+  [0]  = 'heads',
   [1]  = 'masks',
   [2]  = 'hair',
   [3]  = 'torsos',
@@ -82,6 +84,8 @@ local COMPONENT_FILE = {
   [5]  = 'shoes',
   [7]  = 'accessories',
   [8]  = 'undershirts',
+  [9]  = 'armor',
+  [10] = 'decals',
   [11] = 'tops',
 }
 

@@ -1,0 +1,38 @@
+{
+    "0": {
+        "0": {
+            "GXT": "SP_F_DECL_0_0",
+            "Localized": "Decal 0 (Tex 0)"
+        }
+    },
+    "1": {
+        "0": {
+            "GXT": "SP_F_DECL_1_0",
+            "Localized": "Decal 1 (Tex 0)"
+        }
+    },
+    "2": {
+        "0": {
+            "GXT": "SP_F_DECL_2_0",
+            "Localized": "Decal 2 (Tex 0)"
+        }
+    },
+    "3": {
+        "0": {
+            "GXT": "SP_F_DECL_3_0",
+            "Localized": "Decal 3 (Tex 0)"
+        }
+    },
+    "4": {
+        "0": {
+            "GXT": "SP_F_DECL_4_0",
+            "Localized": "Decal 4 (Tex 0)"
+        }
+    },
+    "5": {
+        "0": {
+            "GXT": "SP_F_DECL_5_0",
+            "Localized": "Decal 5 (Tex 0)"
+        }
+    }
+}

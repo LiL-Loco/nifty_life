@@ -1,0 +1,206 @@
+{
+    "0": {
+        "0": {
+            "GXT": "SP_M_TASK_0_0",
+            "Localized": "Ruestung 0 (Tex 0)"
+        }
+    },
+    "1": {
+        "0": {
+            "GXT": "SP_M_TASK_1_0",
+            "Localized": "Ruestung 1 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_1_1",
+            "Localized": "Ruestung 1 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_1_2",
+            "Localized": "Ruestung 1 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_1_3",
+            "Localized": "Ruestung 1 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_1_4",
+            "Localized": "Ruestung 1 (Tex 4)"
+        }
+    },
+    "2": {
+        "0": {
+            "GXT": "SP_M_TASK_2_0",
+            "Localized": "Ruestung 2 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_2_1",
+            "Localized": "Ruestung 2 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_2_2",
+            "Localized": "Ruestung 2 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_2_3",
+            "Localized": "Ruestung 2 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_2_4",
+            "Localized": "Ruestung 2 (Tex 4)"
+        }
+    },
+    "3": {
+        "0": {
+            "GXT": "SP_M_TASK_3_0",
+            "Localized": "Ruestung 3 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_3_1",
+            "Localized": "Ruestung 3 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_3_2",
+            "Localized": "Ruestung 3 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_3_3",
+            "Localized": "Ruestung 3 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_3_4",
+            "Localized": "Ruestung 3 (Tex 4)"
+        }
+    },
+    "4": {
+        "0": {
+            "GXT": "SP_M_TASK_4_0",
+            "Localized": "Ruestung 4 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_4_1",
+            "Localized": "Ruestung 4 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_4_2",
+            "Localized": "Ruestung 4 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_4_3",
+            "Localized": "Ruestung 4 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_4_4",
+            "Localized": "Ruestung 4 (Tex 4)"
+        }
+    },
+    "5": {
+        "0": {
+            "GXT": "SP_M_TASK_5_0",
+            "Localized": "Ruestung 5 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_5_1",
+            "Localized": "Ruestung 5 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_5_2",
+            "Localized": "Ruestung 5 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_5_3",
+            "Localized": "Ruestung 5 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_5_4",
+            "Localized": "Ruestung 5 (Tex 4)"
+        }
+    },
+    "6": {
+        "0": {
+            "GXT": "SP_M_TASK_6_0",
+            "Localized": "Ruestung 6 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_6_1",
+            "Localized": "Ruestung 6 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_6_2",
+            "Localized": "Ruestung 6 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_6_3",
+            "Localized": "Ruestung 6 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_6_4",
+            "Localized": "Ruestung 6 (Tex 4)"
+        }
+    },
+    "7": {
+        "0": {
+            "GXT": "SP_M_TASK_7_0",
+            "Localized": "Ruestung 7 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_7_1",
+            "Localized": "Ruestung 7 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_7_2",
+            "Localized": "Ruestung 7 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_7_3",
+            "Localized": "Ruestung 7 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_7_4",
+            "Localized": "Ruestung 7 (Tex 4)"
+        }
+    },
+    "8": {
+        "0": {
+            "GXT": "SP_M_TASK_8_0",
+            "Localized": "Ruestung 8 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_8_1",
+            "Localized": "Ruestung 8 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_8_2",
+            "Localized": "Ruestung 8 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_8_3",
+            "Localized": "Ruestung 8 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_8_4",
+            "Localized": "Ruestung 8 (Tex 4)"
+        }
+    },
+    "9": {
+        "0": {
+            "GXT": "SP_M_TASK_9_0",
+            "Localized": "Ruestung 9 (Tex 0)"
+        },
+        "1": {
+            "GXT": "SP_M_TASK_9_1",
+            "Localized": "Ruestung 9 (Tex 1)"
+        },
+        "2": {
+            "GXT": "SP_M_TASK_9_2",
+            "Localized": "Ruestung 9 (Tex 2)"
+        },
+        "3": {
+            "GXT": "SP_M_TASK_9_3",
+            "Localized": "Ruestung 9 (Tex 3)"
+        },
+        "4": {
+            "GXT": "SP_M_TASK_9_4",
+            "Localized": "Ruestung 9 (Tex 4)"
+        }
+    }
+}
