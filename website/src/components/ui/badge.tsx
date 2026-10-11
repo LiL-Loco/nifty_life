@@ -1,42 +1,48 @@
-import { cva, type VariantProps } from 'class-variance-authority';
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { Slot } from "@radix-ui/react-slot"
 
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils"
 
-/**
- * A status pill.
- *
- * The four tones are the four APPLICATION STATUSES, not four colours. That is the
- * point of naming them this way: `under_review` being the accent colour is a
- * decision, and if the variant were called `info` the same colour would end up on
- * something merely informational. `submitted` gets its own name rather than
- * sharing `default`, because "neu" is a state a reviewer acts on, not the absence
- * of one — and `default` is then left to mean "a status this file has not been
- * told about", which should be visible rather than silently muted.
- */
 const badgeVariants = cva(
-  'inline-block rounded-full border px-2 py-[0.1rem] text-xs uppercase tracking-[0.04em]',
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
-      tone: {
-        default: 'border-line text-muted',
-        submitted: 'border-line text-muted',
-        approved: 'border-ok text-ok',
-        rejected: 'border-danger text-danger',
-        under_review: 'border-accent text-accent',
+      variant: {
+        default: "bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+        secondary:
+          "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+        destructive:
+          "bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
+        outline:
+          "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+        ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 [a&]:hover:underline",
       },
     },
-    defaultVariants: { tone: 'default' },
-  },
-);
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
-/** Accepts the database's status union directly, so a caller cannot pass a
- *  colour where it should have passed a state and get no compile error. */
-export type PillTone = NonNullable<VariantProps<typeof badgeVariants>['tone']>;
-
-export function StatusPill({
+function Badge({
   className,
-  tone,
+  variant = "default",
+  asChild = false,
   ...props
-}: React.HTMLAttributes<HTMLSpanElement> & { tone?: PillTone }) {
-  return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
+}: React.ComponentProps<"span"> &
+  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : "span"
+
+  return (
+    <Comp
+      data-slot="badge"
+      data-variant={variant}
+      className={cn(badgeVariants({ variant }), className)}
+      {...props}
+    />
+  )
 }
+
+export { Badge, badgeVariants }

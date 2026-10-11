@@ -39,7 +39,7 @@ const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
  *
  * The most common mistake by a wide margin is pasting the portal's *bot invite
  * link* here, because that is the other URL the portal shows you and it also
- * starts with `https://discord.com/oauth2/authorize`. Discord then answers
+ * starts with `http://discord.com/oauth2/authorize`. Discord then answers
  * "invalid redirect_uri", which names neither the app, nor the URL, nor the
  * setting at fault.
  *

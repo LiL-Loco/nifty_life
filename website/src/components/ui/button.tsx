@@ -1,68 +1,64 @@
-import { cva, type VariantProps } from 'class-variance-authority';
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { Slot } from "@radix-ui/react-slot"
 
-import { cn } from '@/lib/utils';
+import { cn } from "@/lib/utils"
 
-/**
- * The button.
- *
- * shadcn's shape, this project's palette. `cva` is what makes the variants
- * type-safe without a single class name being written at a call site: `variant`
- * and `size` are compile-time checked, so a typo is a build error rather than a
- * button that silently renders unstyled.
- *
- * The `secondary` variant is the important one. Almost every button on this site
- * is secondary — "anmelden", "abmelden", "löschen", "weitere ansehen" — and the
- * filled style is reserved for the one thing a screen is asking you to do. That
- * ratio is the difference between a form and a form with nine equally loud
- * buttons on it.
- *
- * The shared classes are INLINED rather than held in a `base` constant. `cva`
- * infers its argument types from the literal, and a `string[]` passed in from a
- * variable widens the signature to `VariantProps<...> | undefined` inside its
- * own return type, which then makes every call site fail to type-check.
- */
 const buttonVariants = cva(
-  'inline-block cursor-pointer rounded-md border font-semibold transition-[filter] hover:brightness-110 disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent',
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: 'border-accent bg-accent text-[#08111c]',
-        secondary: 'border-line bg-transparent text-text',
-        link: 'border-none bg-transparent p-0 text-accent underline',
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
+        outline:
+          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost:
+          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: 'px-[1.1rem] py-[0.6rem]',
-        sm: 'px-2.5 py-1 text-[0.8125rem]',
+        default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
+        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
+        icon: "size-9",
+        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "size-8",
+        "icon-lg": "size-10",
       },
     },
     defaultVariants: {
-      variant: 'default',
-      size: 'default',
+      variant: "default",
+      size: "default",
     },
-  },
-);
+  }
+)
 
-type ButtonOptions = NonNullable<VariantProps<typeof buttonVariants>>;
-
-/**
- * The class string, for a caller rendering its own element.
- *
- * Most of this site's buttons are `<Link>`s — anything that navigates must be an
- * anchor, or it loses middle-click, "open in new tab", and the address bar.
- * Forcing those through a `<button>` would trade real behaviour for a tidier
- * component API, so `Button` is for actions and `buttonLinkClass` is for
- * navigation, and both produce the same string.
- */
-export function buttonLinkClass(props: ButtonOptions & { className?: string } = {}) {
-  const { className, ...options } = props;
-  return cn(buttonVariants(options), 'no-underline', className);
-}
-
-export function Button({
+function Button({
   className,
-  variant,
-  size,
+  variant = "default",
+  size = "default",
+  asChild = false,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & ButtonOptions) {
-  return <button className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+}: React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean
+  }) {
+  const Comp = asChild ? Slot.Root : "button"
+
+  return (
+    <Comp
+      data-slot="button"
+      data-variant={variant}
+      data-size={size}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
 }
+
+export { Button, buttonVariants }

@@ -18,9 +18,9 @@ import 'server-only';
 
 import { config, discordConfigured } from './config';
 
-const DISCORD_AUTHORIZE = 'https://discord.com/oauth2/authorize';
-const DISCORD_TOKEN = 'https://discord.com/api/oauth2/token';
-const DISCORD_ME = 'https://discord.com/api/users/@me';
+const DISCORD_AUTHORIZE = 'http://discord.com/oauth2/authorize';
+const DISCORD_TOKEN = 'http://discord.com/api/oauth2/token';
+const DISCORD_ME = 'http://discord.com/api/users/@me';
 
 const DISCORD_IDENTITY = 'identify';
 

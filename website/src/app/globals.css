@@ -1,70 +1,104 @@
 @import 'tailwindcss';
 
-/**
- * The theme.
- *
- * Tailwind v4 has no tailwind.config.js: the design tokens are declared here, in
- * `@theme`, and Tailwind generates the utilities from the names. Declaring
- * `--color-ground` is what makes `bg-ground` exist.
- *
- * A token that is not declared here is a class that silently does nothing —
- * Tailwind emits no error for a utility it does not recognise, so a typo in a
- * class name is invisible until somebody notices the page looks unstyled.
- *
- * The names are kept from the hand-written stylesheet rather than replaced with
- * shadcn's generic `--background` / `--foreground` / `--primary`. Those names
- * describe a system; these describe this one. `ground` is the page, `surface` is
- * a raised panel, `line` is the border between them, and a reader who does not
- * know this codebase can still tell them apart.
- *
- * The values are byte-for-byte the ones the stylesheet carried before the move.
- * This is a change of mechanism, not of design: if a colour shifts here, that is
- * a design decision and belongs in its own commit.
- */
-@theme {
-  --color-ground: #0d0f11;
-  --color-surface: #14181c;
-  --color-line: #232a30;
-  --color-text: #e7ebee;
-  --color-muted: #97a2ab;
-  --color-accent: #6ea8fe;
-  --color-danger: #e5796b;
-  --color-ok: #6bbf8a;
+@custom-variant dark (&:is(.dark *));
 
-  /* The landing page's amber. Kept separate from --accent on purpose: that one
-     is a link colour chosen for legibility on the dark portal ground, this one
-     is a fill for a large shape. Changing one must not change the other. */
+/**
+ * shadcn v4 design tokens. Dark-only site (the html element sets
+ * `color-scheme: dark`), so the dark values are the only ones defined — no
+ * light mode, no `.dark` toggle. The names are the shadcn standard
+ * (background / foreground / primary / …), so a `npx shadcn@latest add <x>`
+ * pulls primitives that bind to these variables without renaming anything.
+ *
+ * `neutral` base: the project has always been grayscale + a single blue
+ * accent. shadcn's neutral palette matches that decision and gives every
+ * variant a consistent value, instead of the bespoke set of `--color-ground`
+ * / `--color-line` / `--color-accent` the hand-written stylesheet carried.
+ */
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+
+  --destructive: oklch(0.704 0.191 22.216);
+
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+
+  /* Status colour that the shadcn palette does not name: the "everything is
+     fine" green used on the application status pill and the ban-free row in
+     the registrations table. */
+  --success: oklch(0.72 0.15 150);
+
+  /* The landing page's amber. Kept outside the standard set on purpose: it
+     belongs to the hero, not the design system. */
   --color-amber: #f0a53a;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-
-/**
- * The reading column.
- *
- * 46rem is the width the hand-written header, footer and `main` all used. It is
- * a token rather than a repeated literal because every portal page has to agree
- * on it: a header at one width and a paragraph at another is the single most
- * common way a layout looks "almost right" and not right.
- */
-@theme {
   --container-page: 46rem;
 }
 
 /**
- * Element defaults.
- *
- * Only BARE tags live here, and only where the alternative is repeating the same
- * utilities on every page: the reading column, the two heading sizes, and the
- * link colour. Everything with a shape — button, card, notice, pill, header,
- * footer, nav — is a component or a class list at its one call site, which is
- * what makes the stylesheet reviewable in a diff.
+ * Tailwind v4: the `@theme inline` block exposes the CSS variables as
+ * utilities (`bg-background`, `text-foreground`, `border-border`, …). Without
+ * this block Tailwind has no idea the variables exist; classes named after
+ * them would compile to nothing.
  */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-amber: var(--color-amber);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 @layer base {
   * {
     box-sizing: border-box;
-    border-color: var(--color-line);
+    border-color: var(--border);
   }
 
   html,
@@ -78,93 +112,48 @@
   }
 
   body {
-    background-color: var(--color-ground);
-    color: var(--color-text);
+    background-color: var(--background);
+    color: var(--foreground);
     font-family: var(--font-sans);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Focus stays visible on every control, including inside dark cards. The
-     original set `outline` per element; `:focus-visible` covers all of them in
-     one place, and removes the class of bug where a new control forgets. */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--ring);
     outline-offset: 1px;
   }
 
-  input,
-  textarea,
-  select {
-    width: 100%;
-    padding: 0.6rem 0.7rem;
-    background-color: var(--color-ground);
-    border: 1px solid var(--color-line);
-    border-radius: 6px;
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  textarea {
-    min-height: 7rem;
-    resize: vertical;
-  }
-
-  /* A checkbox must stay its own size — the full-width rule is for text inputs,
-     and letting it apply to a checkbox is the one case where it is wrong. */
-  input[type='checkbox'],
-  input[type='radio'] {
-    width: auto;
-  }
-
   ::placeholder {
-    color: var(--color-muted);
+    color: var(--muted-foreground);
   }
 
   ::selection {
-    background-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    background-color: color-mix(in srgb, var(--ring) 30%, transparent);
   }
 
   * {
-    scrollbar-color: var(--color-line) var(--color-ground);
+    scrollbar-color: var(--border) var(--background);
   }
 }
 
 @layer components {
-  /*
-   * The reading column.
-   *
-   * 46rem is the width the hand-written header, footer and `main` all used. It is
-   * a token rather than a repeated literal because every portal page has to agree
-   * on it: a header at one width and a paragraph at another is the single most
-   * common way a layout looks "almost right" and not right.
-   */
   main {
     max-width: var(--container-page);
     margin: 0 auto;
     padding: 3rem 1.25rem 5rem;
   }
 
-  /*
-   * The hero owns the whole viewport, so the portal's centred column and its
-   * padding must not apply here — `.hero` IS a <main>, and the `main` rule above
-   * would otherwise centre and pad it. This is the one place that override is
-   * needed, and it is why the hero is a `main` with a class rather than a
-   * dedicated wrapper element.
-   */
+  /* The hero owns the whole viewport, so the portal's centred column and its
+     padding must not apply here. */
   main.hero {
     max-width: none;
     margin: 0;
     padding: 4rem 1.5rem;
   }
 
-  /*
-   * Links are accent-coloured here rather than per component because a link is a
-   * semantic thing, not a variant. A control styled as a button overrides it, so
-   * a filled button never reads as underlined prose.
-   */
   a {
-    color: var(--color-accent);
+    color: var(--foreground);
   }
 
   h1 {
@@ -186,19 +175,19 @@
 
    Built from the reference screenshot: a full-bleed background pushed almost to
    black, a fine halftone dot texture over it, the mark centred high, and two
-   stacked pill buttons with a heavy outline. The composition and texture are the
-   idea; the assets are ours — there is no GTA screenshot here, because that one
-   belongs to somebody else.
+   stacked pill buttons with a heavy outline. The composition and texture are
+   the idea; the assets are ours — there is no GTA screenshot here, because
+   that one belongs to somebody else.
 
-   NO IMAGE FILE, on purpose. A layered gradient stands in for a city at night and
-   the dots are two repeating radial gradients, so the page weighs nothing and
-   there is no licence to honour. To use a real photograph, drop it at
-   public/hero.jpg and uncomment the background-image line in `.hero::before`.
+   NO IMAGE FILE, on purpose. A layered gradient stands in for a city at night
+   and the dots are two repeating radial gradients, so the page weighs nothing
+   and there is no licence to honour.
 
-   These four rules stay as CSS rather than becoming utilities. A hero written as
+   These rules stay as CSS rather than becoming utilities. A hero written as
    `bg-[radial-gradient(120%_80%_at_50%_115%,rgba(214,138,60,0.5)_0%,transparent_62%)]`
-   would be technically correct and unreadable, and nothing about this composition
-   can be restated from a class name. Everything else on the site IS utilities.
+   would be technically correct and unreadable, and nothing about this
+   composition can be restated from a class name. Everything else on the site
+   IS shadcn.
    =========================================================================== */
 
 .hero {
@@ -211,18 +200,14 @@
   gap: 3.5rem;
   padding: 4rem 1.5rem;
   overflow: hidden;
-  /* Falls back to the flat ground colour before ::before paints. */
   background: #0a0b0d;
 }
 
-/* Layer 1: the "photograph". Radial gradients faking depth — a warm low glow at
-   the horizon, a cool wash above it, dark at the corners. */
 .hero::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  /* background-image: url('/hero.jpg'); background-size: cover; */
   background-image:
     radial-gradient(120% 80% at 50% 115%, rgba(214, 138, 60, 0.5) 0%, transparent 62%),
     radial-gradient(90% 60% at 50% 0%, rgba(40, 62, 96, 0.45) 0%, transparent 70%),
@@ -230,8 +215,6 @@
     linear-gradient(180deg, #0f1218 0%, #16110d 55%, #0a0b0d 100%);
 }
 
-/* Layer 2: the halftone. Two dot grids at different sizes and angles, which is
-   what stops it reading as a flat CSS pattern the way a single grid does. */
 .hero::after {
   content: '';
   position: absolute;
@@ -244,9 +227,6 @@
     radial-gradient(circle at center, rgba(255, 255, 255, 0.22) 0.7px, transparent 0.9px);
   background-size: 5px 5px, 5px 5px;
   background-position: 0 0, 2.5px 2.5px;
-  /* The WebKit prefix is deliberate: without it the dots cover the whole hero at
-     full strength instead of fading toward the edges, which is a visible
-     difference on Safari. */
   -webkit-mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
   mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
 }
@@ -264,8 +244,6 @@
   text-align: center;
 }
 
-/* Uppercase, tight, and outlined twice: a soft glow under the fill plus a hard
-   dark stroke. The stroke is what makes it legible over any background. */
 .hero-mark-top,
 .hero-mark-bottom {
   font-weight: 800;
@@ -293,7 +271,7 @@
   letter-spacing: 0.42em;
   text-indent: 0.42em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--muted-foreground);
 }
 
 .hero-doors {
@@ -330,8 +308,6 @@
   transform: translateY(0);
 }
 
-/* The reference's type is a heavy condensed uppercase — the single detail that
-   most says "game server" rather than "startup". */
 .door-label {
   font-weight: 800;
   font-size: clamp(1.05rem, 3.4vw, 1.45rem);
@@ -341,7 +317,7 @@
 
 .door.is-off {
   background: #23262b;
-  color: var(--color-muted);
+  color: var(--muted-foreground);
   cursor: not-allowed;
 }
 
@@ -362,12 +338,10 @@
   font-size: 0.8rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--muted-foreground);
   text-align: center;
 }
 
-/* A lift on hover is decoration. Somebody who has asked the operating system to
-   reduce motion gets the colour change and nothing else. */
 @media (prefers-reduced-motion: reduce) {
   .door {
     transition: none;

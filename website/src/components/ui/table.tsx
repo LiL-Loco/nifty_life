@@ -1,90 +1,116 @@
-import { cn } from '@/lib/utils';
+"use client"
 
-/**
- * A table cell.
- *
- * `head` is one boolean rather than a separate component because the only
- * difference between a header cell and a body cell on this site is weight,
- * colour and letter-spacing — and getting one of those three wrong is the kind of
- * thing that is invisible in review and obvious on the page.
- */
-export function Th({
-  className,
-  ...props
-}: React.ThHTMLAttributes<HTMLTableCellElement>) {
-  return (
-    <th
-      className={cn(
-        'px-[0.8rem] py-[0.6rem] text-left text-xs uppercase tracking-[0.06em] text-muted',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+import * as React from "react"
 
-export function Td({
-  className,
-  ...props
-}: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return (
-    <td
-      className={cn(
-        'border-t border-line px-[0.8rem] py-[0.6rem] align-top text-[0.9rem]',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
+import { cn } from "@/lib/utils"
 
-/**
- * The answers list on the review screen.
- *
- * Twenty questions rendered as twenty cards stop reading as twenty ANSWERS — each
- * card looks like a section of the page instead of a prompt and a reply. What
- * makes a review workable is that a question and its answer cannot be separated by
- * scrolling: a fixed number, the question, the answer indented beneath it, a
- * hairline between pairs.
- *
- * The number is not decoration. Reviewing twenty answers means saying "question 7"
- * in a Discord conversation an hour later, and an ordinal is the only identifier
- * that survives a reworded rulebook.
- */
-export function Answers({ className, ...props }: React.HTMLAttributes<HTMLOListElement>) {
-  return (
-    <ol
-      className={cn(
-        'm-0 list-none overflow-hidden rounded-lg border border-line p-0',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-export function AnswerPair({ className, ...props }: React.LiHTMLAttributes<HTMLLIElement>) {
-  return <li className={cn('border-t border-line px-[1.1rem] py-4', className)} {...props} />;
-}
-
-export function AnswerNumber({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
-  return (
-    <span
-      className={cn(
-        'inline-flex size-[1.4rem] flex-none items-center justify-center rounded-full',
-        'border border-line text-[0.72rem] text-muted tabular-nums',
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-export function AnswerBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
-      className={cn('mt-2 ml-[2.1rem] whitespace-pre-wrap border-l-2 border-l-accent pl-[0.9rem]', className)}
+      data-slot="table-container"
+      className="relative w-full overflow-x-auto"
+    >
+      <table
+        data-slot="table"
+        className={cn("w-full caption-bottom text-sm", className)}
+        {...props}
+      />
+    </div>
+  )
+}
+
+function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+  return (
+    <thead
+      data-slot="table-header"
+      className={cn("[&_tr]:border-b", className)}
       {...props}
     />
-  );
+  )
+}
+
+function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+  return (
+    <tbody
+      data-slot="table-body"
+      className={cn("[&_tr:last-child]:border-0", className)}
+      {...props}
+    />
+  )
+}
+
+function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+  return (
+    <tfoot
+      data-slot="table-footer"
+      className={cn(
+        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+  return (
+    <tr
+      data-slot="table-row"
+      className={cn(
+        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+  return (
+    <th
+      data-slot="table-head"
+      className={cn(
+        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+  return (
+    <td
+      data-slot="table-cell"
+      className={cn(
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function TableCaption({
+  className,
+  ...props
+}: React.ComponentProps<"caption">) {
+  return (
+    <caption
+      data-slot="table-caption"
+      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
+}
+
+export {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
 }

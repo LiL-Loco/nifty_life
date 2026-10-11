@@ -1,36 +1,24 @@
-import { cn } from '@/lib/utils';
+"use client"
 
-/**
- * A label bound to an input.
- *
- * The `htmlFor` is not a convenience — it is what makes the label clickable and
- * what a screen reader announces when focus lands on the field. The pairing is
- * enforced by the required `htmlFor` prop rather than by a `useId()`: the caller
- * already has the `id` it passed to the input, and generating a second one risks
- * a label that points at nothing.
- */
-export function Label({
+import * as React from "react"
+import * as LabelPrimitive from "@radix-ui/react-label"
+
+import { cn } from "@/lib/utils"
+
+function Label({
   className,
   ...props
-}: React.LabelHTMLAttributes<HTMLLabelElement>) {
+}: React.ComponentProps<typeof LabelPrimitive.Root>) {
   return (
-    <label
-      className={cn('mb-1 block text-sm text-muted', className)}
+    <LabelPrimitive.Root
+      data-slot="label"
+      className={cn(
+        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        className
+      )}
       {...props}
     />
-  );
+  )
 }
 
-/**
- * A label above a form control.
- *
- * The vertical rhythm of a form comes from here, not from margins on individual
- * inputs: twenty fields in the application wizard each get the same gap below
- * them without anyone having to remember it.
- */
-export function Field({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('mb-[1.1rem]', className)} {...props} />;
-}
+export { Label }
