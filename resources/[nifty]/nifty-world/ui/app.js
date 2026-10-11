@@ -310,11 +310,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 const hud = {
   money: { cash: 0, bank: 0 },
-  inventory: { items: [], usedSlots: 0, totalSlots: 0, usedWeight: 0, maxWeight: 0 },
-  // Character + appearance. Populated by nifty:client:enterWorld and
-  // nifty:client:character. The inventory's OUTFIT section reads
-  // hud.character.appearance and lists every worn component/prop.
-  character: null,
   jobs: [],
   jobCatalogue: [],
   shop: [],
@@ -359,20 +354,6 @@ function showToast(ok, message) {
 
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.add('hidden'), 3500);
-}
-
-// Inventory panel renders via the cross-script global that nifty-inventory's
-// app.js attached. Each call passes the live HUD snapshot so the inventory
-// panel does not need its own reactive state.
-function panelInventoryProxy() {
-  if (window.__niftyInventory && window.__niftyInventory.panelInventory) {
-    return window.__niftyInventory.panelInventory(hud);
-  }
-  // The script failed to load (offline CEF, blocked cfx-nui URL, etc.).
-  // Surface a placeholder rather than crashing the page.
-  const wrap = el('div', 'panel-shell__empty',
-    'Inventar konnte nicht geladen werden.');
-  return wrap;
 }
 
 function panelShop() {
@@ -482,7 +463,6 @@ function renderPanel() {
   }
 
   const builders = {
-    inventory: ['Inventar', panelInventoryProxy],
     shop: ['Shop', panelShop],
     jobs: ['Arbeit', panelJobs],
   };
@@ -536,8 +516,6 @@ window.addEventListener('message', (event) => {
     // it no longer exists) must disappear, not linger from the last update.
     Object.assign(hud, {
       money: data.money || hud.money,
-      inventory: data.inventory || hud.inventory,
-      character: data.character !== undefined ? data.character : hud.character,
       jobs: data.jobs || [],
       jobCatalogue: data.jobCatalogue || [],
       shop: data.shop || [],

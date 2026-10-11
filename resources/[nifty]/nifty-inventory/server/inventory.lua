@@ -24,6 +24,7 @@ local RESOURCE = GetCurrentResourceName()
 --- why a local in fxmanifest would not have survived the chunk boundary.
 local Db = Nifty.Db
 local GetSetting = Nifty.GetSetting
+local Identity = Nifty.Identity
 
 --- Item weights are DECIMAL money values, so rounding belongs to the economy system.
 --- Reached through the facade: nifty-economy was absorbed into nifty-core, so
@@ -651,3 +652,29 @@ exports('push', Inventory.push)
 exports('registerUseHandler', Inventory.registerUseHandler)
 exports('unregisterUseHandler', Inventory.unregisterUseHandler)
 exports('transferBetween', Inventory.transferBetween)
+
+-- ---------------------------------------------------------------------------
+-- NUI-driven actions
+--
+-- The inventory's own ui_page fires these. The actions here are thin
+-- wrappers around Inventory.use / Inventory.remove plus the per-code
+-- use handlers, so the existing use-handler registration for
+-- clothing_outfit etc. continues to apply (e.g. applying an outfit
+-- from inventory still routes through the registered handler).
+-- ---------------------------------------------------------------------------
+
+RegisterNetEvent('nifty:server:useItem', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local cid = Identity.getActiveCharacter(src)
+  if not cid then return end
+  Inventory.use(cid, payload.code, payload.quantity, payload.itemId)
+end)
+
+RegisterNetEvent('nifty:server:discardItem', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local cid = Identity.getActiveCharacter(src)
+  if not cid then return end
+  Inventory.remove(cid, payload.code, payload.quantity, payload.itemId)
+end)

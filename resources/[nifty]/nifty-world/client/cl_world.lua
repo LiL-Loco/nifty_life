@@ -225,7 +225,9 @@ RegisterCommand('niftypanel', function(_, argument)
   setPanel(name)
 end, false)
 
-RegisterKeyMapping('niftypanel inventory', 'Nifty Life — Inventar', 'keyboard', 'F1')
+-- NOTE: 'inventory' is no longer a panel here. nifty-inventory has its own
+-- ui_page now and binds F1 directly via RegisterKeyMapping in its own
+-- client script (client/cl_inventory.lua).
 RegisterKeyMapping('niftypanel shop', 'Nifty Life — Shop', 'keyboard', 'F2')
 RegisterKeyMapping('niftypanel jobs', 'Nifty Life — Jobs', 'keyboard', 'F3')
 RegisterKeyMapping('niftyclose', 'Nifty Life — Panel schließen', 'keyboard', 'F5')
