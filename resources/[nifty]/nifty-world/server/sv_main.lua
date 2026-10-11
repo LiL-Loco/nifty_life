@@ -160,7 +160,7 @@ local function enterWorld(src, character, hasSession)
   -- kills the CLIENT on `data.spawn.x` at the exact moment the player was told
   -- they had entered the world.
   spawn = lastPosition or (SpawnPoints[character.spawn_point] or SpawnPoints.default),
-  usePicker = lastPosition == nil,
+  usePicker = false,
   })
 
   -- The unread badge has to exist before the player first presses the key,
