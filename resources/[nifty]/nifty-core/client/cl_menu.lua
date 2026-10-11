@@ -93,7 +93,25 @@ end
 --- Append one item. Every builder funnels through here so that validation and the
 --- `kind` string live in exactly one place — an item type that is added to the page
 --- but not to this function is invisible until somebody opens that menu.
+---
+--- DEFENSIVE `items` ASSIGNMENT. `newMenu` always returns a table with `items = {}`,
+--- so in a correctly constructed flow this line is a no-op. It exists for the case
+--- where a menu arrived here without that field (the openCreator chain was hitting
+--- a runtime error on `attempt to get length of a nil value (field 'items')` from
+--- this function; the print below surfaces the actual menu so we can see what is
+--- arriving). When the diagnostic fires we know the menu is malformed and the
+--- caller has to fix it; when it does not, this is a one-liner that costs nothing.
 local function push(menu, item)
+  if type(menu) ~= 'table' then
+    print(('[nifty-core] push: ERROR menu is %s, item.kind=%s'):format(type(menu), tostring(item and item.kind)))
+    return menu
+  end
+  if menu.items == nil then
+    local keys = {}
+    for k in pairs(menu) do keys[#keys + 1] = tostring(k) end
+    print(('[nifty-core] push: menu arrived with no items field - keys=%s, creating []'):format(table.concat(keys, ', ')))
+    menu.items = {}
+  end
   item.kind = item.kind or 'button'
   menu.items[#menu.items + 1] = item
   return menu
