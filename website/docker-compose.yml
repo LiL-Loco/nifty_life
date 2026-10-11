@@ -110,7 +110,19 @@ services:
       DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
 
     ports:
-      - "3000:3000"
+      # Host 3000 -> container 3000. Coolify's proxy is pointed at 3000, so the
+      # default has to stay 3000.
+      #
+      # If this ever fails with "port is already allocated", something else on
+      # the host holds 3000 — most often the PREVIOUS Nixpacks deployment of this
+      # same site, whose container is still running. Stop or remove that one
+      # rather than moving this port: two resources fighting over 3000 is the
+      # real problem.
+      #
+      # APP_PORT is an escape hatch for a host where 3000 is genuinely taken by
+      # something unrelated. If you set it, set the Coolify port to the SAME
+      # value or the proxy will answer 502.
+      - "${APP_PORT:-3000}:3000"
 
     networks:
       nifty:
