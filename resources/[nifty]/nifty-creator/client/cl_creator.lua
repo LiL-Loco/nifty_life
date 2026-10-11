@@ -485,6 +485,7 @@ end
 -- moment it was pressed. Read top to bottom: a definition must precede its use.
 local buildSlotMenu
 local randomise
+local randomiseAll
 local reset
 local submit
 local cancel
@@ -1922,6 +1923,11 @@ buildRootMenu = function()
     onSelect = function() randomise() end,
   })
 
+  Menu.button(menu, 'Zufallschar', {
+    description = 'Outfit, Gesicht, Haare, Eltern - alles auf einmal.',
+    onSelect = function() randomiseAll() end,
+  })
+
   Menu.button(menu, 'Zuruecksetzen', {
     description = 'Alle Auswaehle verwerfen und das Modell neu laden.',
     onSelect = function() reset() end,
@@ -1985,6 +1991,125 @@ randomise = function()
       end
     end
   end
+
+  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
+end
+
+--- Roll every choice the creator exposes: outfit, face features,
+--- overlays, hair colour, eye colour, parents and weights, skin tone.
+--- Tattoos are left alone - they are personal and the player has
+--- usually picked them by hand, so a "complete random" that wiped
+--- them would feel hostile.
+---
+--- The distribution skews toward the middle of each value range so
+--- the result is a person, not a caricature: 70% of feature rolls
+--- land in -0.3..0.3, half the overlays end up off, and the third
+--- parent stays subtle (max 0.2) so the face does not look like a
+--- three-way composite.
+randomiseAll = function()
+  -- Outfit - same logic as the partial randomise.
+  selection = { components = {}, props = {} }
+  local dressProps = (math.random(1, 4) == 1)
+  for kind, options in pairs(slots) do
+    for id, list in pairs(options) do
+      if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
+        local chosen = list[math.random(#list)]
+        if chosen then
+          selection[kind][tostring(id)] = {
+            collection = chosen.name,
+            drawable   = math.random(0, chosen.drawables - 1),
+            texture    = math.random(0, chosen.textures - 1),
+          }
+        end
+      end
+    end
+  end
+
+  -- Face features. Three weight buckets: mild (70%), moderate (20%),
+  -- extreme (10%). The result is mostly unremarkable with occasional
+  -- striking features.
+  face.features = {}
+  for id = 0, AppearanceConfig.MAX_FACE_FEATURE do
+    local r = math.random()
+    local v
+    if r < 0.7 then
+      v = (math.random() - 0.5) * 0.6
+    elseif r < 0.9 then
+      v = (math.random() - 0.5) * 1.6
+    else
+      v = (math.random() - 0.5) * 2.0
+    end
+    if math.abs(v) < 0.05 then
+      face.features[tostring(id)] = nil
+    else
+      face.features[tostring(id)] = v
+    end
+  end
+
+  -- Overlays. 50/50 off vs on; on rolls get a random style, a
+  -- random opacity in 0.4..1.0 (so the overlay is visible), and a
+  -- random colour from the palette the engine accepts for this slot.
+  face.overlays = {}
+  for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
+    if math.random(1, 2) == 1 then
+      face.overlays[tostring(id)] = {
+        style = 0, opacity = 0.0, colourType = 1, colour = 0, secondColour = 0,
+      }
+    else
+      local maxStyle = overlayStyleCount(id)
+      local palettes = OVERLAY_PALETTES[id]
+      local colourType = 1
+      local palette = HAIR_PALETTE
+      if palettes and palettes[1] then
+        colourType = palettes[1][1]
+        palette = palettes[1][3]
+      end
+      face.overlays[tostring(id)] = {
+        style = math.random(0, maxStyle),
+        opacity = 0.4 + math.random() * 0.6,
+        colourType = colourType,
+        colour = math.random(0, #palette - 1),
+        secondColour = 0,
+      }
+    end
+  end
+
+  -- Hair colour. Two-thirds of random heads have no highlight.
+  face.hairColour = {
+    primary = math.random(0, #HAIR_PALETTE - 1),
+    highlight = (math.random(1, 3) <= 1) and math.random(0, #HAIR_PALETTE - 1) or 0,
+  }
+
+  face.eyeColour = math.random(0, AppearanceConfig.MAX_EYE_COLOUR)
+
+  -- Parents and weights. thirdWeight is capped at 0.2 so the third
+  -- person stays a hint, not a third of the face. motherWeight and
+  -- fatherWeight are renormalised so the engine receives a proper
+  -- ratio (the native treats them as ratios, not percentages).
+  local mw = math.random()
+  local fw = math.random()
+  local tw = math.random() * 0.2
+  local wsum = mw + fw + tw
+  if wsum > 0 then
+    mw, fw, tw = mw / wsum, fw / wsum, tw / wsum
+  end
+  face.headBlend = {
+    mother = math.random(0, MOTHER_COUNT - 1),
+    father = math.random(0, FATHER_COUNT - 1),
+    third  = math.random(0, AppearanceConfig.MAX_HEADBLEND_PRESET),
+    motherWeight = mw,
+    fatherWeight = fw,
+    thirdWeight  = tw,
+    skinTone = math.random(),
+  }
+
+  -- refresh() walks selection + face and applies the whole appearance
+  -- through nifty-world. applyDecorations() then lays the hair overlay
+  -- and tattoos on top.
+  refresh()
+  applyDecorations()
+  resolveHairOverlay()
+  applyDecorations()
 
   if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
