@@ -1542,9 +1542,14 @@ exports('openCreator', function(data)
   SetEntityCoords(ped, scene.x, scene.y, scene.z, false, false, false, false)
   SetEntityHeading(ped, scene.heading)
   FreezeEntityPosition(ped, true)
+  print(('[%s] openCreator: parked player at scene.x=%.2f y=%.2f z=%.2f heading=%.2f'):format(RESOURCE, scene.x, scene.y, scene.z, scene.heading))
 
   respawnModel()
   discoverSlots()
+  print(('[%s] openCreator: post-discoverSlots components=%d props=%d'):format(
+    RESOURCE,
+    slots.components and (function() local n=0; for _ in pairs(slots.components) do n=n+1 end; return n end)() or 0,
+    slots.props and (function() local n=0; for _ in pairs(slots.props) do n=n+1 end; return n end)() or 0))
   startCamera()
   openRoot()
 end)

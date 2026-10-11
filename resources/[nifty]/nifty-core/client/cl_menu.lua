@@ -273,6 +273,7 @@ end
 --- Send one menu to the page and remember it, so a callback can be routed back.
 local function present(menu)
   SendNUIMessage({ action = 'menuOpen', data = toWire(menu) })
+  print(('[nifty-core] present: sent menuOpen id=%s items=%d to NUI'):format(menu.id or '?', tostring(#menu.items)))
 end
 
 --- Open a menu owned by `owner`.
@@ -282,10 +283,21 @@ end
 --- staring at a menu with dead controls, which is the exact class of bug the focus
 --- broker was written to make impossible.
 exports('openMenu', function(owner, menu)
-  if type(menu) ~= 'table' or #menu.items == 0 then return false end
-  if Current ~= nil then return false end
+  if type(menu) ~= 'table' or #menu.items == 0 then
+    print(('[nifty-core] menu.openMenu(%s) -> REJECTED, items=%s, type=%s'):format(
+      tostring(owner), tostring(type(menu) == 'table' and #menu.items or 'n/a'),
+      type(menu)))
+    return false
+  end
+  if Current ~= nil then
+    print(('[nifty-core] menu.openMenu(%s) -> REJECTED, current already set (id=%s)'):format(tostring(owner), Current.id or '?'))
+    return false
+  end
 
-  if not Focus:acquire(RESOURCE) then return false end
+  if not Focus:acquire(RESOURCE) then
+    print(('[nifty-core] menu.openMenu(%s) -> REJECTED, focus not acquired'):format(tostring(owner)))
+    return false
+  end
 
   MenuSerial = MenuSerial + 1
   menu.owner = owner
@@ -293,13 +305,21 @@ exports('openMenu', function(owner, menu)
 
   Current = menu
   present(menu)
+  print(('[nifty-core] menu.openMenu(%s) -> opened id=%s items=%d'):format(tostring(owner), menu.id, #menu.items))
   return true
 end)
 
 --- Replace the open menu with another, keeping focus. This is what a submenu is.
 exports('pushMenu', function(owner, menu)
-  if type(menu) ~= 'table' or #menu.items == 0 then return false end
-  if Current == nil then return exports['nifty-core']:openMenu(owner, menu) end
+  if type(menu) ~= 'table' or #menu.items == 0 then
+    print(('[nifty-core] menu.pushMenu(%s) -> REJECTED, items=%s'):format(
+      tostring(owner), tostring(type(menu) == 'table' and #menu.items or 'n/a')))
+    return false
+  end
+  if Current == nil then
+    print(('[nifty-core] menu.pushMenu(%s) -> no current, falling back to openMenu'):format(tostring(owner)))
+    return exports['nifty-core']:openMenu(owner, menu)
+  end
 
   menu.owner = owner
   menu.id = Current.id
@@ -311,6 +331,7 @@ exports('pushMenu', function(owner, menu)
   menu.parent = Current.parent
   Current = menu
   present(menu)
+  print(('[nifty-core] menu.pushMenu(%s) -> pushed id=%s items=%d'):format(tostring(owner), menu.id, #menu.items))
   return true
 end)
 

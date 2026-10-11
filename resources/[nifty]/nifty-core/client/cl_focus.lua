@@ -55,12 +55,19 @@ exports('acquire', function(name)
 
   -- Re-acquiring what you already hold is not an error. A chat input that is
   -- closed and reopened inside one frame would otherwise deadlock against itself.
-  if Holder == name then return true end
+  if Holder == name then
+    print(('[nifty-core] focus.acquire(%s) -> already held'):format(name))
+    return true
+  end
 
-  if Holder ~= nil then return false end
+  if Holder ~= nil then
+    print(('[nifty-core] focus.acquire(%s) -> DENIED, current holder=%s'):format(name, tostring(Holder)))
+    return false
+  end
 
   Holder = name
   apply(true)
+  print(('[nifty-core] focus.acquire(%s) -> granted'):format(name))
   return true
 end)
 
@@ -70,10 +77,14 @@ end)
 --- `acquire` and then calls `release` must NOT drop the keyboard from whoever
 --- actually has it. That mistake would look exactly like random focus loss.
 exports('release', function(name)
-  if Holder ~= name then return false end
+  if Holder ~= name then
+    print(('[nifty-core] focus.release(%s) -> not held by us, holder=%s'):format(name, tostring(Holder)))
+    return false
+  end
 
   Holder = nil
   apply(false)
+  print(('[nifty-core] focus.release(%s) -> released'):format(name))
   return true
 end)
 
