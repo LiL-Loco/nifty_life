@@ -3,19 +3,20 @@ game 'gta5'
 
 name 'nifty-spawn'
 author 'Nifty Life 2.0'
-description 'Player spawning - the complete Cfx spawnmanager replacement. Ensured before every other gameplay resource so its exports are available to anything that asks.'
+description 'Spawn-location picker. Builds a menu through nifty-ui (Lemon-style) listing the spawn points, flies a cinematic camera to the one the player highlights, and hands the chosen coords back to the caller. The caller does the actual spawn.'
 version '0.1.0'
 
--- Load order: shared base first, then the appearance config (SpawnPoints is
--- defined there). The order of `ensure` in server.cfg puts this resource as
--- the first nifty-* that starts after nifty-core.
+-- Logik/Idee angelehnt an qb-spawn (qbcore-fivem/qb-spawn, GPL-3.0).
+-- Nichts uebernommen oder uebersetzt - das Konzept eines Pickers ist
+-- allgemein; unsere Umsetzung geht ueber das nifty-ui-Menuframework und
+-- eine eigene Kamerafuehrung. Code ist eigenstaendig geschrieben.
 shared_scripts {
   '@nifty-core/shared/constants.lua',
-  '@nifty-core/shared/appearance_config.lua',
+  'shared/config.lua',
 }
 
 client_script 'client/cl_spawn.lua'
 
-dependencies { 'nifty-core' }
+dependencies { 'nifty-core', 'nifty-ui' }
 
 server_only 'no'

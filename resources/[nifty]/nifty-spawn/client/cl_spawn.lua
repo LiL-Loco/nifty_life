@@ -1,276 +1,148 @@
---- Player spawning (ADR-0024).
+--- Spawn-location picker, powered by the nifty-ui Lemon menu.
 ---
---- WHY THIS EXISTS RATHER THAN `ensure spawnmanager`
+--- Logik/Idee angelehnt an qb-spawn (qbcore-fivem/qb-spawn, GPL-3.0). Kein
+--- Code uebernommen - das Picker-Konzept ist allgemein, und das nifty-ui-
+--- Menuframework liefert das Backbone. Kamerafuehrung und Auswahlablauf
+--- sind eigenstaendig geschrieben.
 ---
---- Two reasons, and the first is not about ownership.
+--- VERANTWORTLICHKEIT
 ---
---- spawnmanager takes its spawn points from mapmanager or a map resource. This
---- server has neither - `resources/` holds nothing but nifty and oxmysql - so
---- spawnmanager has zero points to spawn from and cannot spawn anybody. Adding a
---- map resource purely to feed a spawn point is a dependency bought for one
---- coordinate pair.
+--- nifty-spawn macht NUR den Picker: Menu aufbauen, Kamerafluge, Auswahl
+--- zurueckgeben. Das eigentliche Spawnen (Modell, Aussehen, Teleport,
+--- Cfx-spawnmanager) macht nifty-world im Callback. So bleibt nifty-spawn
+--- klein und frei von Charakterdaten.
 ---
---- The second is ADR-0002. spawnmanager decides nothing about characters, money or
---- jobs, so it would have been permissible - but it is also a hundred lines of
---- somebody else's guessing about when a player should exist, and our answer is
---- unusual: a player must NOT spawn at join. They stand frozen at the creation
---- point until they have a character, and possibly not even that, because the
---- creator may send them straight back out. Owning the spawn means that rule lives
---- in one readable place instead of being negotiated with an autospawn flag.
----
---- THE CONTRACT IS SPAWNMANAGER'S, ON PURPOSE
----
---- Same export names, same event, same behaviour. That is not nostalgia: it means
---- every tutorial, snippet and third-party script written against spawnmanager
---- reads correctly here, and if we ever do use the real one, ours is a drop-in
---- replacement rather than a rewrite. The differences are stated where they occur.
----
---- WHAT IS DIFFERENT, AND WHY
----
----   * `setAutoSpawnCallback` exists and does something, but nothing calls it.
----     spawnmanager calls the callback to decide WHERE to spawn. We spawn at a
----     point the server already chose in `nifty:client:enterWorld`, because that
----     point came out of the database. The export is kept for contract
----     compatibility and is honoured if anything ever sets it.
----
----   * `addSpawnPoint` takes our shape (`x, y, z, heading, label, model`) rather
----     than spawnmanager's, which is the same plus a radius for the picking UI we
----     do not have.
----
---- WHY THE EXPORTS ARE AT THE VERY TOP OF THIS FILE
----
---- basic-gamemode (a Cfx resource with no dependencies) calls
---- exports['nifty-spawn']:setAutoSpawn(true) in its onClientMapStart handler.
---- onClientMapStart fires the instant a map resource starts. The map is ensured
---- AFTER nifty-spawn in server.cfg, so the server's "Started resource nifty-spawn"
---- is logged before the map starts - but that log line is the server's view of
---- the resource lifecycle, not the client's. The client must still download the
---- client script and execute it before the handler finds the export.
----
---- If the exports are registered mid-file, there is a window between "the first
---- line ran" and "the export line ran" during which the handler can fire and
---- find nothing. Registering the exports at the top of the file - before the
---- spawn-point setup, before the function bodies, before anything that could
---- throw - makes the race a non-event. The functions the closures call are
---- forward-declared and assigned further down; the closures dereference them at
---- call time, by which point the whole file has executed and the assignments are
---- done.
+--- VERTRAG
+--- exports.openSpawnPicker(locations, onConfirm)
+---   locations: array of { key, label, x, y, z, heading }
+---   onConfirm(x, y, z, heading): wird mit den Koordinaten der gewaehlten
+---     Location aufgerufen, NACHDEM das Menu geschlossen und die Kameras
+---     abgebaut sind. nil heisst "abgebrochen".
+---     nifty-world macht dann den Rest.
 
 local RESOURCE = GetCurrentResourceName()
+local Menu = exports['nifty-ui']
 
---- Forward declarations. The actual assignments happen further down. The
---- closures registered as exports dereference these upvalues at call time, so
---- the order of "register export" and "assign value" does not matter as long as
---- the file completes before an event fires - which it always does, because the
---- body below contains no Wait() calls.
-local spawnPoints = {}
-local nextSpawnId
-local autoSpawn, autoSpawnCallback, isSpawning
-local respawnAtDefault
-local spawnPlayerImpl
+--- Module state. Set when openSpawnPicker is called, cleared on close.
+local locations   = nil
+local onConfirmCb = nil
+local currentPick = nil
+local confirmed   = false
+local cam, cam2
 
---- ----------------------------------------------------------------------------
---- Exports. Registered FIRST. Every entry below points at a forward-declared
---- name that is assigned in the body further down; the closure captures the
---- upvalue and dereferences it on call.
---- ----------------------------------------------------------------------------
+--- Cinematic flight to a location. Two scripted cameras with interpolation:
+--- high overview first, then a closer angled view pointing at the point.
+--- Concept similar to qb-spawn, values and code are ours.
+local function flyTo(loc)
+  if cam then DestroyCam(cam, true) end
+  if cam2 then DestroyCam(cam2, true) end
 
-exports('spawnPlayer', function(definition, cb)
-  return spawnPlayerImpl(definition, cb)
-end)
+  cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA',
+    loc.x, loc.y, loc.z + Spawn.CAM_HIGH_Z,
+    -85.0, 0.0, 0.0,
+    Spawn.CAM_FAR_FOV, false, 0)
+  SetCamActive(cam, true)
+  RenderScriptCams(true, false, 1, true, true)
 
-exports('forceRespawn', function()
-  if not IsEntityDead(PlayerPedId()) then return end
-  respawnAtDefault()
-end)
-
-exports('setAutoSpawn', function(state)
-  autoSpawn = state ~= false
-end)
-
-exports('setAutoSpawnCallback', function(cb)
-  autoSpawnCallback = cb
-  autoSpawn = true
-end)
-
-exports('addSpawnPoint', function(point)
-  if type(point) ~= 'table' or not point.x then return nil end
-
-  local entry = {
-    id = nextSpawnId,
-    label = point.label or ('Spawn ' .. nextSpawnId),
-    x = point.x, y = point.y, z = point.z,
-    heading = point.heading or 0.0,
-    model = point.model,
-  }
-  nextSpawnId = nextSpawnId + 1
-  spawnPoints[#spawnPoints + 1] = entry
-
-  return entry.id
-end)
-
-exports('removeSpawnPoint', function(id)
-  for i, point in ipairs(spawnPoints) do
-    if point.id == id then
-      table.remove(spawnPoints, i)
-      return true
-    end
-  end
-  return false
-end)
-
-exports('getSpawnPoints', function() return spawnPoints end)
-
---- ----------------------------------------------------------------------------
---- Body. Initialise state, build the spawn-point table, define the functions
---- the exports call. All synchronous; no event can interleave.
---- ----------------------------------------------------------------------------
-
-autoSpawn = false
-autoSpawnCallback = nil
-isSpawning = false
-nextSpawnId = 1
-
---- The known spawn points, seeded from AppearanceConfig - which is our "map".
----
---- Read at load rather than passed in, because AppearanceConfig is a shared file
---- and a spawn point that only exists if someone remembered to forward it is a
---- spawn point that will be missing the one time it matters.
-for key, point in pairs(SpawnPoints or {}) do
-  if type(point) == 'table' and point.x then
-    spawnPoints[#spawnPoints + 1] = {
-      id = nextSpawnId,
-      label = point.label or key,
-      x = point.x, y = point.y, z = point.z,
-      heading = point.heading or 0.0,
-      model = point.model,
-    }
-    nextSpawnId = nextSpawnId + 1
-  end
-end
-
---- Sort by label so the order does not depend on `pairs`, which yields a
---- different order every session. A spawn list that reshuffles itself is not
---- wrong, but it makes "the same spawn as last time" impossible to describe.
-table.sort(spawnPoints, function(a, b) return tostring(a.label) < tostring(b.label) end)
-
---- Respawn a dead player at the current spawn point.
----
---- The original does this on death, and so do we - but only once the player is
---- actually in the world. Before that they are frozen at the creation point, and
---- a frozen player cannot die, so this is mostly about not surprising anyone.
-respawnAtDefault = function()
-  local definition = spawnPoints[1]
-  if not definition then
-    print(('[%s] no spawn point configured - cannot respawn'):format(RESOURCE))
-    return
-  end
-  exports[RESOURCE]:spawnPlayer(definition)
-end
-
---- Spawn the player.
----
---- ORDER MATTERS, and it is the one thing about spawning that is easy to get wrong:
----
----   1. fade out, so none of this is visible
----   2. SetPlayerModel BEFORE the resurrect
----   3. NetworkResurrectLocalPlayer, which puts the player in the world alive
----   4. coords and heading, because the resurrect lands at 0,0,0 with our call's
----      arguments not always honoured on a first spawn
----   5. fade in
----
---- Setting the model after the resurrect leaves the camera inside the old ped for
---- a frame, which reads as a glitch on every single spawn.
-spawnPlayerImpl = function(definition, cb)
-  if isSpawning then return end
-
-  if type(definition) ~= 'table' or not definition.x then
-    definition = spawnPoints[1]
-  end
-  if type(definition) ~= 'table' or not definition.x then
-    print(('[%s] spawnPlayer called with no spawn point configured'):format(RESOURCE))
-    return
-  end
-
-  isSpawning = true
-
-  Citizen.CreateThread(function()
-    DoScreenFadeOut(500)
-    while not IsScreenFadedOut() do Wait(0) end
-
-    if definition.model then
-      local hash = joaat(definition.model)
-      SetPlayerModel(PlayerId(), hash)
-      SetModelAsNoLongerNeeded(hash)
-    end
-
-    NetworkResurrectLocalPlayer(
-      definition.x, definition.y, definition.z, definition.heading or 0.0,
-      false, false, false)
-
-    local ped = PlayerPedId()
-    SetEntityCoords(ped, definition.x, definition.y, definition.z, false, false, false, false)
-    SetEntityHeading(ped, definition.heading or 0.0)
-    SetEntityVelocity(ped, 0.0, 0.0, 0.0)
-
-    -- Explicit, because a resurrect does not reliably restore visibility or
-    -- unfreeze on its own, and an invisible player at the airport is a bug that
-    -- looks like a graphics problem.
-    SetEntityVisible(ped, true)
-    FreezeEntityPosition(ped, false)
-    SetPlayerInvincible(ped, true)
-    SetPlayerInvincible(ped, false)
-
-    DoScreenFadeIn(500)
-    while not IsScreenFadedIn() do Wait(0) end
-
-    isSpawning = false
-
-    if type(cb) == 'function' then cb(definition) end
-    TriggerEvent('playerSpawned', definition)
+  SetTimeout(Spawn.CAM_SETTLE_MS, function()
+    cam2 = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA',
+      loc.x, loc.y, loc.z + Spawn.CAM_NEAR_Z,
+      -20.0, 0.0, loc.heading,
+      Spawn.CAM_NEAR_FOV, false, 0)
+    PointCamAtCoord(cam2, loc.x, loc.y, loc.z)
+    SetCamActiveWithInterp(cam2, cam, Spawn.CAM_INTERP_MS, true, true)
   end)
 end
 
---- The death monitor.
----
---- With `baseevents` running, this listens to a real `onPlayerDied` event - which
---- is the correct way and costs nothing, since the resource is present.
----
---- Without it, it falls back to a slow poll. There is no client death event
---- without baseevents, and that is a good enough reason to keep the fallback
---- rather than to assume a resource that a future server.cfg might drop.
-CreateThread(function()
-  while not NetworkIsSessionStarted() do Wait(500) end
+local function destroyCams()
+  RenderScriptCams(false, true, 0, true, true)
+  if cam then SetCamActive(cam, false); DestroyCam(cam, true); cam = nil end
+  if cam2 then SetCamActive(cam2, false); DestroyCam(cam2, true); cam2 = nil end
+end
 
-  while true do
-    if autoSpawn and not isSpawning and NetworkIsSessionStarted() then
-      local ped = PlayerPedId()
-      if ped and ped ~= 0 and IsEntityDead(ped) then
-        respawnAtDefault()
+--- ---------------------------------------------------------------------------
+--- The menu
+--- ---------------------------------------------------------------------------
+
+--- Build a nifty-ui menu for the given locations and open it.
+local function buildAndOpen()
+  local m = Menu:menu({
+    title    = 'Wo willst du aufwachen?',
+    subtitle = 'Waehle einen Ort. Die Kamera fliegt hin. Bestaetige unten.',
+    onClose  = function(_)
+      destroyCams()
+      local cb = onConfirmCb
+      onConfirmCb = nil
+      locations = nil
+      currentPick = nil
+      if cb then
+        if confirmed then
+          cb(currentPick and currentPick.x or 0,
+             currentPick and currentPick.y or 0,
+             currentPick and currentPick.z or 0,
+             currentPick and currentPick.heading or 0.0)
+        else
+          cb(nil)
+        end
       end
-    end
-    Wait(1000)
+      confirmed = false
+    end,
+  })
+
+  --- One button per location. Selecting it flies the camera and updates
+  --- the current pick; the menu stays open. The camera preview IS the
+  --- selection feedback - no need to rebuild the menu to relabel rows.
+  for _, loc in ipairs(locations) do
+    Menu:button(m, loc.label, {
+      onSelect = function()
+        currentPick = loc
+        flyTo(loc)
+      end,
+    })
   end
-end)
 
---- Checked once, at load, and only to decide which of the two paths is live.
---- Polling a started baseevents AND listening to it would respawn twice; the
---- `isSpawning` guard would stop the second, but two mechanisms for one job is
---- one too many.
-local hasBaseEvents = GetResourceState('baseevents') == 'started'
+  Menu:button(m, 'Bestaetigen', {
+    description = 'Hier aufwachen.',
+    onSelect = function()
+      confirmed = true
+      Menu:closeMenu(RESOURCE, 'confirmed')
+    end,
+  })
 
-if hasBaseEvents then
-  RegisterNetEvent('baseevents:onPlayerDied', function()
-    if not autoSpawn or isSpawning then return end
-    -- A moment of grace. Some deaths fire twice - once for the ped and once for
-    -- the ragdoll - and respawning on the first leaves the player mid-animation
-    -- on the second.
-    SetTimeout(500, function()
-      if autoSpawn and not isSpawning then respawnAtDefault() end
-    end)
-  end)
+  Menu:button(m, 'Abbrechen', {
+    onSelect = function()
+      confirmed = false
+      Menu:closeMenu(RESOURCE, 'cancelled')
+    end,
+  })
+
+  Menu:openMenu(RESOURCE, m)
 end
 
-print(('[%s] %d spawn point(s), autospawn off until the player is in the world%s'):format(
-  RESOURCE, #spawnPoints,
-  hasBaseEvents and ', death via baseevents' or ', death via poll'))
+--- ---------------------------------------------------------------------------
+--- Export
+--- ---------------------------------------------------------------------------
+
+exports('openSpawnPicker', function(passedLocations, cb)
+  if type(passedLocations) ~= 'table' or #passedLocations == 0 then
+    print(('[%s] openSpawnPicker: no locations provided'):format(RESOURCE))
+    return false
+  end
+  if type(cb) ~= 'function' then
+    print(('[%s] openSpawnPicker: callback is not a function'):format(RESOURCE))
+    return false
+  end
+  if Menu:isOpen() then
+    print(('[%s] openSpawnPicker: another menu is open'):format(RESOURCE))
+    return false
+  end
+
+  locations   = passedLocations
+  onConfirmCb = cb
+  currentPick = passedLocations[1]
+  confirmed   = false
+
+  buildAndOpen()
+  flyTo(currentPick)
+  return true
+end)

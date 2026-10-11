@@ -267,48 +267,72 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
 
   local appearance = data.character.appearance
 
-  -- The game has already placed the player at the map's default spawn; we
-  -- swap the model, dress the ped, and move them to their character's home.
-  -- A short fade hides the model switch - without it the camera sits inside
-  -- the old ped for a frame.
-  DoScreenFadeOut(500)
-  while not IsScreenFadedOut() do Wait(0) end
-
-  if appearance and appearance.model then
-    local model = joaat(appearance.model)
-    SetPlayerModel(PlayerId(), model)
-    SetModelAsNoLongerNeeded(model)
+  -- Build the picker's location list. The character's DB spawn_point is the
+  -- default choice; the rest come from the shared config. The picker returns
+  -- the chosen coords, after which we do the model switch, dress, teleport and
+  -- hand the point to Cfx spawnmanager.
+  local PickerLocations = Spawn and Spawn.Locations or {}
+  local list = {}
+  for _, loc in ipairs(PickerLocations) do
+    list[#list + 1] = {
+      key      = loc.key,
+      label    = loc.label,
+      x        = loc.x,
+      y        = loc.y,
+      z        = loc.z,
+      heading  = loc.heading,
+    }
   end
 
-  applyAppearanceParts(PlayerPedId(), appearance)
+  -- If the picker has nothing to offer, fall back to the DB spawn point
+  -- directly. Keeps a misconfigured boot from hanging the player.
+  if #list == 0 then
+    list[#list + 1] = {
+      key     = data.spawn and data.spawn.key or 'spawn',
+      label   = 'Spawn',
+      x       = data.spawn.x, y = data.spawn.y, z = data.spawn.z,
+      heading = data.spawn.heading or 0.0,
+    }
+  end
 
-  local ped = PlayerPedId()
-  SetEntityCoords(ped, data.spawn.x, data.spawn.y, data.spawn.z, false, false, false, false)
-  SetEntityHeading(ped, data.spawn.heading or 0.0)
+  exports['nifty-spawn']:openSpawnPicker(list, function(x, y, z, heading)
+    -- The picker has closed and the cameras are down. Fade out, do the heavy
+    -- work while the screen is black, fade back in. Model switch is the part
+    -- that has to be hidden - it resets the ped and leaves the camera inside
+    -- the old one for a frame without a fade.
+    DoScreenFadeOut(500)
+    while not IsScreenFadedOut() do Wait(0) end
 
-  -- Register the character's home with Cfx spawnmanager so death respawns
-  -- land here too, not at whatever default the map supplies. The index is
-  -- removed on playerDisconnected; without that, reconnects leak entries.
-  characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
-    data.spawn.x, data.spawn.y, data.spawn.z,
-    data.spawn.heading or 0.0,
-    appearance and appearance.model
-  )
+    if appearance and appearance.model then
+      local model = joaat(appearance.model)
+      SetPlayerModel(PlayerId(), model)
+      SetModelAsNoLongerNeeded(model)
+    end
 
-  DoScreenFadeIn(500)
-  while not IsScreenFadedIn() do Wait(0) end
+    applyAppearanceParts(PlayerPedId(), appearance)
 
-  -- spawnmanager handles respawn on death from here on.
-  exports.spawnmanager:setAutoSpawn(true)
+    local ped = PlayerPedId()
+    SetEntityCoords(ped, x, y, z, false, false, false, false)
+    SetEntityHeading(ped, heading or 0.0)
 
-  print(('[nifty-world] entered world as %s %s'):format(
-    data.character.firstName, data.character.lastName or ''))
+    -- Register the chosen point with Cfx spawnmanager so death respawns
+    -- land here too. Removed on playerDisconnected to keep the map's point
+    -- list from leaking entries across reconnects.
+    characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
+      x, y, z, heading or 0.0, appearance and appearance.model
+    )
 
-  -- Ask for money, items, jobs and the shop once the ped is real. The server
-  -- already pushed these in enterWorld (server side); this is the client's own
-  -- confirmation, and it covers the case where the push arrived before the HUD
-  -- existed to receive it.
-  TriggerEvent('nifty:client:worldReady')
+    DoScreenFadeIn(500)
+    while not IsScreenFadedIn() do Wait(0) end
+
+    -- spawnmanager handles respawn on death from here on.
+    exports.spawnmanager:setAutoSpawn(true)
+
+    print(('[nifty-world] entered world as %s %s'):format(
+      data.character.firstName, data.character.lastName or ''))
+
+    TriggerEvent('nifty:client:worldReady')
+  end)
 end)
 
 RegisterNetEvent('nifty:client:openCreator', function(data)
