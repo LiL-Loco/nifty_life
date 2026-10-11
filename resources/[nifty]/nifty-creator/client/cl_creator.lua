@@ -1411,19 +1411,53 @@ local function buildFaceMenu()
     return math.floor(v * 100 + 0.5) / 100
   end
 
+  -- A feature with only two options (value is -1.0 or +1.0) is rendered
+  -- as a single horizontal row, not a 2D grid. This keeps tiny two-option
+  -- features from appearing as mostly-empty grids.
+  local function isBinaryFeature(id)
+    local v = face.features[tostring(id)]
+    return (v or 0.0) <= -0.99 or (v or 0.0) >= 0.99
+  end
+
   for _, g in ipairs(FACE_2D_GROUPS) do
     local xv = face.features[tostring(g.xId)] or 0.0
     local yv = face.features[tostring(g.yId)] or 0.0
-    Menu.gridPanel(menu, g.title, {
-      kind = 'grid',
-      top = g.top, bottom = g.bottom, left = g.left, right = g.right,
-      x = (xv + 1) / 2, y = (yv + 1) / 2,
-      onChange = function(pos)
-        setFeature(g.xId, toFeature(pos.X))
-        setFeature(g.yId, toFeature(pos.Y))
-        refresh()
-      end,
-    })
+    if isBinaryFeature(g.xId) or isBinaryFeature(g.yId) then
+      -- At least one axis has only two options: render both as 1D rows.
+      if not isBinaryFeature(g.xId) then
+        Menu.gridPanel(menu, g.title, {
+          kind = 'horizontal',
+          left = g.left, right = g.right,
+          x = (xv + 1) / 2,
+          onChange = function(pos)
+            setFeature(g.xId, toFeature(pos.X))
+            refresh()
+          end,
+        })
+      end
+      if not isBinaryFeature(g.yId) then
+        Menu.gridPanel(menu, g.title, {
+          kind = 'horizontal',
+          left = g.top, right = g.bottom,
+          x = (yv + 1) / 2,
+          onChange = function(pos)
+            setFeature(g.yId, toFeature(pos.X))
+            refresh()
+          end,
+        })
+      end
+    else
+      Menu.gridPanel(menu, g.title, {
+        kind = 'grid',
+        top = g.top, bottom = g.bottom, left = g.left, right = g.right,
+        x = (xv + 1) / 2, y = (yv + 1) / 2,
+        onChange = function(pos)
+          setFeature(g.xId, toFeature(pos.X))
+          setFeature(g.yId, toFeature(pos.Y))
+          refresh()
+        end,
+      })
+    end
   end
 
   for _, g in ipairs(FACE_1D_GROUPS) do
