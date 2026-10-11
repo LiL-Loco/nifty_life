@@ -10,17 +10,17 @@ import {
 } from '@/lib/applications';
 
 const LABELS: Record<ApplicationStatus, string> = {
-  submitted: 'Submitted',
-  under_review: 'Under review',
-  approved: 'Approved',
-  rejected: 'Rejected',
+  submitted: 'Eingegangen',
+  under_review: 'In Prüfung',
+  approved: 'Freigegeben',
+  rejected: 'Abgelehnt',
 };
 
 const BLURB: Record<ApplicationStatus, string> = {
-  submitted: 'Waiting for a human to pick it up.',
-  under_review: 'Someone is reading it right now.',
-  approved: 'You can connect when the server opens.',
-  rejected: 'Read the note below. You can apply again.',
+  submitted: 'Wartet darauf, dass sich ein Mensch die Bewerbung ansieht.',
+  under_review: 'Gerade wird sie gelesen.',
+  approved: 'Du kannst dich verbinden, sobald der Server offen ist.',
+  rejected: 'Lies die Nachricht unten. Du kannst dich erneut bewerben.',
 };
 
 export default async function StatusPage({
@@ -39,65 +39,69 @@ export default async function StatusPage({
 
   return (
     <>
-      <h1>Your application</h1>
+      <h1>Deine Bewerbung</h1>
       <p className="lede">
-        Discord ID <span className="small">{session.discordId}</span>
+        Discord-ID <span className="small">{session.discordId}</span>
       </p>
 
       {params.submitted ? (
-        <div className="notice ok">Application received. A human will read it.</div>
+        <div className="notice ok">
+          Bewerbung eingegangen. Ein Mensch wird sie lesen.
+        </div>
       ) : null}
 
       {ban ? (
         <div className="notice error">
-          <strong>There is an active ban on this account.</strong>
+          <strong>Auf diesem Konto ist ein aktives Ban hinterlegt.</strong>
           <br />
           {ban.reason ? <span>{ban.reason} — </span> : null}
-          {ban.expires_at ? `Expires ${ban.expires_at}.` : 'No expiry.'}
+          {ban.expires_at ? `Läuft ab am ${ban.expires_at}.` : 'Ohne Ablaufdatum.'}
         </div>
       ) : null}
 
       {!application ? (
         <div className="card">
-          <p>You have not applied yet.</p>
+          <p>Du hast dich noch nicht beworben.</p>
           <Link className="button" href="/apply">
-            Apply
+            Bewerben
           </Link>
         </div>
       ) : (
         <>
           <div className="card">
             <div className="post-head">
-              <strong>Current application</strong>
+              <strong>Aktuelle Bewerbung</strong>
               <span className={`status-pill ${application.status}`}>
                 {LABELS[application.status]}
               </span>
             </div>
             <p className="muted small" style={{ marginTop: 0 }}>
-              {BLURB[application.status]} Submitted {application.submitted_at}.
+              {BLURB[application.status]} Eingegangen am {application.submitted_at}.
             </p>
 
             {application.decision_note ? (
               <p className="small">
-                <strong>Note:</strong> {application.decision_note}
+                <strong>Nachricht:</strong> {application.decision_note}
               </p>
             ) : null}
 
             {application.status === 'approved' && !ban ? (
               <p className="small">
-                Connect with <code>connect 127.0.0.1:30120</code> during the weekend
-                window.
+                Verbinde dich während des Zeitfensters mit{' '}
+                <code>connect 127.0.0.1:30120</code>.
               </p>
             ) : null}
           </div>
 
           {history.length > 1 ? (
             <>
-              <h2>Earlier applications</h2>
+              <h2>Frühere Bewerbungen</h2>
               {history.slice(1).map((row) => (
                 <div className="card small" key={row.id}>
-                  <span className={`status-pill ${row.status}`}>{LABELS[row.status]}</span>{' '}
-                  <span className="muted">submitted {row.submitted_at}</span>
+                  <span className={`status-pill ${row.status}`}>
+                    {LABELS[row.status]}
+                  </span>{' '}
+                  <span className="muted">eingegangen am {row.submitted_at}</span>
                   {row.decision_note ? (
                     <div className="muted">{row.decision_note}</div>
                   ) : null}
@@ -108,11 +112,11 @@ export default async function StatusPage({
         </>
       )}
 
-      <h2>What this page cannot do</h2>
+      <h2>Was diese Seite nicht kann</h2>
       <p className="small muted">
-        There is no button here to approve an application, because the database
-        account this site connects with has no UPDATE privilege on any table. That is
-        a property of the grant, not of this interface.
+        Hier gibt es keinen Knopf, um eine Bewerbung freizugeben — der
+        Datenbankzugang dieser Seite besitzt auf keinerlei Tabelle ein UPDATE-Recht.
+        Das ist eine Eigenschaft der Rechtevergabe, nicht dieser Oberfläche.
       </p>
     </>
   );

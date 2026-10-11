@@ -19,56 +19,60 @@ export default async function PairPage({
 
   return (
     <>
-      <h1>Link your character</h1>
+      <h1>Charakter verknüpfen</h1>
       <p className="lede">
-        Peeper posts belong to a character. Linking binds this Discord account to
-        exactly one of yours.
+        Peeper wird von Charakteren geschrieben. Die Verknüpfung bindet dieses
+        Discord-Konto an genau einen deiner Charaktere.
       </p>
 
-      {params.error ? <div className="notice error">That code is not usable.</div> : null}
+      {params.error ? (
+        <div className="notice error">Dieser Code ist nicht verwendbar.</div>
+      ) : null}
 
       {params.sent ? (
         <div className="notice ok">
-          Request sent. The game server confirms it while the world is open — Friday
-          19:00 to Sunday 22:00. Codes expire after 15 minutes.
+          Anfrage gesendet. Der Spielserver bestätigt sie, solange die Welt offen
+          ist — Freitag 19:00 bis Sonntag 22:00. Codes laufen nach 15 Minuten ab.
         </div>
       ) : null}
 
       {link ? (
         <div className="notice ok">
-          Already linked to character <span className="small">{link.characterId}</span>.
-          One character per account; ask in Discord to change it.
+          Bereits mit dem Charakter{' '}
+          <span className="small">{link.characterId}</span> verknüpft. Ein Konto, ein
+          Charakter — für einen Wechsel bitte in Discord melden.
         </div>
       ) : (
         <div className="card">
           <ol className="small" style={{ paddingLeft: '1.1rem' }}>
-            <li>Connect to the server.</li>
-            <li>Run the pairing command in game to get a code.</li>
-            <li>Type it below.</li>
+            <li>Verbinde dich mit dem Server.</li>
+            <li>Führe im Spiel den Befehl zur Code-Erzeugung aus.</li>
+            <li>Trage den Code unten ein.</li>
           </ol>
 
           <form action={pair}>
             <div className="field">
-              <label htmlFor="code">Pairing code</label>
+              <label htmlFor="code">Verknüpfungscode</label>
               <input id="code" name="code" maxLength={16} autoComplete="off" required />
             </div>
-            <button type="submit">Send request</button>
+            <button type="submit">Anfrage senden</button>
           </form>
 
           <p className="small muted" style={{ marginTop: '1rem' }}>
-            This site submits the code and cannot confirm it. That confirmation belongs
-            to the game server, which is why the site has no UPDATE privilege on any
-            table — it could otherwise link itself to any character.
+            Diese Seite reicht den Code ein und kann ihn nicht selbst bestätigen.
+            Diese Bestätigung gehört dem Spielserver — deshalb besitzt der
+            Datenbankzugang hier auf keiner Tabelle ein UPDATE-Recht. Er könnte
+            sich sonst selbst mit jedem Charakter verknüpfen.
           </p>
         </div>
       )}
 
       {requests.length > 0 ? (
         <>
-          <h2>Recent requests</h2>
+          <h2>Aktuelle Anfragen</h2>
           <ul className="small muted">
             {requests.map((row) => (
-              <li key={row.id}>submitted {row.created_at}</li>
+              <li key={row.id}>gesendet am {row.created_at}</li>
             ))}
           </ul>
         </>

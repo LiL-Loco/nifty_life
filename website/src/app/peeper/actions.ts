@@ -36,7 +36,7 @@ export async function publish(
   if (!result.ok) return { error: result.error };
 
   revalidatePath('/peeper');
-  return { ok: 'Posted.' };
+  return { ok: 'Beitrag veröffentlicht.' };
 }
 
 export async function toggleLike(
@@ -44,7 +44,7 @@ export async function toggleLike(
   form: FormData,
 ): Promise<ActionState> {
   const who = await actor();
-  if (!who) return { error: 'Link your character in game first.' };
+  if (!who) return { error: 'Verknüpfe zuerst deinen Charakter im Spiel.' };
 
   const postId = String(form.get('post') ?? '');
   const liked = form.get('liked') === '1';
@@ -64,7 +64,7 @@ export async function report(
   form: FormData,
 ): Promise<ActionState> {
   const who = await actor();
-  if (!who) return { error: 'Link your character in game first.' };
+  if (!who) return { error: 'Verknüpfe zuerst deinen Charakter im Spiel.' };
 
   const result = await reportPost(
     who.characterId,
@@ -75,5 +75,5 @@ export async function report(
   if (!result.ok) return { error: result.error };
 
   revalidatePath('/peeper');
-  return { ok: 'Reported. Only staff can resolve a report.' };
+  return { ok: 'Gemeldet. Nur Teammitglieder können eine Meldung bearbeiten.' };
 }

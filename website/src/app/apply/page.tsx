@@ -9,11 +9,11 @@ export default async function ApplyPage() {
 
   return (
     <>
-      <h1>Apply</h1>
+      <h1>Bewerbung</h1>
       <p className="lede">
-        Signed in as <strong>{session.username}</strong>. The application is filed
-        under this Discord account — that is the identity the server checks when you
-        connect.
+        Angemeldet als <strong>{session.username}</strong>. Die Bewerbung läuft unter
+        dieser Discord-Kennung — das ist die Identität, die der Server beim Verbinden
+        prüft.
       </p>
 
       <ApplicationForm />

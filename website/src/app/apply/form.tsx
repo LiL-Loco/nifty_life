@@ -13,15 +13,15 @@ export default function ApplicationForm() {
       {state?.error ? <div className="notice error">{state.error}</div> : null}
 
       <div className="field">
-        <label htmlFor="age">Age</label>
+        <label htmlFor="age">Alter</label>
         <input id="age" name="age" inputMode="numeric" maxLength={2} required />
         <p className="small muted" style={{ margin: '0.35rem 0 0' }}>
-          The server is 18+. This is checked again by a human.
+          Ab 18 Jahren. Das prüft danach noch einmal ein Mensch.
         </p>
       </div>
 
       <div className="field">
-        <label htmlFor="timezone">Timezone</label>
+        <label htmlFor="timezone">Zeitzone</label>
         <input
           id="timezone"
           name="timezone"
@@ -32,24 +32,24 @@ export default function ApplicationForm() {
       </div>
 
       <div className="field">
-        <label htmlFor="experience">What have you played before?</label>
+        <label htmlFor="experience">Was hast du vorher gespielt?</label>
         <textarea id="experience" name="experience" maxLength={2000} required />
       </div>
 
       <div className="field">
-        <label htmlFor="motivation">Why here?</label>
+        <label htmlFor="motivation">Warum hier?</label>
         <textarea id="motivation" name="motivation" maxLength={2000} required />
         <p className="small muted" style={{ margin: '0.35rem 0 0' }}>
-          Be honest. Nobody expects a polished essay.
+          Sehr ehrlich. Niemand erwartet einen gepflegten Aufsatz.
         </p>
       </div>
 
-      <button type="submit">Submit application</button>
+      <button type="submit">Bewerbung abschicken</button>
 
       <p className="small muted" style={{ marginTop: '1rem' }}>
-        This website cannot approve you, and it cannot edit an application after
-        sending it. A person in Discord does that. See your{' '}
-        <Link href="/status">status</Link> at any time.
+        Diese Website kann dich nicht freigeben und eine abgeschickte Bewerbung
+        nicht nachträglich ändern. Das macht ein Mensch in Discord. Den{' '}
+        <Link href="/status">Status</Link> kannst du jederzeit abrufen.
       </p>
     </form>
   );

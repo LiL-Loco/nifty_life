@@ -26,21 +26,24 @@ export default async function PeeperPage() {
     <>
       <h1>Peeper</h1>
       <p className="lede">
-        Posts belong to characters, not to accounts — the same author in game and
-        here, the same moderation either way.
+        Beiträge gehören Charakteren, nicht Konten — dieselbe Person im Spiel und
+        hier, dieselbe Moderation auf beiden Seiten.
       </p>
 
       {!link ? (
         <div className="notice">
-          Your Discord account is not linked to a character yet.{' '}
-          <Link href="/peeper/pair">Generate a code in game and enter it here</Link>.
+          Dein Discord-Konto ist noch mit keinem Charakter verknüpft.{' '}
+          <Link href="/peeper/pair">
+            Erzeuge im Spiel einen Code und trage ihn hier ein
+          </Link>
+          .
         </div>
       ) : null}
 
       <Composer disabled={!link} />
 
       {withReplies.length === 0 ? (
-        <p className="muted">Nothing has been posted yet.</p>
+        <p className="muted">Es wurde noch nichts geschrieben.</p>
       ) : (
         withReplies.map(({ post, kids }) => (
           <article className="post" key={post.id}>
