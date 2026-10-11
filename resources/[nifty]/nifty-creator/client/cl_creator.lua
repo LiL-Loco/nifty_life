@@ -400,7 +400,6 @@ local function startCamera()
 
   creatorCam = cam
   RenderScriptCams(cam, true, false, 0)
-  FreezeCamPosition(cam, false)
 
   -- Firing off so a player cannot shoot themselves while posing.
   DisablePlayerFiring(PlayerId(), true)
