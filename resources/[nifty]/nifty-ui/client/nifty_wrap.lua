@@ -99,10 +99,6 @@ exports('menu', function(...)
   -- names to the same table is safe for the lifetime of the menu.
   m.items = m.Items
   LastBuiltMenu = m
-  print(('[nifty-ui] menu: created, LastBuiltMenu.Items.id=%s, type=%s, items=#m=%d'):format(
-    tostring(m and m.id or 'nil'),
-    type(LastBuiltMenu),
-    m and m.items and #m.items or 0))
   return m
 end)
 
@@ -111,7 +107,12 @@ exports('button', function(...)
   if type(spec) ~= 'table' then spec = {} end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
-  item.OnActivated = function() safeCall(spec.onSelect) end
+  -- NativeUI's UIMenu fires the per-item callback as `Item.Activated(menu, item)`
+  -- (UIMenu.lua line 1027), not `OnActivated`. The library's New() initialises
+  -- Activated to a no-op so the field always exists on a fresh item, but
+  -- sub-classes / certain code paths may not - assigning it explicitly is
+  -- the supported way to bind a click handler.
+  item.Activated = function(_, _) safeCall(spec.onSelect) end
   if spec.rightLabel then item:RightLabel(tostring(spec.rightLabel)) end
   if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
 end)
@@ -122,7 +123,10 @@ exports('checkbox', function(...)
   local initial = spec.checked == true
   local item = NativeUI.CreateCheckboxItem(label or '', initial, spec.description or '')
   if spec.disabled then item:Enabled(false) end
-  item.OnCheckedChanged = function(_, _item, checked)
+  -- Per-item callback is CheckboxEvent(menu, item, checked) (UIMenu.lua:1003).
+  -- NativeUI's UIMenuCheckboxItem.New() initialises it to a no-op, so we
+  -- overwrite it.
+  item.CheckboxEvent = function(_, _, checked)
     safeCall(spec.onChange, checked == true)
   end
   if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
@@ -158,7 +162,11 @@ exports('slider', function(...)
     local newValue = values[newIndex] or value
     safeCall(spec.onChange, newValue)
   end
-  item.OnActivated = function(_, _item, newIndex)
+  -- The slider's click-to-confirm path in UIMenu.lua:1011 calls the
+  -- per-item OnSliderSelected(_Index) (note: only the index, not the
+  -- menu/item pair). The shim's caller expects onSelect with the value
+  -- at that index, so we look it up.
+  item.OnSliderSelected = function(newIndex)
     local newValue = values[newIndex] or value
     safeCall(spec.onSelect, newValue)
   end
@@ -178,7 +186,9 @@ exports('select', function(...)
   item.OnListChanged = function(_, _item, newIndex)
     safeCall(spec.onChange, newIndex, items[newIndex])
   end
-  item.OnActivated = function(_, _item, newIndex)
+  -- UIMenu.lua:1007 fires the per-item OnListSelected(menu, item, newindex)
+  -- when the list item is activated (Enter pressed).
+  item.OnListSelected = function(_, _item, newIndex)
     safeCall(spec.onSelect, newIndex, items[newIndex])
   end
   if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
@@ -196,9 +206,6 @@ exports('separator', function(...)
   item:Text(label or '')
   if LastBuiltMenu then
     LastBuiltMenu:AddItem(item)
-    print(('[nifty-ui] separator: added "%s", LastBuiltMenu.items=#%d'):format(tostring(label), #LastBuiltMenu.items))
-  else
-    print('[nifty-ui] separator: LastBuiltMenu is nil, skipping AddItem')
   end
 end)
 
@@ -217,7 +224,9 @@ exports('input', function(...)
   end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
-  item.OnActivated = function()
+  -- The input row is a UIMenuItem (no native text input widget), so its
+  -- click handler is Item.Activated, not OnActivated.
+  item.Activated = function(_, _)
     DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', LastBuiltMenu._input_value or '', '', '', '', 64)
     -- Wait for the keyboard to be ready, then read the result.
     -- DisplayOnscreenKeyboard is asynchronous: UpdateOnscreenKeyboard
@@ -255,7 +264,11 @@ exports('submenu', function(...)
   -- menu). The result is cached on the parent for subsequent opens.
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
-  item.OnActivated = function()
+  -- A submenu is a button-style UIMenuItem whose Item.Activated builds
+  -- and shows a child UIMenu. We use UIMenu:BindMenuToItem for the
+  -- parent/child relationship so the child's GoBack returns to the
+  -- parent - matches the wardrobe's "Zurueck" button flow.
+  item.Activated = function(_, _)
     if not LastBuiltMenu then return end
     if not LastBuiltMenu._submenu_cache then
       LastBuiltMenu._submenu_cache = {}
@@ -265,6 +278,8 @@ exports('submenu', function(...)
     end
     local sub = LastBuiltMenu._submenu_cache[label]
     if sub and type(sub) == 'table' then
+      -- Bind if not already (idempotent - safe to re-call).
+      LastBuiltMenu:BindMenuToItem(sub, item)
       pool:Add(sub)
       sub:Visible(true)
     end

@@ -2,7 +2,26 @@
   "diagnostics": {
     "disable": [
       "redundant-parameter",
-      "undefined-global"
+      "undefined-global",
+            "inject-field",
+            "undefined-field",
+            "undefined-doc-name"
     ]
-  }
+  },
+    "diagnostics.globals": [
+        "fx_version",
+        "game",
+        "lua54",
+        "name",
+        "author",
+        "description",
+        "version",
+        "shared_scripts",
+        "ui_page",
+        "files",
+        "server_script",
+        "client_script",
+        "dependencies",
+        "flag"
+    ]
 }

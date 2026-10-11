@@ -1,7 +1,3 @@
-print("Github download : https://github.com/iTexZoz/NativeUILua-Reloaded/releases")
-print("[Feature Suggestions] and [Frequently asked question] : https://github.com/iTexZoz/NativeUILua-Reloaded/issues/9")
-print("NativeUILua-Reloaded wiki : https://github.com/iTexZoz/NativeUILua-Reloaded/wiki")
-
 ---@type table
 NativeUI = {}
 
