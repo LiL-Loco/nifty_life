@@ -218,16 +218,21 @@ end)
 exports('input', function(...)
   local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
-  if not LastBuiltMenu then return end
-  if LastBuiltMenu._input_value == nil then
-    LastBuiltMenu._input_value = tostring(spec.value or '')
+  -- Capture the parent menu NOW. The Activated callback fires when
+  -- the user clicks the row, by which time LastBuiltMenu may have
+  -- been clobbered by another Menu.menu() call (e.g. a sibling
+  -- submenu's lazy build, or another openMenu during navigation).
+  local menu = LastBuiltMenu
+  if not menu then return end
+  if menu._input_value == nil then
+    menu._input_value = tostring(spec.value or '')
   end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
   -- The input row is a UIMenuItem (no native text input widget), so its
   -- click handler is Item.Activated, not OnActivated.
   item.Activated = function(_, _)
-    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', LastBuiltMenu._input_value or '', '', '', '', 64)
+    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', menu._input_value or '', '', '', '', 64)
     -- Wait for the keyboard to be ready, then read the result.
     -- DisplayOnscreenKeyboard is asynchronous: UpdateOnscreenKeyboard
     -- returns 0 while the user is typing, 1 when done, 2 when cancelled.
@@ -236,12 +241,12 @@ exports('input', function(...)
       local status = UpdateOnscreenKeyboard()
       if status == 1 then
         local result = GetOnscreenKeyboardResult()
-        LastBuiltMenu._input_value = tostring(result or '')
-        safeCall(spec.onChange, LastBuiltMenu._input_value)
+        menu._input_value = tostring(result or '')
+        safeCall(spec.onChange, menu._input_value)
       end
     end)
   end
-  LastBuiltMenu:AddItem(item)
+  menu:AddItem(item)
 end)
 
 exports('list', function(...)
@@ -258,10 +263,17 @@ end)
 exports('submenu', function(...)
   local label, spec = ...
   if type(spec) ~= 'table' then spec = {} end
-  -- A submenu is a button that, when activated, builds and shows a
-  -- child UIMenu. We lazily build the child the first time the button
-  -- is activated (the nifty API takes a build function, not a pre-built
-  -- menu). The result is cached on the parent for subsequent opens.
+  -- Capture the parent menu NOW. The Activated callback closes over
+  -- this upvalue; if we read LastBuiltMenu inside the callback it may
+  -- have been overwritten by spec.build() (which calls Menu.menu to
+  -- create the child) - that was the source of the
+  -- `attempt to index a nil value (field '_submenu_cache')` crash
+  -- when navigating into a submenu.
+  local parent = LastBuiltMenu
+  if not parent then return end
+  if not parent._submenu_cache then
+    parent._submenu_cache = {}
+  end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
   -- A submenu is a button-style UIMenuItem whose Item.Activated builds
@@ -269,22 +281,18 @@ exports('submenu', function(...)
   -- parent/child relationship so the child's GoBack returns to the
   -- parent - matches the wardrobe's "Zurueck" button flow.
   item.Activated = function(_, _)
-    if not LastBuiltMenu then return end
-    if not LastBuiltMenu._submenu_cache then
-      LastBuiltMenu._submenu_cache = {}
+    if not parent._submenu_cache[label] then
+      parent._submenu_cache[label] = spec.build()
     end
-    if not LastBuiltMenu._submenu_cache[label] then
-      LastBuiltMenu._submenu_cache[label] = spec.build()
-    end
-    local sub = LastBuiltMenu._submenu_cache[label]
+    local sub = parent._submenu_cache[label]
     if sub and type(sub) == 'table' then
       -- Bind if not already (idempotent - safe to re-call).
-      LastBuiltMenu:BindMenuToItem(sub, item)
+      parent:BindMenuToItem(sub, item)
       pool:Add(sub)
       sub:Visible(true)
     end
   end
-  if LastBuiltMenu then LastBuiltMenu:AddItem(item) end
+  parent:AddItem(item)
 end)
 
 -- ----- Visibility / pool control -----
