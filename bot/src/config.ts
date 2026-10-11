@@ -11,6 +11,16 @@ export interface BotConfig {
   guildId: string;
   /** Several roles may count as staff. Empty means the bot refuses to start. */
   staffRoleIds: string[];
+  /**
+   * The role Discord created for the bot itself.
+   *
+   * Recorded for one reason that is not tidiness: a bot's own role sits at the
+   * TOP of the hierarchy, so it can hand itself any role below. If the bot role
+   * were ever also configured as a staff role, the bot would mirror ITSELF into
+   * the `staff` table — and a bot that can appoint itself moderator is worse than
+   * no admin area at all. Refusing to start is the correct response.
+   */
+  botRoleId: string | null;
   db: {
     host: string;
     port: number;
@@ -49,10 +59,26 @@ export function loadConfig(): BotConfig {
     throw new Error('STAFF_RESYNC_MS must be a number of at least 60000 (one minute).');
   }
 
+  const rawBotRole = (process.env.DISCORD_BOT_ROLE_ID ?? '').trim();
+  const botRoleId = rawBotRole ? rawBotRole : null;
+
+  if (botRoleId && !/^\d{5,32}$/.test(botRoleId)) {
+    throw new Error(`DISCORD_BOT_ROLE_ID is not a valid Discord id: ${botRoleId}`);
+  }
+
+  if (botRoleId && staffRoleIds.includes(botRoleId)) {
+    throw new Error(
+      `DISCORD_BOT_ROLE_ID (${botRoleId}) is also listed in DISCORD_STAFF_ROLE_IDS. ` +
+        'Refusing to start: the bot would mirror ITSELF into the staff table, and a bot ' +
+        'that can appoint itself moderator is worse than no admin area.',
+    );
+  }
+
   return {
     token: required('DISCORD_BOT_TOKEN'),
     guildId: required('DISCORD_GUILD_ID'),
     staffRoleIds,
+    botRoleId,
     db: {
       host: process.env.DB_HOST ?? '127.0.0.1',
       port: Number(process.env.DB_PORT ?? 3306),

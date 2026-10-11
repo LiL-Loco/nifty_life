@@ -38,11 +38,21 @@ async function main(): Promise<void> {
 
   /** Read every member currently holding a staff role. */
   async function collectStaff(guild: Guild) {
+    const before = guild.members.cache.size;
     await guild.members.fetch();
+    const after = guild.members.cache.size;
+
+    // The counts are logged on EVERY sync. The first version of this file
+    // reported "staff=0" with no explanation and no way to tell "nobody is staff"
+    // apart from "the bot cannot see anybody" — which are completely different
+    // problems: the first is correct, the second usually means the Server Members
+    // Intent is off. One line of logging separates them forever.
+    console.log(`[sync] members ${before} -> ${after}, staff roles ${config.staffRoleIds.join(',')}`);
 
     const entries: { discordId: string; roleId: string }[] = [];
     for (const member of guild.members.cache.values()) {
       const roleId = staffRoleOf(member);
+      console.log(`[sync]   ${member.user.username}: roles=[${[...member.roles.cache.keys()].join(',')}] staff=${roleId ?? '-'}`);
       if (roleId) entries.push({ discordId: member.id, roleId });
     }
     return entries;
@@ -66,6 +76,7 @@ async function main(): Promise<void> {
     }
 
     console.log(`[ready] connected as ${client.user?.tag ?? 'unknown'}`);
+    console.log(`[ready] guild=${guild.name} bot-role=${config.botRoleId ?? 'unknown'}`);
 
     try {
       await fullSync(guild);
