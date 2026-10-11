@@ -86,3 +86,33 @@ desktop.ini
 # REPLXX shell history from an interactive session. Not ours, not wanted, and
 # it records what was typed into a terminal.
 .replxx_history
+
+# ---- Cfx.re Development Kit (FxDK) ------------------------------------------
+# The FxDK (`FiveM - Cfx.re Development Kit (FxDK).lnk`) is the SERVER-DEVELOPER
+# launcher: started from this directory it deploys its own stock gamemode into the
+# CWD and writes a project file next to it. All of that belongs to Cfx.re, not to
+# us:
+#
+#   .fxdk/                     launcher state, and its own fxserver/
+#   fxproject.json             the generated project descriptor
+#   Test/                      its scratch directory
+#   resources/fxproject.json   ditto, one level down
+#   resources/[system]/        baseevents, basic-gamemode, map-skater, mapmanager,
+#                              playernames, spawnmanager — Cfx's defaults, not ours
+#
+# `/resources/[nifty]` is OUR code and stays tracked.
+#
+# The brackets in `/resources/[system]/` need ESCAPING. gitignore reads `[...]` as
+# a character class, so the unescaped rule matches `resources/s/`, `resources/y/`
+# or `resources/m/` and NOT the directory actually called `[system]` — it fails
+# silently, which is why this was verified rather than assumed. `\[` matches a
+# literal bracket.
+#
+# None of this is in history to begin with; a `git add -A` after starting the
+# FxDK swept 2092 lines of it in once. These rules make that impossible rather
+# than relying on remembering to read `git status` first.
+.fxdk/
+/Test/
+/fxproject.json
+/resources/fxproject.json
+/resources/\[system\]/
