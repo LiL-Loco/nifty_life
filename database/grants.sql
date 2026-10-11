@@ -181,6 +181,45 @@ GRANT UPDATE (deleted_at, deleted_by, deleted_by_discord_id, deleted_reason)
 GRANT SELECT, INSERT ON nifty_life.peeper_likes TO 'nifty_admin'@'localhost';
 GRANT SELECT, INSERT ON nifty_life.peeper_reports TO 'nifty_admin'@'localhost';
 
+-- ---------------------------------------------------------------------------
+-- Portal accounts (migration 015).
+--
+-- COLUMN-SCOPED on portal_users, and that is the point of the whole thing.
+-- A table-level INSERT would let the public pool write `email_verified_at` — the
+-- column that says "this person proved they own this mailbox". A signup form
+-- could then mark itself confirmed, and a confirmation that proves nothing is
+-- worse than none. The grant names every column the registration actually needs
+-- and stops there; `email_verified_at` is writable by nobody but the confirm
+-- route, which lives on the game-side flow.
+--
+-- password_hash and password_salt are deliberately NOT grantable here. The
+-- website hashes a password to CREATE a user and compares it to LOG one in, and
+-- never needs to rewrite either. A future "change password" route writes through
+-- a dedicated grant on those two columns, the same way applications get a
+-- column-scoped UPDATE for its decision.
+--
+-- The admin pool may READ the accounts — that is the registrations list — and
+-- may not write them, insert them, or delete them. Being able to read a password
+-- hash is already more than a moderator needs; being able to SET one would mean
+-- a moderator could log in as anybody, which is the whole account system.
+-- ---------------------------------------------------------------------------
+GRANT SELECT ON nifty_life.portal_users        TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.portal_user_discord TO 'nifty_admin'@'localhost';
+GRANT SELECT ON nifty_life.portal_email_tokens TO 'nifty_admin'@'localhost';
+
+GRANT SELECT ON nifty_life.portal_users TO 'nifty_website'@'localhost';
+GRANT INSERT (id, email, password_hash, password_salt)
+  ON nifty_life.portal_users TO 'nifty_website'@'localhost';
+-- last_login_at is a fact about signing in, not about the account itself.
+GRANT UPDATE (last_login_at) ON nifty_life.portal_users TO 'nifty_website'@'localhost';
+
+GRANT SELECT, INSERT ON nifty_life.portal_email_tokens TO 'nifty_website'@'localhost';
+
+-- The link is written once, by the Discord callback, and swapped at most once by
+-- the "use a different account" action. No DELETE: unlinking is an UPDATE, so a
+-- database error cannot orphan a link and leave an application unattributable.
+GRANT SELECT, INSERT, UPDATE ON nifty_life.portal_user_discord TO 'nifty_website'@'localhost';
+
 -- Verification, alongside the ones below:
 --   INSERT INTO applications (...)                    -- denied: no INSERT
 --   UPDATE applications SET answers='{}'             -- denied: column not granted

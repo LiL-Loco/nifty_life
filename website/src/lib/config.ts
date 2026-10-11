@@ -97,6 +97,16 @@ export const config = {
 
   sessionSecret: required('SESSION_SECRET', process.env.SESSION_SECRET),
 
+  /**
+   * This site's own base URL, absolute and without a trailing slash.
+   *
+   * It exists because a confirmation link is read in an EMAIL CLIENT, not in a
+   * page: there is no request to derive a host from, and `x-forwarded-host` is
+   * attacker-controlled anyway. Anything that builds a link the user will click
+   * later builds it from here.
+   */
+  publicUrl: (process.env.PUBLIC_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),
+
   discord: {
     clientId: process.env.DISCORD_CLIENT_ID ?? '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET ?? '',
