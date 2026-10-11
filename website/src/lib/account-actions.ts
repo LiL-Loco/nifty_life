@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 import { encodeSession, cookieOptions } from '@/lib/session';
 import { authenticate, issueEmailToken, register } from '@/lib/users';
@@ -46,12 +47,13 @@ export async function registerAction(
   const email = String(form.get('email') ?? '');
   const password = String(form.get('password') ?? '');
   const repeat = String(form.get('password_repeat') ?? '');
+  const username = String(form.get('username') ?? '');
 
   if (password !== repeat) {
     return { error: 'Die beiden Passwörter stimmen nicht überein.' };
   }
 
-  const result = await register(email, password);
+  const result = await register(email, password, username);
   if (!result.ok) return { error: result.error };
 
   // Signed in immediately. Confirmation is a property of the ADDRESS, not a
@@ -73,7 +75,7 @@ export async function registerAction(
     });
   }
 
-  return { ok: 'Konto angelegt.' };
+  redirect('/register/done');
 }
 
 export async function signInAction(

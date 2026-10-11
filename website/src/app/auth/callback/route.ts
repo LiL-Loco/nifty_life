@@ -2,25 +2,24 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { exchangeCode } from '@/lib/discord';
-import { linkDiscord } from '@/lib/users';
-import { decodeSession } from '@/lib/session';
+import { linkDiscord, findUserByDiscordId } from '@/lib/users';
+import { decodeSession, encodeSession, cookieOptions } from '@/lib/session';
 
 /**
- * Discord sends the person back here after they approved the attach.
+ * Discord sends the person back here after they approved the round trip.
  *
- * Four things have to line up before a link is written: a code, a state that
- * matches the one this server issued, a signed-in portal session, and an identity
- * that is actually a Discord ID. Anything else is a failed attach, not a partial
- * one — in particular NO session is created here. Signing in is email and
- * password, on /login, and a Discord account that gets attached does not change
- * who is signed in.
+ * Two flows share this route, distinguished by the state cookie written by
+ * the start route:
  *
- * The session requirement is what makes the link worth anything: you must already
- * be authenticated as the portal account you are attaching to, and you must prove
- * you hold the Discord account being attached. `portal_user_discord` is UNIQUE in
- * both directions, so the database refuses the two dishonest cases — claiming
- * somebody else's Discord identity, and holding two portal accounts to apply
- * twice.
+ *   - state = a same-site path      → ATTACH. A portal session must already
+ *     exist; the Discord account is linked to it.
+ *   - state = `/auth/discord/login` → LOG IN. No session needed; the
+ *     callback looks up the Discord ID and signs the matching portal
+ *     account in.
+ *
+ * Both paths require a valid code, a state that matches the cookie, and an
+ * identity that is actually a Discord ID. Anything else is a refused round
+ * trip — no partial links, no partial sessions.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -35,14 +34,36 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/account?error=link-failed', request.url));
   }
 
+  const identity = await exchangeCode(code);
+  if (!identity) {
+    return NextResponse.redirect(
+      new URL(`/${state === '/auth/discord/login' ? 'login' : 'account'}?error=link-failed`, request.url),
+    );
+  }
+
+  // ---- LOG IN -----------------------------------------------------------
+  if (state === '/auth/discord/login') {
+    const account = await findUserByDiscordId(identity.id);
+    if (!account) {
+      return NextResponse.redirect(
+        new URL('/login?error=no-account-for-discord', request.url),
+      );
+    }
+
+    const response = NextResponse.redirect(new URL('/account', request.url));
+    response.cookies.set(
+      'nifty_session',
+      encodeSession({ userId: account.userId, email: account.email }),
+      cookieOptions(),
+    );
+    response.cookies.delete('nifty_oauth_state');
+    return response;
+  }
+
+  // ---- ATTACH -----------------------------------------------------------
   const session = decodeSession(store.get('nifty_session')?.value);
   if (!session) {
     return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
-  }
-
-  const identity = await exchangeCode(code);
-  if (!identity) {
-    return NextResponse.redirect(new URL('/account?error=link-failed', request.url));
   }
 
   const result = await linkDiscord(session.userId, identity.id, identity.username);

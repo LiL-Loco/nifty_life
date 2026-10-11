@@ -26,6 +26,7 @@ import {
   checkPasswordStrength,
   hashPassword,
   normalizeEmail,
+  normalizeUsername,
   randomToken,
   sha256,
   verifyPassword,
@@ -34,6 +35,9 @@ import {
 export interface PortalUser {
   id: string;
   email: string;
+  /** Display name picked at registration. Null for legacy accounts registered
+   *  before the column existed (migration 022). */
+  username: string | null;
   createdAt: string;
   lastLoginAt: string | null;
   emailVerifiedAt: string | null;
@@ -62,10 +66,19 @@ export type RegisterResult =
  * only, or a whitelist — the message here should become generic like the one in
  * `authenticate`.
  */
-export async function register(emailInput: string, password: string): Promise<RegisterResult> {
+export async function register(
+  emailInput: string,
+  password: string,
+  usernameInput: string,
+): Promise<RegisterResult> {
   const email = normalizeEmail(emailInput);
   if (!email) {
     return { ok: false, error: 'Das ist keine gültige E-Mail-Adresse.' };
+  }
+
+  const username = normalizeUsername(usernameInput);
+  if (!username) {
+    return { ok: false, error: 'Bitte einen Anzeigenamen angeben (3–32 Zeichen, Buchstaben, Ziffern, _, -).' };
   }
 
   const strength = checkPasswordStrength(password);
@@ -84,9 +97,13 @@ export async function register(emailInput: string, password: string): Promise<Re
   const id = newUuid();
 
   try {
+    // `last_login_at` is set in the same statement as the row's creation: the
+    // register action signs the user in immediately, so the moment the row
+    // exists is also the moment of their first login. Without this, the
+    // /admin/users page shows "—" for every freshly registered account.
     await query(
-      'INSERT INTO portal_users (id, email, password_hash, password_salt) VALUES (?, ?, ?, ?)',
-      [id, email, hash, salt],
+      'INSERT INTO portal_users (id, email, username, password_hash, password_salt, last_login_at) VALUES (?, ?, ?, ?, ?, NOW())',
+      [id, email, username, hash, salt],
     );
   } catch (error) {
     // The UNIQUE index is the real guard; the check above only produces a
@@ -103,8 +120,9 @@ export async function register(emailInput: string, password: string): Promise<Re
     user: {
       id,
       email,
+      username,
       createdAt: new Date().toISOString(),
-      lastLoginAt: null,
+      lastLoginAt: new Date().toISOString(),
       emailVerifiedAt: null,
     },
   };
@@ -230,6 +248,7 @@ export async function authenticate(emailInput: string, password: string): Promis
   const user = await one<{
     id: string;
     email: string;
+    username: string | null;
     password_hash: string;
     password_salt: string;
     created_at: string;
@@ -254,6 +273,7 @@ export async function authenticate(emailInput: string, password: string): Promis
     user: {
       id: user.id,
       email: user.email,
+      username: user.username,
       createdAt: user.created_at,
       lastLoginAt: new Date().toISOString(),
       emailVerifiedAt: user.email_verified_at,
@@ -273,11 +293,12 @@ export async function findUser(userId: string): Promise<PortalUser | null> {
   const row = await one<{
     id: string;
     email: string;
+    username: string | null;
     created_at: string;
     last_login_at: string | null;
     email_verified_at: string | null;
   }>(
-    `SELECT id, email, created_at, last_login_at, email_verified_at
+    `SELECT id, email, username, created_at, last_login_at, email_verified_at
        FROM portal_users WHERE id = ? LIMIT 1`,
     [userId],
   );
@@ -286,6 +307,7 @@ export async function findUser(userId: string): Promise<PortalUser | null> {
     ? {
         id: row.id,
         email: row.email,
+        username: row.username,
         createdAt: row.created_at,
         lastLoginAt: row.last_login_at,
         emailVerifiedAt: row.email_verified_at,
@@ -306,6 +328,31 @@ export async function linkedDiscord(userId: string): Promise<DiscordLink | null>
   ]);
 
   return row ? { discordId: row.discord_id, username: row.username, linkedAt: row.linked_at } : null;
+}
+
+/**
+ * The portal account that holds a given Discord ID, or null.
+ *
+ * Used by the "Login with Discord" flow: the OAuth callback exchanges the code,
+ * looks up the Discord ID here, and on a hit signs that account in. On a miss
+ * the user is told to register first, because there is no account to log into
+ * without a prior link.
+ */
+export async function findUserByDiscordId(discordId: string): Promise<{
+  userId: string;
+  email: string;
+} | null> {
+  if (!/^\d{5,32}$/.test(discordId)) return null;
+
+  const row = await one<{ user_id: string; email: string }>(
+    `SELECT d.user_id, u.email
+       FROM portal_user_discord d
+       JOIN portal_users u ON u.id = d.user_id
+      WHERE d.discord_id = ? LIMIT 1`,
+    [discordId],
+  );
+
+  return row ? { userId: row.user_id, email: row.email } : null;
 }
 
 /**
@@ -406,13 +453,16 @@ export async function registrations(limit = 200) {
     discord_id: string | null;
     username: string | null;
     application_status: string | null;
+    is_staff: number | null;
   }>(
     `SELECT u.id, u.email, u.created_at, u.last_login_at, u.email_verified_at,
             d.discord_id, d.username,
-            a.status AS application_status
+            a.status AS application_status,
+            s.role_id IS NOT NULL AS is_staff
        FROM portal_users u
        LEFT JOIN portal_user_discord d ON d.user_id = u.id
        LEFT JOIN applications a       ON a.user_id = u.id
+       LEFT JOIN staff s               ON s.discord_id = d.discord_id
       ORDER BY u.created_at DESC
       LIMIT ${safeLimit}`,
   );

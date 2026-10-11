@@ -18,9 +18,9 @@ import 'server-only';
 
 import { config, discordConfigured } from './config';
 
-const DISCORD_AUTHORIZE = 'http://discord.com/oauth2/authorize';
-const DISCORD_TOKEN = 'http://discord.com/api/oauth2/token';
-const DISCORD_ME = 'http://discord.com/api/users/@me';
+const DISCORD_AUTHORIZE = 'https://discord.com/oauth2/authorize';
+const DISCORD_TOKEN = 'https://discord.com/api/oauth2/token';
+const DISCORD_ME = 'https://discord.com/api/users/@me';
 
 const DISCORD_IDENTITY = 'identify';
 
@@ -111,4 +111,23 @@ export async function exchangeCode(
     // happen". They must not throw their way into a 500 that looks like a bug.
     return null;
   }
+}
+
+/**
+ * The avatar URL to render for a Discord user, given their snowflake ID.
+ *
+ * Discord serves two flavours of avatar from its CDN:
+ *
+ *   - a custom one at `/avatars/{id}/{hash}.{ext}`, when the user has set one,
+ *   - a built-in one at `/embed/avatars/{index}.png` for everyone else.
+ *
+ * The site does not store the custom-hash field (it is not in the schema), so
+ * this function returns the built-in URL. The index is derived from the user
+ * ID itself, which is the same formula Discord uses client-side, so the same
+ * person always gets the same default picture and we never reach into a CDN
+ * path that 404s.
+ */
+export function discordAvatarUrl(discordId: string): string {
+  const index = Number((BigInt(discordId) >> 22n) % 6n);
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
 }

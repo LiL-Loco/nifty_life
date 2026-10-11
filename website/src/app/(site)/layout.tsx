@@ -1,5 +1,5 @@
-import Link from 'next/link';
-
+import { Footer } from '@/components/footer';
+import { Navbar } from '@/components/navbar-server';
 import { currentAccount } from '@/lib/auth';
 
 /**
@@ -27,35 +27,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
 
   return (
     <>
-      <header className="mx-auto flex max-w-page items-center justify-between gap-4 border-b border-line px-5 py-5">
-        <Link href="/" className="font-semibold tracking-[-0.01em] text-text no-underline">
-          Nifty Life <span className="font-normal text-muted">2.0</span>
-        </Link>
-        <nav className="flex gap-5">
-          {account?.isStaff ? (
-            <>
-              <Link href="/peeper">P&amp;R</Link>
-              <Link href="/admin">Team</Link>
-              <Link href="/account">{account.user.email}</Link>
-            </>
-          ) : (
-            <>
-              <Link href="/apply">Bewerbung</Link>
-              <Link href="/status">Status</Link>
-              <Link href="/peeper">P&amp;R</Link>
-              <Link href={account ? '/account' : '/login'}>
-                {account ? account.user.email : 'Anmelden'}
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
-
+      <Navbar account={account} />
       <main>{children}</main>
-
-      <footer className="mx-auto max-w-page border-t border-line px-5 pb-12 pt-6 text-sm text-muted">
-        <p>Freitag 19:00 bis Sonntag 22:00. In der Zwischenzeit geht nichts verloren.</p>
-      </footer>
+      <Footer />
     </>
   );
 }

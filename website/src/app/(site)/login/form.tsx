@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 
-import { Button, Field, Label, Notice } from '@/components/ui';
+import { Alert, Button, Input, Label } from '@/components/ui';
 import type { AuthState } from '@/lib/account-actions';
 
 type Action = (state: AuthState, form: FormData) => Promise<AuthState>;
@@ -29,14 +29,16 @@ export default function AuthForm({
   return (
     <form action={formAction}>
       {state?.error ? (
-        <Notice tone="error" role="alert">
+        <Alert variant="destructive" role="alert">
           {state.error}
-        </Notice>
+        </Alert>
       ) : null}
 
-      <Field>
-        <Label htmlFor="email">E-Mail-Adresse</Label>
-        <input
+      <div className="mb-4">
+        <Label htmlFor="email" className="mb-1 block text-muted-foreground">
+          E-Mail-Adresse
+        </Label>
+        <Input
           id="email"
           name="email"
           type="email"
@@ -44,11 +46,13 @@ export default function AuthForm({
           required
           maxLength={254}
         />
-      </Field>
+      </div>
 
-      <Field>
-        <Label htmlFor="password">Passwort</Label>
-        <input
+      <div className="mb-4">
+        <Label htmlFor="password" className="mb-1 block text-muted-foreground">
+          Passwort
+        </Label>
+        <Input
           id="password"
           name="password"
           type="password"
@@ -58,17 +62,22 @@ export default function AuthForm({
           maxLength={200}
         />
         {showRepeat ? (
-          <p className="mt-1.5 mb-0 text-sm text-muted">
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Mindestens 10 Zeichen. Keine Regeln zu Zeichenarten — ein Satz ist ein
             gutes Passwort.
           </p>
         ) : null}
-      </Field>
+      </div>
 
       {showRepeat ? (
-        <Field>
-          <Label htmlFor="password_repeat">Passwort wiederholen</Label>
-          <input
+        <div className="mb-4">
+          <Label
+            htmlFor="password_repeat"
+            className="mb-1 block text-muted-foreground"
+          >
+            Passwort wiederholen
+          </Label>
+          <Input
             id="password_repeat"
             name="password_repeat"
             type="password"
@@ -77,7 +86,7 @@ export default function AuthForm({
             minLength={10}
             maxLength={200}
           />
-        </Field>
+        </div>
       ) : null}
 
       <Button type="submit" disabled={pending}>

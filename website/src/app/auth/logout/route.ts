@@ -6,5 +6,5 @@ export async function GET(request: Request) {
   store.delete('nifty_session');
   store.delete('nifty_oauth_state');
 
-  return NextResponse.redirect(new URL('/', request.url));
+  return NextResponse.redirect(new URL('/logout/done', request.url));
 }

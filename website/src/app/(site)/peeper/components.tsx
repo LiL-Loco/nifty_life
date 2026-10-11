@@ -2,7 +2,8 @@
 
 import { useActionState } from 'react';
 
-import { Button, Card, Field, Label, Notice } from '@/components/ui';
+import { Alert, Button, Card, CardContent, Input, Textarea } from '@/components/ui';
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   publish,
   report,
@@ -12,42 +13,52 @@ import {
   type ActionState,
 } from './actions';
 
+const SUCCESS_CLASS = 'border-success/40 bg-success/10 text-success [&>svg]:text-success';
+
 export function Composer({ disabled }: { disabled: boolean }) {
   const [state, action] = useActionState<ActionState, FormData>(publish, undefined);
 
   return (
     <Card>
-      <form action={action}>
-        {state?.error ? (
-          <Notice tone="error" role="alert">
-            {state.error}
-          </Notice>
-        ) : null}
-        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
+      <CardContent>
+        <form action={action}>
+          {state?.error ? (
+            <Alert variant="destructive" role="alert" className="mb-4">
+              {state.error}
+            </Alert>
+          ) : null}
+          {state?.ok ? (
+            <Alert className={`mb-4 ${SUCCESS_CLASS}`}>{state.ok}</Alert>
+          ) : null}
 
-        <Field>
-          <Label htmlFor="body">Schreib etwas</Label>
-          <textarea
-            id="body"
-            name="body"
-            maxLength={500}
-            disabled={disabled}
-            placeholder={
-              disabled ? 'Verknüpfe zuerst deinen Charakter.' : 'Bis zu 500 Zeichen.'
-            }
-            required
-          />
-        </Field>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="body">Schreib etwas</FieldLabel>
+              <Textarea
+                id="body"
+                name="body"
+                maxLength={500}
+                disabled={disabled}
+                placeholder={
+                  disabled ? 'Verknüpfe zuerst deinen Charakter.' : 'Bis zu 500 Zeichen.'
+                }
+                required
+              />
+            </Field>
 
-        <Field>
-          <Label htmlFor="place">Ort (optional)</Label>
-          <input id="place" name="place" maxLength={64} disabled={disabled} />
-        </Field>
+            <Field>
+              <FieldLabel htmlFor="place">Ort (optional)</FieldLabel>
+              <Input id="place" name="place" maxLength={64} disabled={disabled} />
+            </Field>
 
-        <Button type="submit" disabled={disabled}>
-          Abschicken
-        </Button>
-      </form>
+            <Field>
+              <Button type="submit" disabled={disabled}>
+                Abschicken
+              </Button>
+            </Field>
+          </FieldGroup>
+        </form>
+      </CardContent>
     </Card>
   );
 }
@@ -63,38 +74,46 @@ export function StaffComposer({ name }: { name: string }) {
   const [state, action] = useActionState<ActionState, FormData>(staffPublish, undefined);
 
   return (
-    <Card accent>
-      <p className="mb-3 mt-0 text-sm text-muted">
-        <strong className="text-accent">P&amp;R-Team</strong> · du schreibst als{' '}
-        <strong>{name}</strong>
-      </p>
+    <Card className="border-primary">
+      <CardContent>
+        <p className="mb-3 text-sm text-muted-foreground">
+          <strong className="text-primary">P&amp;R-Team</strong> · du schreibst als{' '}
+          <strong>{name}</strong>
+        </p>
 
-      <form action={action}>
-        {state?.error ? (
-          <Notice tone="error" role="alert">
-            {state.error}
-          </Notice>
-        ) : null}
-        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
+        <form action={action}>
+          {state?.error ? (
+            <Alert variant="destructive" role="alert" className="mb-4">
+              {state.error}
+            </Alert>
+          ) : null}
+          {state?.ok ? (
+            <Alert className={`mb-4 ${SUCCESS_CLASS}`}>{state.ok}</Alert>
+          ) : null}
 
-        <Field>
-          <Label htmlFor="staff_body">Ankündigung</Label>
-          <textarea
-            id="staff_body"
-            name="body"
-            maxLength={500}
-            placeholder="Bis zu 500 Zeichen. Sichtbar für alle."
-            required
-          />
-        </Field>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="staff_body">Ankündigung</FieldLabel>
+              <Textarea
+                id="staff_body"
+                name="body"
+                maxLength={500}
+                placeholder="Bis zu 500 Zeichen. Sichtbar für alle."
+                required
+              />
+            </Field>
 
-        <Field>
-          <Label htmlFor="staff_place">Ort (optional)</Label>
-          <input id="staff_place" name="place" maxLength={64} />
-        </Field>
+            <Field>
+              <FieldLabel htmlFor="staff_place">Ort (optional)</FieldLabel>
+              <Input id="staff_place" name="place" maxLength={64} />
+            </Field>
 
-        <Button type="submit">Veröffentlichen</Button>
-      </form>
+            <Field>
+              <Button type="submit">Veröffentlichen</Button>
+            </Field>
+          </FieldGroup>
+        </form>
+      </CardContent>
     </Card>
   );
 }
@@ -112,28 +131,30 @@ export function DeletePost({ postId, authorName }: { postId: string; authorName:
 
   return (
     <details className="ml-auto">
-      <summary className="cursor-pointer list-none text-sm text-muted">löschen</summary>
+      <summary className="cursor-pointer list-none text-sm text-muted-foreground">löschen</summary>
 
       <form action={action} className="mt-2">
         <input type="hidden" name="post" value={postId} />
 
         {state?.error ? (
-          <Notice tone="error" role="alert">
+          <Alert variant="destructive" role="alert" className="mb-2">
             {state.error}
-          </Notice>
+          </Alert>
         ) : null}
-        {state?.ok ? <Notice tone="ok">{state.ok}</Notice> : null}
+        {state?.ok ? (
+          <Alert className={`mb-2 ${SUCCESS_CLASS}`}>{state.ok}</Alert>
+        ) : null}
 
-        <p className="mb-1.5 mt-0 text-sm text-muted">
-          Beitrag von <strong>{authorName}</strong> ausblenden. Der Beitrag bleibt in
-          der Datenbank — gelöscht wird nur die Sichtbarkeit.
+        <p className="mb-1.5 text-sm text-muted-foreground">
+          Beitrag von <strong>{authorName}</strong> ausblenden. Der Beitrag bleibt
+          in der Datenbank — gelöscht wird nur die Sichtbarkeit.
         </p>
 
-        <input
+        <Input
           name="reason"
           maxLength={255}
           placeholder="Grund (optional, wird gespeichert)"
-          className="px-1.5 py-1 text-[0.8125rem]"
+          className="h-8 text-sm"
         />
         <Button type="submit" variant="secondary" size="sm" className="mt-1.5">
           Löschen
@@ -159,7 +180,7 @@ export function PostActions({
   );
 
   return (
-    <div className="mt-2.5 flex gap-4 text-[0.8125rem] text-muted">
+    <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
       <form action={likeAction}>
         <input type="hidden" name="post" value={postId} />
         <input type="hidden" name="liked" value="0" />
@@ -168,18 +189,18 @@ export function PostActions({
         </Button>
       </form>
 
-      <form action={reportAction}>
+      <form action={reportAction} className="flex items-center gap-1.5">
         <input type="hidden" name="post" value={postId} />
         <select
           name="reason"
           defaultValue="spam"
           disabled={disabled}
-          className="w-auto py-1 pr-1 text-[0.8125rem]"
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
         >
-          <option value="spam"> Spam</option>
-          <option value="harassment"> Belästigung</option>
-          <option value="impersonation"> Identitätsmissbrauch</option>
-          <option value="other"> Sonstiges</option>
+          <option value="spam">Spam</option>
+          <option value="harassment">Belästigung</option>
+          <option value="impersonation">Identitätsmissbrauch</option>
+          <option value="other">Sonstiges</option>
         </select>
         <Button variant="secondary" size="sm" type="submit" disabled={disabled}>
           Melden
@@ -187,7 +208,7 @@ export function PostActions({
       </form>
 
       {reportState?.error ? (
-        <span className="text-danger">{reportState.error}</span>
+        <span className="text-destructive">{reportState.error}</span>
       ) : null}
       {reportState?.ok ? <span>{reportState.ok}</span> : null}
     </div>

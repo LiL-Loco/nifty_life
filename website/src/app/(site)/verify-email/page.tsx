@@ -1,7 +1,15 @@
 import Link from 'next/link';
 
 import { confirmEmail } from '@/lib/users';
-import { Card, Notice, buttonLinkClass } from '@/components/ui';
+import { Alert, buttonVariants } from '@/components/ui';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Field, FieldGroup } from '@/components/ui/field';
 
 /**
  * The confirmation link target.
@@ -25,37 +33,56 @@ export default async function VerifyEmailPage({
   const result = token ? await confirmEmail(token) : { ok: false as const };
 
   return (
-    <Card className="max-w-[30rem]">
-      <h1 className="mt-0">E-Mail-Adresse bestätigen</h1>
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <Card>
+          <CardHeader>
+            <CardTitle>E-Mail-Adresse bestätigen</CardTitle>
+            {result.ok ? (
+              <CardDescription>Deine Adresse ist bestätigt.</CardDescription>
+            ) : (
+              <CardDescription>
+                Dieser Bestätigungslink ist ungültig oder abgelaufen.
+              </CardDescription>
+            )}
+          </CardHeader>
+          <CardContent>
+            {result.ok ? (
+              <Alert className="border-success/40 bg-success/10 text-success [&>svg]:text-success">
+                Alles klar. Du kannst dich jetzt anmelden oder direkt zum Konto
+                gehen.
+              </Alert>
+            ) : (
+              <Alert variant="destructive" role="alert">
+                Ein Link funktioniert genau einmal und ist 24 Stunden gültig. Ist
+                er abgelaufen, hol dir auf der Kontoseite einen neuen.
+              </Alert>
+            )}
 
-      {result.ok ? (
-        <>
-          <Notice tone="ok">Deine Adresse ist bestätigt.</Notice>
-          <p>
-            <Link className={buttonLinkClass()} href="/account">
-              Weiter zu deinem Konto
-            </Link>
-          </p>
-        </>
-      ) : (
-        <>
-          <Notice tone="error" role="alert">
-            Dieser Bestätigungslink ist ungültig oder abgelaufen.
-          </Notice>
-          <p className="text-sm text-muted">
-            Ein Link funktioniert genau einmal und ist 24 Stunden gültig. Ist er
-            abgelaufen, hol dir auf der Kontoseite einen neuen.
-          </p>
-          <p className="flex flex-wrap gap-3">
-            <Link className={buttonLinkClass({ variant: 'secondary' })} href="/account">
-              Neuen Link anfordern
-            </Link>
-            <Link className={buttonLinkClass({ variant: 'secondary' })} href="/login">
-              Anmelden
-            </Link>
-          </p>
-        </>
-      )}
-    </Card>
+            <FieldGroup className="mt-6">
+              {result.ok ? (
+                <Field>
+                  <Link className={buttonVariants()} href="/account">
+                    Weiter zu deinem Konto
+                  </Link>
+                </Field>
+              ) : (
+                <Field>
+                  <Link className={buttonVariants()} href="/account">
+                    Neuen Link anfordern
+                  </Link>
+                  <Link
+                    className={buttonVariants({ variant: 'secondary' })}
+                    href="/login"
+                  >
+                    Anmelden
+                  </Link>
+                </Field>
+              )}
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }

@@ -44,6 +44,18 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
 
+  /* Sidebar tokens. The site is dark-only, so the dark values are the only ones
+     defined — no .light sibling. The values match the rest of the neutral dark
+     palette so a sidebar panel does not look like a different surface. */
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
   /* Status colour that the shadcn palette does not name: the "everything is
      fine" green used on the application status pill and the ban-free row in
      the registrations table. */
@@ -55,7 +67,18 @@
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --container-page: 46rem;
+
+  /* The width of the portal shell — navbar, main, footer all sit inside this
+     so a card cannot be wider than the bar above and below it. */
+  --container-shell: 72rem;
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 /**
@@ -86,6 +109,15 @@
   --color-ring: var(--ring);
   --color-amber: var(--color-amber);
 
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 
@@ -93,6 +125,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* The portal shell width. Re-exposed so Tailwind generates `max-w-shell`. */
+  --container-shell: var(--container-shell);
 }
 
 @layer base {
@@ -112,6 +147,9 @@
   }
 
   body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
@@ -138,10 +176,25 @@
 }
 
 @layer components {
+  /* The page column. `flex: 1` makes it grow inside the body flex container so
+     a short page still pushes the footer to the bottom of the viewport. The
+     max-width matches the navbar and footer so nothing inside the page can
+     exceed the bar above and below. `align-self: center` is the piece that
+     actually puts it in the middle: in a flex column with the default
+     `align-items: stretch`, a child with `max-width` is sized to that width
+     but pinned to the cross-axis start, so `margin: 0 auto` on its own is
+     not enough to centre it. No horizontal padding: the navbar and footer
+     manage their own edge spacing, and cards inside the main already carry
+     their own `px-6`. With horizontal padding here the content area would
+     be ~40px narrower than the bar above it, which is the thing the reader
+     notices on the admin tables. */
   main {
-    max-width: var(--container-page);
+    align-self: center;
+    flex: 1;
+    width: 100%;
+    max-width: var(--container-shell);
     margin: 0 auto;
-    padding: 3rem 1.25rem 5rem;
+    padding: 3rem 0 5rem;
   }
 
   /* The hero owns the whole viewport, so the portal's centred column and its
@@ -350,4 +403,16 @@
   .door:hover {
     transform: none;
   }
+}
+/*---break---
+ */
+.dark {
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
