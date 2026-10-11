@@ -1078,9 +1078,9 @@ local function buildOverlayMenu(id)
   -- colour panel. 0% to 100%, integer percent. The value list is
   -- {"0%", "1%", ..., "100%"} so the player sees the percentage.
   local opacityList = {}
-  for i = 0, 100 do opacityList[i + 1] = (i .. '%') end
+  for i = 0, 1000 do opacityList[i + 1] = (i * 0.1 .. '%') end
   local opacityItem = NativeUI.CreateSliderItem('Deckkraft', opacityList,
-    math.floor(math.clamp((current.opacity or 1.0) * 100, 0, 100)) + 1,
+    math.floor(math.clamp((current.opacity or 1.0) * 1000, 0, 1000)) + 1,
     'Deckkraft in Prozent (0% = aus).', true)
   styleItem:AddPanel(opacityItem)
 
@@ -1130,7 +1130,7 @@ local function buildOverlayMenu(id)
           colourValue = livePanels[1]:CurrentSelection() - 1
         end
       end
-      local opacity = opacityItem:CurrentSelection() / 100
+      local opacity = opacityItem:CurrentSelection() / 1000
       face.overlays[tostring(id)] = {
         style = styleValue,
         opacity = opacity,
@@ -1200,11 +1200,12 @@ local function buildParentsMenu()
   local heritage = NativeUI.CreateHeritageWindow(face.headBlend.mother, face.headBlend.father)
   menu:AddWindow(heritage)
 
-  -- The slider's value list, shared by Resemblance and Skin Tone. Each
-  -- entry is a string the library displays in the bar; the index 1..N
-  -- is what the OnSliderChange callback sees.
+  -- The slider's value list, shared by Resemblance and Skin Tone. 101
+  -- entries (0.00 to 1.00 in 0.01 steps) for finer granularity than the
+  -- 11-entry 0.0..1.0 list. Each entry is a string the library displays
+  -- in the bar; the index 1..N is what the OnSliderChange callback sees.
   local ZtO = {}
-  for i = 1, 11 do ZtO[i] = ('%.1f'):format((i - 1) / 10) end
+  for i = 1, 101 do ZtO[i] = ('%.2f'):format((i - 1) / 100) end
 
   -- 1-based item lists: UIMenuListItem is 1-based, the engine is 0-based.
   -- We carry the same array the engine wants and let OnListChange
@@ -1256,7 +1257,7 @@ local function buildParentsMenu()
   -- The engine reads the ratio, so storing frac01 keeps the precision;
   -- the right-label shows the percent (0..100, 1 decimal).
   local halfStep = {}
-  for i = 0, 200 do halfStep[i + 1] = ('%.1f%%'):format(i * 0.5) end
+  for i = 0, 1000 do halfStep[i + 1] = ('%.1f%%'):format(i * 0.1) end
   local function halfStepIndex(frac01)
     -- explicit if/else instead of math.clamp: FiveM's runtime Lua
     -- accepts vectors in math.clamp and raises 'number or vector
@@ -1265,7 +1266,7 @@ local function buildParentsMenu()
     -- path that hands math.clamp a vector. Plain clamp here is safer.
     if frac01 < 0 then frac01 = 0 end
     if frac01 > 1 then frac01 = 1 end
-    return math.floor(frac01 * 200) + 1
+    return math.floor(frac01 * 1000) + 1
   end
   local weightDefs = {
     { key = 'motherWeight', label = 'Mutter-Anteil' },
@@ -1384,6 +1385,16 @@ local function buildFaceMenu()
     end
   end
 
+  -- Snap the engine's continuous 0..1 cursor to a 0.01 grid. 201 positions
+  -- across -1.0..1.0 (0.01 each) is much finer than 21 (0.05) - matches
+  -- the 100-step slider precision elsewhere. math.floor((x*2 - 1) * 100
+  -- + 0.5) / 100 rounds to the nearest 0.01; the same expression lives
+  -- in both the 2D and 1D branches.
+  local function toFeature(posX)
+    local v = (posX or 0.5) * 2 - 1
+    return math.floor(v * 100 + 0.5) / 100
+  end
+
   for _, g in ipairs(FACE_2D_GROUPS) do
     local xv = face.features[tostring(g.xId)] or 0.0
     local yv = face.features[tostring(g.yId)] or 0.0
@@ -1392,8 +1403,8 @@ local function buildFaceMenu()
       top = g.top, bottom = g.bottom, left = g.left, right = g.right,
       x = (xv + 1) / 2, y = (yv + 1) / 2,
       onChange = function(pos)
-        setFeature(g.xId, (pos.X or 0.5) * 2 - 1)
-        setFeature(g.yId, (pos.Y or 0.5) * 2 - 1)
+        setFeature(g.xId, toFeature(pos.X))
+        setFeature(g.yId, toFeature(pos.Y))
         refresh()
       end,
     })
@@ -1406,7 +1417,7 @@ local function buildFaceMenu()
       left = g.left, right = g.right,
       x = (v + 1) / 2,
       onChange = function(pos)
-        setFeature(g.id, (pos.X or 0.5) * 2 - 1)
+        setFeature(g.id, toFeature(pos.X))
         refresh()
       end,
     })
