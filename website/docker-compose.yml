@@ -29,14 +29,18 @@ services:
 
     environment:
       MARIADB_DATABASE: nifty_life
+      # These four names are the ones the website's own .env already uses, so an
+      # existing configuration can be copied over unchanged. Only DB_ROOT_PASSWORD
+      # and GAME_DB_PASSWORD are new, and neither is read by the application:
+      # they exist for the database container during the init.
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
 
-      # Consumed by docker/initdb/900-grants.sh, which creates the three
-      # accounts from database/grants.sql. The entrypoint passes NO of these to
-      # a .sql file, which is exactly why that script exists.
+      # Consumed by docker/initdb/000-users.sh and 900-grants.sh, which create
+      # the three accounts from database/grants.sql. The entrypoint passes NO of
+      # these to a .sql file, which is exactly why those scripts exist.
       GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?GAME_DB_PASSWORD must be set}
-      WEB_DB_PASSWORD: ${WEB_DB_PASSWORD:?WEB_DB_PASSWORD must be set}
-      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
 
       # Host patterns for the GRANT statements. 'localhost' is wrong here: the
       # app connects from a container address. WEB_DB_HOST stays on the compose
@@ -101,9 +105,9 @@ services:
       DB_PORT: "3306"
       DB_NAME: nifty_life
       DB_USER: nifty_website
-      DB_PASSWORD: ${WEB_DB_PASSWORD:?WEB_DB_PASSWORD must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       DB_ADMIN_USER: nifty_admin
-      DB_ADMIN_PASSWORD: ${ADMIN_DB_PASSWORD:?ADMIN_DB_PASSWORD must be set}
+      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
 
     ports:
       - "3000:3000"

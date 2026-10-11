@@ -29,7 +29,7 @@ set -euo pipefail
 TEMPLATE="/docker-entrypoint-initdb.d/grants.sql.template"
 
 # MARIADB_ROOT_PASSWORD is the name the container actually receives.
-for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD WEB_DB_PASSWORD ADMIN_DB_PASSWORD \
+for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD DB_PASSWORD DB_ADMIN_PASSWORD \
            WEB_DB_HOST GAME_DB_HOST; do
   if [ -z "${!var:-}" ]; then
     echo "900-grants.sh: ${var} is not set — the accounts cannot be created." >&2
@@ -52,8 +52,8 @@ esc() {
 
 sed \
   -e "s|CHANGE_ME_GAME|$(esc "$GAME_DB_PASSWORD")|g" \
-  -e "s|CHANGE_ME_WEB|$(esc "$WEB_DB_PASSWORD")|g" \
-  -e "s|CHANGE_ME_ADMIN|$(esc "$ADMIN_DB_PASSWORD")|g" \
+  -e "s|CHANGE_ME_WEB|$(esc "$DB_PASSWORD")|g" \
+  -e "s|CHANGE_ME_ADMIN|$(esc "$DB_ADMIN_PASSWORD")|g" \
   -e "s|'@'localhost'|$(esc "'@'${WEB_DB_HOST}'")|g" \
   -e "s|'@'127.0.0.1'|$(esc "'@'${GAME_DB_HOST}'")|g" \
   "$TEMPLATE" \

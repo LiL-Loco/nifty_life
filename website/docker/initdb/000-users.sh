@@ -32,7 +32,7 @@ set -euo pipefail
 
 # MARIADB_ROOT_PASSWORD is the name the container actually receives; the compose
 # file does not duplicate it under a second key.
-for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD WEB_DB_PASSWORD ADMIN_DB_PASSWORD \
+for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD DB_PASSWORD DB_ADMIN_PASSWORD \
            WEB_DB_HOST GAME_DB_HOST; do
   if [ -z "${!var:-}" ]; then
     echo "000-users.sh: ${var} is not set." >&2
@@ -48,8 +48,8 @@ esc() {
 }
 
 GAME_PW="$(esc "$GAME_DB_PASSWORD")"
-WEB_PW="$(esc "$WEB_DB_PASSWORD")"
-ADMIN_PW="$(esc "$ADMIN_DB_PASSWORD")"
+WEB_PW="$(esc "$DB_PASSWORD")"
+ADMIN_PW="$(esc "$DB_ADMIN_PASSWORD")"
 
 # LOCAL_HOST is where migrations 016/018 grant to. DEPLOY_HOST is where the
 # application and the game server actually connect from.
