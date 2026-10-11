@@ -20,7 +20,138 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-local Menu = require('client._menu')
+-- ---------------------------------------------------------------------------
+-- Shared menu infrastructure.
+--
+-- FiveM's `require` in client_scripts does not search subdirectories - both
+-- `client/_menu` and `client._menu` fail with "module not found". The cleanest
+-- workaround that doesn't drag in a require-side hack is to define the Menu
+-- wrapper here (cl_wardrobe.lua is the first consumer in the manifest) and
+-- publish it on `_G` so cl_store.lua can pick it up. Both files share one
+-- NativeUI pool and one render thread, which is the right shape: only one
+-- menu is open at a time, but they would have drawn over each other if each
+-- had its own pool. Load order (cl_wardrobe.lua before cl_store.lua in
+-- fxmanifest) is what makes this safe.
+-- ---------------------------------------------------------------------------
+local _pool = NativeUI.CreatePool()
+_pool:MouseControlsEnabled(true)
+_pool:ControlDisablingEnabled(true)
+
+local Menu = {}
+
+function Menu.menu(spec)
+  spec = spec or {}
+  local x = (spec.dock == 'right') and 1300 or 0
+  local m = NativeUI.CreateMenu(
+    spec.title or '',
+    spec.subtitle or '',
+    x, 0,
+    'commonmenu', 'interaction_bgd',
+    0,
+    255, 255, 255, 255
+  )
+  if type(spec.onClose) == 'function' then
+    m.OnMenuClose = function(_) pcall(spec.onClose) end
+  end
+  -- Mouse at the screen edge rotates the gameplay camera by default in
+  -- NativeUI; the creator's camera control owns the world turn now.
+  m.Settings.MouseEdgeEnabled = false
+  return m
+end
+
+function Menu.button(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _) pcall(spec.onSelect) end
+  menu:AddItem(item)
+end
+
+function Menu.separator(menu, label)
+  -- MrMathias154's fork does not ship UIMenuSeparatorItem. Approximate
+  -- it with a disabled UIMenuItem whose label acts as a section heading.
+  local text = (label and label ~= '') and label or '—'
+  local item = NativeUI.CreateItem(text, '')
+  item:Enabled(false)
+  menu:AddItem(item)
+end
+
+function Menu.submenu(menu, label, spec)
+  spec = spec or {}
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _)
+    if not spec.build then return end
+    local child = spec.build()
+    if not child or type(child) ~= 'table' then return end
+    menu:BindMenuToItem(child, item)
+    _pool:Add(child)
+    child:Visible(true)
+  end
+  menu:AddItem(item)
+end
+
+function Menu.input(menu, label, spec)
+  spec = spec or {}
+  if not menu._input_value then
+    menu._input_value = tostring(spec.value or '')
+  end
+  local item = NativeUI.CreateItem(label or '', spec.description or '')
+  if spec.disabled then item:Enabled(false) end
+  item.Activated = function(_, _)
+    DisplayOnscreenKeyboard(true, 'FMMC_KEY_TIP8', '', menu._input_value or '', '', '', '', 64)
+    Citizen.CreateThread(function()
+      while UpdateOnscreenKeyboard() == 0 do Citizen.Wait(0) end
+      if UpdateOnscreenKeyboard() == 1 then
+        menu._input_value = tostring(GetOnscreenKeyboardResult() or '')
+        pcall(spec.onChange, menu._input_value)
+      end
+    end)
+  end
+  menu:AddItem(item)
+end
+
+function Menu.openMenu(_RESOURCE, menu)
+  _pool:Add(menu)
+  menu:Visible(true)
+  return true
+end
+
+function Menu.pushMenu(_RESOURCE, menu)
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then other.Visible(false) end
+  end
+  _pool:Add(menu)
+  menu:Visible(true)
+  return true
+end
+
+function Menu.closeMenu(_RESOURCE, _reason)
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then other.Visible(false) end
+  end
+end
+
+function Menu.isOpen()
+  for _, other in ipairs(_pool.Menus) do
+    if other.Visible then return true end
+  end
+  return false
+end
+
+-- One render thread, one pool, one line per frame. cl_store.lua does not
+-- have its own menu thread.
+Citizen.CreateThread(function()
+  while true do
+    _pool:ProcessMenus()
+    Citizen.Wait(0)
+  end
+end)
+
+-- Publish for cl_store.lua. The globals are read at cl_store.lua's top,
+-- which loads after this file in the manifest, so the order is safe.
+_G.NiftyMenu = Menu
+_G.NiftyMenuPool = _pool
 
 -- Slot labels - same table as in cl_store.lua. Keeping a copy here so the
 -- wardrobe can be built without depending on the store loading first.

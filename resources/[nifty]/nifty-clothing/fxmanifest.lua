@@ -60,7 +60,11 @@ client_script '@nifty-ui/items/UIMenuProgressItem.lua'
 client_script '@nifty-ui/base/UIMenu.lua'
 client_script '@nifty-ui/base/MenuPool.lua'
 client_script '@nifty-ui/NativeUI.lua'
-client_script 'client/_menu.lua'
+-- The Menu wrapper lives at the top of cl_wardrobe.lua (the first
+-- consumer) and is published on _G for cl_store.lua. FiveM's `require`
+-- in client_scripts does not search subdirectories, so the wrapper
+-- cannot be a require()d module; load order in the manifest is what
+-- makes the cross-file sharing safe.
 client_script 'client/cl_wardrobe.lua'
 client_script 'client/cl_store.lua'
 

@@ -21,7 +21,18 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-local Menu = require('client._menu')
+-- Reuses the menu infrastructure defined at the top of cl_wardrobe.lua.
+-- FiveM's `require` in client_scripts does not search subdirectories, so
+-- the wrapper cannot be a require()d module - it lives in the first
+-- consumer and is published on _G. Load order in fxmanifest
+-- (cl_wardrobe.lua before cl_store.lua) is what makes this safe.
+local Menu = _G.NiftyMenu
+if not Menu then
+  print(('[%s] FATAL: cl_store.lua loaded before cl_wardrobe.lua. ' ..
+         'The shared menu infrastructure is missing - check fxmanifest ' ..
+         'load order.'):format(RESOURCE))
+  return
+end
 
 -- Mirrors nifty-creator/client/cl_creator.lua COMPONENT_LABELS / PROP_LABELS.
 local COMPONENT_LABELS = {
