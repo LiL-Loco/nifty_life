@@ -328,23 +328,10 @@ const hud = {
 // they don't want to look at, so a pickup-heavy session can clear
 // the OUTFIT column and an outfit-driven player can collapse the
 // BACKPACK column.
-const invSettingsKey = 'nifty.inv.settings.v1';
-const invSettings = (() => {
-  try {
-    const raw = localStorage.getItem(invSettingsKey);
-    if (raw) return JSON.parse(raw);
-  } catch (_) { /* ignore */ }
-  return {
-    showBackpack: true,
-    showOutfit: true,
-    showQuickAccess: true,
-    showEnvironment: true,
-  };
-})();
-function saveInvSettings() {
-  try { localStorage.setItem(invSettingsKey, JSON.stringify(invSettings)); }
-  catch (_) { /* private mode / disabled storage */ }
-}
+//
+// These settings are owned by the inventory panel itself; they live in
+// nifty-inventory/ui/app.js. nifty-world's panel builder calls them via
+// the cross-script global window.__niftyInventory.panelInventory.
 
 let toastTimer = null;
 
@@ -374,208 +361,18 @@ function showToast(ok, message) {
   toastTimer = setTimeout(() => toast.classList.add('hidden'), 3500);
 }
 
-// ------------------------------------------------------------------- panels
-
-function panelInventory() {
-  const wrap = el('div', 'inv');
-
-  // ---------------------------------------------------------------- header
-  // Top row: title + summary + settings button. The settings button
-  // reveals the per-section toggles ("show backpack" / "show outfit" /
-  // ...) — the design intent is that the player can collapse sections
-  // they don't want to look at today.
-  const header = el('div', 'inv__header');
-  const title = el('h2', 'inv__title', 'INVENTORY');
-  header.appendChild(title);
-
-  const summary = el('span', 'inv__summary',
-    `${hud.inventory.usedSlots}/${hud.inventory.totalSlots} Plätze · ` +
-    `${money(hud.inventory.usedWeight)} / ${money(hud.inventory.maxWeight)} KG`);
-  header.appendChild(summary);
-
-  const cog = el('button', 'inv__cog', '⚙');
-  cog.title = 'Inventar-Einstellungen';
-  cog.addEventListener('click', (e) => {
-    e.stopPropagation();
-    settingsPanel.classList.toggle('hidden');
-  });
-  header.appendChild(cog);
-  wrap.appendChild(header);
-
-  // ---------------------------------------------------------------- settings
-  // Read once on click; toggling any switch saves the new shape so a
-  // reload of the panel keeps the layout.
-  const settingsPanel = el('div', 'inv__settings hidden');
-  const toggleRow = (label, key) => {
-    const row = el('label', 'inv__settings-row');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = !!invSettings[key];
-    const label1 = el('span', null, label);
-    row.append(cb, label1);
-    cb.addEventListener('change', () => {
-      invSettings[key] = cb.checked;
-      saveInvSettings();
-      applySectionVisibility();
-    });
-    return row;
-  };
-  settingsPanel.appendChild(toggleRow('Rucksack zeigen',     'showBackpack'));
-  settingsPanel.appendChild(toggleRow('Outfit zeigen',       'showOutfit'));
-  settingsPanel.appendChild(toggleRow('Quick Access zeigen', 'showQuickAccess'));
-  settingsPanel.appendChild(toggleRow('Umgebung zeigen',     'showEnvironment'));
-  wrap.appendChild(settingsPanel);
-
-  // ---------------------------------------------------------------- grid
-  // Four sections laid out as a grid. Visibility is driven by the
-  // toggles; the four grid columns stay reserved (`grid-template-columns:
-  // repeat(4, ...)`) so a toggle doesn't reflow the rest.
-  const grid = el('div', 'inv__grid');
-  wrap.appendChild(grid);
-
-  const sections = {
-    backpack:   el('section', 'inv__section inv__section--backpack'),
-    outfit:     el('section', 'inv__section inv__section--outfit'),
-    quick:      el('section', 'inv__section inv__section--quick'),
-    environment: el('section', 'inv__section inv__section--environment'),
-  };
-
-  Object.values(sections).forEach((s) => grid.appendChild(s));
-
-  // ---- backpack
-  const bHeader = el('div', 'inv__section-header', 'BACKPACK');
-  sections.backpack.appendChild(bHeader);
-  if (hud.inventory.items.length) {
-    const list = el('ul', 'inv__list');
-    for (const item of hud.inventory.items) {
-      list.appendChild(invItemTile(item));
-    }
-    sections.backpack.appendChild(list);
-  } else {
-    sections.backpack.appendChild(
-      el('p', 'inv__empty', 'Rucksack ist leer.'));
+// Inventory panel renders via the cross-script global that nifty-inventory's
+// app.js attached. Each call passes the live HUD snapshot so the inventory
+// panel does not need its own reactive state.
+function panelInventoryProxy() {
+  if (window.__niftyInventory && window.__niftyInventory.panelInventory) {
+    return window.__niftyInventory.panelInventory(hud);
   }
-
-  // ---- outfit: what the player is wearing right now. The character data
-  // arrived via nifty:client:enterWorld and stays in sync with wardrobe
-  // edits; items come back with kind + slot_id from the character's
-  // appearance JSON.
-  const oHeader = el('div', 'inv__section-header', 'OUTFIT');
-  sections.outfit.appendChild(oHeader);
-  const worn = wornItemsFromAppearance(hud.character && hud.character.appearance);
-  if (worn.length) {
-    const list = el('ul', 'inv__list');
-    for (const item of worn) list.appendChild(invItemTile(item, { readOnly: true }));
-    sections.outfit.appendChild(list);
-  } else {
-    sections.outfit.appendChild(
-      el('p', 'inv__empty', 'Kein Outfit gespeichert.'));
-  }
-
-  // ---- quick access: 5 slots, empty placeholders. Future work fills
-  // these from a hotbar binding stored on the character.
-  const qHeader = el('div', 'inv__section-header', 'QUICK ACCESS');
-  sections.quick.appendChild(qHeader);
-  const qList = el('ul', 'inv__list inv__list--quick');
-  for (let i = 1; i <= 5; i++) {
-    const slot = el('li', 'inv__tile inv__tile--quick');
-    slot.appendChild(el('span', 'inv__tile-index', String(i)));
-    qList.appendChild(slot);
-  }
-  sections.quick.appendChild(qList);
-
-  // ---- environment: dropped items. Reads a placeholder for now - the
-  // drop-to-environment flow needs an additional server side that
-  // persists world props per cell, out of scope for this commit.
-  const eHeader = el('div', 'inv__section-header', 'ENVIRONMENT');
-  sections.environment.appendChild(eHeader);
-  sections.environment.appendChild(
-    el('p', 'inv__empty', 'Noch nichts abgelegt.'));
-
-  // Apply visibility AFTER the sections exist - reads from invSettings.
-  function applySectionVisibility() {
-    sections.backpack.classList.toggle('hidden', !invSettings.showBackpack);
-    sections.outfit.classList.toggle('hidden', !invSettings.showOutfit);
-    sections.quick.classList.toggle('hidden', !invSettings.showQuickAccess);
-    sections.environment.classList.toggle('hidden', !invSettings.showEnvironment);
-  }
-  applySectionVisibility();
-
+  // The script failed to load (offline CEF, blocked cfx-nui URL, etc.).
+  // Surface a placeholder rather than crashing the page.
+  const wrap = el('div', 'panel-shell__empty',
+    'Inventar konnte nicht geladen werden.');
   return wrap;
-}
-
-// One tile in an inventory grid. Same shape for BACKPACK and OUTFIT so
-// the user reads them the same way. Hovering reveals the action row -
-// split + discard + use; the OUTFIT tiles get readOnly=true and skip
-// the discard because the player's worn set lives on the appearance
-// and is not a drop-candidate for V1.
-function invItemTile(item, opts) {
-  const tile = el('li', 'inv__tile');
-  if (opts && opts.readOnly) tile.classList.add('inv__tile--read-only');
-  tile.appendChild(el('span', 'inv__tile-qty',
-    item.quantity > 1 ? `x${item.quantity}` : ''));
-  tile.appendChild(el('span', 'inv__tile-name', String(item.name || item.code)));
-  tile.appendChild(el('span', 'inv__tile-weight',
-    `${money(item.unitWeight || 0)} kg`));
-  return tile;
-}
-
-// Compose the outfit list out of the saved appearance. Server-side
-// `clothing_prices.name` is the human label; without it we fall back to
-// "Slot N". The wardrobe panel reads the same shape later when it
-// renders owned pieces, so the labels stay consistent.
-function wornItemsFromAppearance(appearance) {
-  if (!appearance || typeof appearance !== 'object') return [];
-  const out = [];
-
-  // Pull a human label for a slot+drawable+texture from a tiny built-in
-  // map; production wants the catalogue query, but this stays in the UI
-  // as a label that is good enough until staff fills the pricebook.
-  const labelFor = (kind, slotId, collection, drawable, texture) => {
-    // No backend round-trip here. The wardrobe panel has the full name;
-    // here we just give the slot a recognisable label.
-    if (kind === 'component') {
-      const map = {
-        1: 'Maske', 2: 'Haar', 3: 'Oberkörper', 4: 'Hose', 5: 'Schuhe',
-        6: 'Socken', 7: 'Jacke', 8: 'Unterhemd', 9: 'Krawatte',
-        10: 'Gürtel', 11: 'Oberteil',
-      };
-      return `${map[slotId] || ('Slot ' + slotId)} #${drawable}`;
-    }
-    const pmap = {
-      0: 'Mütze', 1: 'Brille', 2: 'Ohrring', 3: 'Uhr', 4: 'Armband',
-      5: 'Ring',
-    };
-    return `${pmap[slotId] || ('Prop ' + slotId)} #${drawable}`;
-  };
-
-  for (const [k, slots] of Object.entries(appearance.components || {})) {
-    const sid = Number(k);
-    const slot = slots;
-    if (!slot || sid === undefined) continue;
-    out.push({
-      code: 'clothing_component_' + sid,
-      name: labelFor('component', sid, slot.collection, slot.drawable, slot.texture),
-      quantity: 1,
-      unitWeight: 0,
-      slot_kind: 'component',
-      slot_id: sid,
-    });
-  }
-  for (const [k, slots] of Object.entries(appearance.props || {})) {
-    const sid = Number(k);
-    const slot = slots;
-    if (!slot) continue;
-    out.push({
-      code: 'clothing_prop_' + sid,
-      name: labelFor('prop', sid, slot.collection, slot.drawable, slot.texture),
-      quantity: 1,
-      unitWeight: 0,
-      slot_kind: 'prop',
-      slot_id: sid,
-    });
-  }
-  return out;
 }
 
 function panelShop() {
@@ -685,7 +482,7 @@ function renderPanel() {
   }
 
   const builders = {
-    inventory: ['Inventar', panelInventory],
+    inventory: ['Inventar', panelInventoryProxy],
     shop: ['Shop', panelShop],
     jobs: ['Arbeit', panelJobs],
   };

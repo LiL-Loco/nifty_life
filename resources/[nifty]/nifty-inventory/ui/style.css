@@ -1,0 +1,173 @@
+/* Nifty Life 2.0 — inventory panel
+   4-section grid: BACKPACK / OUTFIT / QUICK ACCESS / ENVIRONMENT.
+   Each column is its own grid region; visibility toggles come from
+   per-character settings stored in localStorage. The four grid
+   columns stay reserved (`auto-flow` row) so toggling one section
+   off does not reflow the remaining ones.
+
+   Lives in nifty-inventory/ui/style.css. nifty-world's index.html
+   loads this sheet alongside its own, so the panel renders inside
+   nifty-world's NUI without giving nifty-world ownership of the
+   inventory panel's styling. */
+
+.inv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.inv__header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 4px 6px 2px;
+}
+.inv__title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent, #d6b469);
+}
+.inv__summary {
+  font-size: 12px;
+  color: var(--text-dim, #9a9aa4);
+}
+.inv__cog {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 4px;
+  color: var(--text-dim, #9a9aa4);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.inv__cog:hover {
+  color: var(--text, #f2f2f4);
+  border-color: var(--accent, #d6b469);
+}
+
+.inv__settings {
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inv__settings.hidden { display: none; }
+.inv__settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text, #f2f2f4);
+  cursor: pointer;
+}
+.inv__settings-row input { accent-color: var(--accent, #d6b469); }
+
+.inv__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  min-height: 320px;
+}
+
+.inv__section {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.inv__section.hidden { display: none; }
+
+.inv__section-header {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--text-dim, #9a9aa4);
+  text-align: center;
+  padding: 4px 0 6px;
+  border-bottom: 1px dashed var(--border, rgba(255,255,255,0.08));
+}
+
+.inv__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  flex: 1;
+  align-content: start;
+}
+.inv__list--quick {
+  grid-template-columns: 1fr;
+}
+
+.inv__empty {
+  font-size: 11px;
+  color: var(--text-dim, #9a9aa4);
+  font-style: italic;
+  padding: 16px 6px;
+  text-align: center;
+}
+
+.inv__tile {
+  position: relative;
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--border, rgba(255,255,255,0.08));
+  border-radius: 4px;
+  padding: 12px 6px 8px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text, #f2f2f4);
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.inv__tile:hover {
+  border-color: var(--accent, #d6b469);
+}
+.inv__tile-qty {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  color: var(--text-dim, #9a9aa4);
+}
+.inv__tile-name {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv__tile-weight {
+  font-size: 9px;
+  color: var(--text-dim, #9a9aa4);
+}
+.inv__tile--quick {
+  min-height: 36px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.inv__tile--read-only {
+  background: rgba(214, 180, 105, 0.06);
+  border-color: rgba(214, 180, 105, 0.18);
+}
+
+.inv__tile-index {
+  font-size: 14px;
+  color: var(--accent, #d6b469);
+  font-weight: 600;
+}
