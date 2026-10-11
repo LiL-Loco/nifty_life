@@ -84,7 +84,7 @@ Labels.OVERLAY_STYLES = {
     'Lochmuster', 'Ausgeblichen', 'Solo Tram',
   },
   [3] = { -- Alterung
-    'Kein', "Kraehenaugen", 'Erste Zeichen', 'Mittleres Alter', 'Sorgenfalten',
+    'Kein', "Krähenaußen", 'Erste Zeichen', 'Mittleres Alter', 'Sorgenfalten',
     'Depression', 'Unterschieden', 'Gealtert', 'Verwittert', 'Runzlig',
     'Durchhaengend', 'Hartes Leben', 'Vintage', 'Im Ruhestand', 'Fixer',
     'Greisenhaft',
@@ -115,14 +115,14 @@ Labels.OVERLAY_STYLES = {
   },
   [9] = { -- Muttermale und Sommersprossen
     'Keine', 'Cherub', 'Ueberall', 'Unregelmaessig', 'Punkt-Strich',
-    'Ueber die Bruecke', 'Baby Doll', 'Pixie', 'Sonnenkuess', 'Schoenheitsmale',
+    'Über die Bruecke', 'Baby Doll', 'Pixie', 'Sonnenkuess', 'Schoenheitsmale',
     'Aufgestellt', 'Modelesque', 'Gelegentlich', 'Gesprenkelt', ' Regentropfen',
     'Doppelt', 'Einseitig', 'Paarweise', 'Wachstum',
   },
   [10] = { -- Brustbehaarung
     'Keine', 'Natuerlich', 'Der Streifen', 'Der Baum', 'Zottelig', 'Gruesslich',
     'Affe', 'Gepflegter Affe', 'Bikini', 'Blitz', 'Umgekehrter Blitz',
-    'Liebesherz', 'Brustweh', 'Glueckliches Gesicht', 'Schaedel', 'Schneckenspur',
+    'Liebesherz', 'Brustweh', 'Glückliches Gesicht', 'Schädel', 'Schneckenspur',
     'Schnecke und Nippel', 'Behaarte Arme',
   },
 }

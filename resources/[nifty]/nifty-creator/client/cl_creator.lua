@@ -743,8 +743,8 @@ local OVERLAY_LABELS = {
   [8]  = 'Lippenstift',
   [9]  = 'Muttermale',
   [10] = 'Brustbehaarung',
-  [11] = 'Koerperpickel',
-  [12] = 'Koerperpickel (additiv)',
+  [11] = 'Körperpickel',
+  [12] = 'Körperpickel (additiv)',
 }
 
 --- Face sliders 0..19. The engine gives them no names worth shipping; the player
@@ -809,15 +809,15 @@ local FACE_2D_GROUPS = {
 --- Face-feature indices that get a 1D horizontal grid panel.
 local FACE_1D_GROUPS = {
   { id = 0,  title = 'Nasenbreite',      left = 'Schmal', right = 'Breit' },
-  { id = 3,  title = 'Nasenbeinhoehe',   left = 'Tief',   right = 'Hoch'  },
+  { id = 3,  title = 'Nasenbeinhöhe',   left = 'Tief',   right = 'Hoch'  },
   { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
   { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
   { id = 10, title = 'Wangenspalt',      left = 'Schmal', right = 'Breit' },
-  { id = 11, title = 'Augenoeffnung',    left = 'Eng',    right = 'Weit'  },
-  { id = 12, title = 'Lippendicke',      left = 'Duenn',  right = 'Dick'  },
+  { id = 11, title = 'Augenöffnung',    left = 'Eng',    right = 'Weit'  },
+  { id = 12, title = 'Lippendicke',      left = 'Dünn',  right = 'Dick'  },
   { id = 16, title = 'Kinn-Tiefe',       left = 'Flach',  right = 'Hervor' },
   { id = 18, title = 'Kinn-Loch',        left = 'Klein',  right = 'Gross' },
-  { id = 19, title = 'Hals-Dicke',       left = 'Duenn',  right = 'Dick'  },
+  { id = 19, title = 'Hals-Dicke',       left = 'Dünn',  right = 'Dick'  },
 }
 
 --- The 9 realistic eye-colour indices in the GTA palette.
@@ -1214,7 +1214,7 @@ local function buildParentsMenu()
   local heritage = NativeUI.CreateHeritageWindow(face.headBlend.mother, face.headBlend.father)
   menu:AddWindow(heritage)
 
-  Menu.separator(menu, 'Praesets')
+  Menu.separator(menu, 'Präsets')
 
   Menu.slider(menu, 'Mutter', {
     min = 0, max = MOTHER_COUNT - 1, step = 1, value = face.headBlend.mother,
@@ -1734,10 +1734,10 @@ buildRootMenu = function()
   -- is entitled to say about themselves.
   if modelIsUndecided then
     Menu.separator(menu, 'Modell')
-    for _, entry in ipairs({ { 'mp_m_freemode_01', 'Maennlich' },
+    for _, entry in ipairs({ { 'mp_m_freemode_01', 'Männlich' },
                              { 'mp_f_freemode_01', 'Weiblich' } }) do
       Menu.button(menu, entry[2], {
-        description = 'Freemode-Modell waehlen.',
+        description = 'Freemode-Modell wählen.',
         onSelect = function()
           currentModel = entry[1]
           modelIsUndecided = false
@@ -1758,7 +1758,7 @@ buildRootMenu = function()
     description = 'Eltern und Augenfarbe.',
     build = buildHeritageCategoryMenu,
   })
-  Menu.submenu(menu, 'Gesichtszuege', {
+  Menu.submenu(menu, 'Gesichtszüge', {
     description = 'Nasen, Wangen, Kinn, Brauen, ...',
     build = buildFaceFeaturesCategoryMenu,
   })
@@ -1791,8 +1791,8 @@ buildRootMenu = function()
     onSelect = function() randomiseAll() end,
   })
 
-  Menu.button(menu, 'Zuruecksetzen', {
-    description = 'Alle Auswaehle verwerfen und das Modell neu laden.',
+  Menu.button(menu, 'Zurücksetzen', {
+    description = 'Alle Auswähle verwerfen und das Modell neu laden.',
     onSelect = function() reset() end,
   })
 
@@ -1802,7 +1802,7 @@ buildRootMenu = function()
   })
 
   Menu.button(menu, 'Abbrechen', {
-    description = 'Verlassen. Beim naechsten Verbinden geht es hier weiter.',
+    description = 'Verlassen. Beim nächsten Verbinden geht es hier weiter.',
     onSelect = function() cancel() end,
   })
 

@@ -2,21 +2,21 @@
   Spawn-location picker, powered by the nifty-ui Lemon menu.
 
   Logik/Idee angelehnt an qb-spawn (qbcore-fivem/qb-spawn, GPL-3.0). Kein
-  Code uebernommen - das Picker-Konzept ist allgemein, und das nifty-ui-
+  Code übernommen - das Picker-Konzept ist allgemein, und das nifty-ui-
   Menuframework liefert das Backbone. Kamerafuehrung und Auswahlablauf
   sind eigenstaendig geschrieben.
 
   VERANTWORTLICHKEIT
 
   nifty-spawn macht NUR den Picker: Menu aufbauen, Kamerafluge, Auswahl
-  zurueckgeben. Das eigentliche Spawnen (Modell, Aussehen, Teleport,
+  zurückgeben. Das eigentliche Spawnen (Modell, Aussehen, Teleport,
   Cfx-spawnmanager) macht nifty-world im Callback. So bleibt nifty-spawn
   klein und frei von Charakterdaten.
 
   VERTRAG
   exports.openSpawnPicker(locations, onConfirm)
     locations: array of { key, label, x, y, z, heading }
-    onConfirm(x, y, z, heading): wird mit den Koordinaten der gewaehlten
+    onConfirm(x, y, z, heading): wird mit den Koordinaten der gewählten
       Location aufgerufen, NACHDEM das Menu geschlossen und die Kameras
       abgebaut sind. nil heisst "abgebrochen".
       nifty-world macht dann den Rest.
@@ -71,7 +71,7 @@ end
 local function buildAndOpen()
   local m = Menu:menu({
     title    = 'Wo willst du aufwachen?',
-    subtitle = 'Waehle einen Ort. Die Kamera fliegt hin. Bestaetige unten.',
+    subtitle = 'Wähle einen Ort. Die Kamera fliegt hin. Bestätige unten.',
     onClose  = function(_)
       destroyCams()
       local cb = onConfirmCb
@@ -104,7 +104,7 @@ local function buildAndOpen()
     })
   end
 
-  Menu:button(m, 'Bestaetigen', {
+  Menu:button(m, 'Bestätigen', {
     description = 'Hier aufwachen.',
     onSelect = function()
       confirmed = true
