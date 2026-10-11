@@ -19,7 +19,7 @@ local RESOURCE = GetCurrentResourceName()
 -- Server pushes inventory payloads here. Same event nifty-world listens
 -- to - both resources catch the broadcast.
 local invState = {
-  inventory = { items = {}, usedSlots = 0, totalSlots: 0, usedWeight: 0, maxWeight: 0 },
+  inventory = { items = {}, usedSlots = 0, totalSlots = 0, usedWeight = 0, maxWeight = 0 },
   character = nil,
 }
 
