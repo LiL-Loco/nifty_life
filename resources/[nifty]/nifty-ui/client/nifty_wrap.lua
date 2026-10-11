@@ -48,7 +48,24 @@ local function safeCall(fn, ...)
   end
 end
 
-exports('menu', function(spec)
+-- FiveM prepends the exports-namespace userdata as the first arg of
+-- every external call. nifty's call site is `Menu.separator(menu, 'X')`
+-- (dot or colon syntax - both pre-pend). Our shim body expects the
+-- user args directly. stripNamespace drops the namespace if it is
+-- arg[1], so the function bodies see the shape the in-house
+-- framework's cl_menu.lua used to see. The same fix was applied to
+-- the zUI-v2 port (commit 67d4753).
+local Self = exports[RESOURCE]
+local function stripNamespace(...)
+  local args = table.pack(...)
+  if args.n >= 1 and args[1] == Self then
+    return table.unpack(args, 2, args.n)
+  end
+  return table.unpack(args, 1, args.n)
+end
+
+exports('menu', function(...)
+  local spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   -- NativeUI's CreateMenu takes (Title, Subtitle, X, Y, TxtDictionary,
   -- TxtName, Heading, R, G, B, A). X=0, Y=0 - the menu renders at the
@@ -68,7 +85,8 @@ exports('menu', function(spec)
   return m
 end)
 
-exports('button', function(menu, label, spec)
+exports('button', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   local item = NativeUI.CreateItem(label or '', spec.description or '')
   if spec.disabled then item:Enabled(false) end
@@ -77,7 +95,8 @@ exports('button', function(menu, label, spec)
   menu:AddItem(item)
 end)
 
-exports('checkbox', function(menu, label, spec)
+exports('checkbox', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   local initial = spec.checked == true
   local item = NativeUI.CreateCheckboxItem(label or '', initial, spec.description or '')
@@ -88,7 +107,8 @@ exports('checkbox', function(menu, label, spec)
   menu:AddItem(item)
 end)
 
-exports('slider', function(menu, label, spec)
+exports('slider', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   local min = tonumber(spec.min) or 0
   local max = tonumber(spec.max) or 100
@@ -124,7 +144,8 @@ exports('slider', function(menu, label, spec)
   menu:AddItem(item)
 end)
 
-exports('select', function(menu, label, spec)
+exports('select', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   local items = spec.items or {}
   local index = tonumber(spec.index) or 1
@@ -142,7 +163,8 @@ exports('select', function(menu, label, spec)
   menu:AddItem(item)
 end)
 
-exports('separator', function(menu, label)
+exports('separator', function(...)
+  local menu, label = stripNamespace(...)
   -- NativeUI exposes UIMenuSeparatorItem as a global (loaded by
   -- UIMenu/items/UIMenuSeparatorItem.lua before this file). Its
   -- New() function has a bug in the upstream library (Text and
@@ -160,7 +182,8 @@ end)
 -- variable on the menu, so the rest of the menu can read it via
 -- Menu.input's getValue pattern (callers read it at click time of
 -- the "save" button, not via a callback).
-exports('input', function(menu, label, spec)
+exports('input', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   if menu._input_value == nil then
     menu._input_value = tostring(spec.value or '')
@@ -185,7 +208,8 @@ exports('input', function(menu, label, spec)
   menu:AddItem(item)
 end)
 
-exports('list', function(menu, spec)
+exports('list', function(...)
+  local menu, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   -- nifty's "list" was an old API the codebase never used; emit a
   -- disabled button so callers that mistakenly use it see something
@@ -195,7 +219,8 @@ exports('list', function(menu, spec)
   menu:AddItem(item)
 end)
 
-exports('submenu', function(menu, label, spec)
+exports('submenu', function(...)
+  local menu, label, spec = stripNamespace(...)
   if type(spec) ~= 'table' then spec = {} end
   -- A submenu is a button that, when activated, builds and shows a
   -- child UIMenu. We lazily build the child the first time the button
@@ -238,12 +263,14 @@ local function presentHandle(menu)
   return true
 end
 
-exports('openMenu', function(_owner, menu)
+exports('openMenu', function(...)
+  local _owner, menu = stripNamespace(...)
   if not presentHandle(menu) then return false end
   return true
 end)
 
-exports('pushMenu', function(_owner, menu)
+exports('pushMenu', function(...)
+  local _owner, menu = stripNamespace(...)
   -- pushMenu: caller has a new menu to show, replacing the current
   -- one. We close everything currently visible first to mirror the
   -- previous framework's "navigate to new menu" behaviour.
@@ -251,7 +278,8 @@ exports('pushMenu', function(_owner, menu)
   return presentHandle(menu)
 end)
 
-exports('closeMenu', function(_owner, _reason)
+exports('closeMenu', function(...)
+  local _owner, _reason = stripNamespace(...)
   -- Close whichever menu is currently visible. The OnMenuClose
   -- handler set up by presentHandle fires the user's onClose with the
   -- reason. NativeUI's close does not pass a reason, so we collapse
@@ -260,11 +288,11 @@ exports('closeMenu', function(_owner, _reason)
   pool:CloseAllMenus()
 end)
 
-exports('isOpen', function()
+exports('isOpen', function(...)
   return pool:IsAnyMenuOpen()
 end)
 
-exports('holder', function()
+exports('holder', function(...)
   -- The native-UI menu does not need the focus broker; the broker
   -- stays in nifty-core for chat/phone. We return the broker's
   -- current holder so callers that diagnose focus (e.g. the creator's
