@@ -6,6 +6,15 @@
 --- PORTED FROM root-cause/ragemp-hood-up (MIT), see LEARNINGS.md for the
 --- licence and for the two places this port deliberately departs from it.
 
+-- The table has to be CREATED before the first field assignment, not opened
+-- as if it already existed. A previous version of this file started with
+-- `Clothing.COMPONENT_TOP = 11` directly, which on the very first load (the
+-- only load order that matters - the one that establishes the global) was an
+-- `attempt to index a nil value (global 'Clothing')`. The error stopped being
+-- raised only because the resource still reported "Started"; the rest of the
+-- resource was then running against a Clothing table that did not exist.
+Clothing = Clothing or {}
+
 --- The only component and prop this system ever touches.
 Clothing.COMPONENT_TOP    = 11
 Clothing.COMPONENT_MASK   = 1
