@@ -764,6 +764,20 @@ local HAIR_PALETTE = {
   { 162, 80,  47,  255 },  { 170, 78,  43,  255 },  { 98,  98,  98,  255 },
 }
 
+--- Shared colour-channel builder for hair colour panels.
+--- Returns a NativeUI list item with a colour panel attached.
+local function makeHairChannel(label, currentIndex)
+  local max = #HAIR_PALETTE
+  local value = math.max(0, math.min(max, currentIndex or 0)) + 1
+  local placeholders = {}
+  for i = 1, max do placeholders[i] = (i .. '.') end
+  local item = NativeUI.CreateListItem(label, placeholders, value, '')
+  local panel = NativeUI.CreateColourPanel(label, HAIR_PALETTE)
+  panel:CurrentSelection(value, true)
+  item:AddPanel(panel)
+  return item
+end
+
 --- The makeup colour palette (used by the colour picker on the makeup row).
 local MAKEUP_PALETTE = {
   { 240, 200, 195, 255 },  { 220, 170, 165, 255 },  { 200, 140, 130, 255 },
@@ -1477,47 +1491,6 @@ local function buildFaceMenu()
 end
 
 --- Hair colour: primary and highlight, both from the hair palette.
-local function buildHairColourMenu()
-  -- lbg-char pattern. A list item per colour channel (primary, highlight).
-  -- A NativeUI.CreateColourPanel is attached to each; the OnListChanged
-  -- reads the panel's current selection. The list entry names (1..N) are
-  -- placeholder labels for the colour index; the panel is what carries
-  -- the colour value, not the list.
-  local menu = NativeUI.CreateMenu(
-    'Haarfarbe', 'Hauptfarbe und Strähnen aus der Haar-Palette.', 1300, 0,
-    'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
-  )
-
-  local function makeChannel(label, currentIndex)
-    local max = #HAIR_PALETTE
-    local value = math.max(0, math.min(max, currentIndex or 0)) + 1
-    local placeholders = {}
-    for i = 1, max do placeholders[i] = (i .. '.') end
-    local item = NativeUI.CreateListItem(label, placeholders, value, '')
-    local panel = NativeUI.CreateColourPanel(label, HAIR_PALETTE)
-    panel:CurrentSelection(value, true)
-    item:AddPanel(panel)
-    return item
-  end
-
-  local primaryItem = makeChannel('Hauptfarbe', face.hairColour.primary)
-  local highlightItem = makeChannel('Strähnen', face.hairColour.highlight)
-
-  primaryItem.OnListChanged = function(_p, _i, _idx)
-    face.hairColour.primary = primaryItem.Panels[1]:CurrentSelection() - 1
-    SetPedHairColor(PlayerPedId(), face.hairColour.primary, face.hairColour.highlight or 0)
-    refresh()
-  end
-  highlightItem.OnListChanged = function(_p, _i, _idx)
-    face.hairColour.highlight = highlightItem.Panels[1]:CurrentSelection() - 1
-    SetPedHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight)
-    refresh()
-  end
-
-  menu:AddItem(primaryItem)
-  menu:AddItem(highlightItem)
-  return menu
-end
 
 --- One zone's tattoos.
 ---
@@ -1650,23 +1623,35 @@ buildSlotMenu = function(kind, id)
   })
 
   -- Ausführung: one list item per texture. Same naming convention.
-  local texLabels = {}
-  for t = 0, option.textures - 1 do
-    local n = nameFor(drawable, t)
-    texLabels[t + 1] = n or ('Ausfuehrung %d'):format(t)
+  -- Hair slot (2) replaces this with a colour picker for Hauptfarbe.
+  local isHairSlot = (kind == 'components' and tonumber(id) == 2)
+  if isHairSlot then
+    local hairItem = makeHairChannel('Haarfarbe', face.hairColour.primary)
+    hairItem.OnListChanged = function(_p, _i, _idx)
+      face.hairColour.primary = hairItem.Panels[1]:CurrentSelection() - 1
+      SetPedHairColor(PlayerPedId(), face.hairColour.primary, face.hairColour.highlight or 0)
+      refresh()
+    end
+    menu:AddItem(hairItem)
+  else
+    local texLabels = {}
+    for t = 0, option.textures - 1 do
+      local n = nameFor(drawable, t)
+      texLabels[t + 1] = n or ('Ausfuehrung %d'):format(t)
+    end
+    Menu.select(menu, 'Ausführung', {
+      items = texLabels,
+      index = texture + 1,
+      onChange = function(i)
+        local live = slotOf(kind, id) or {}
+        setSlot(kind, id, {
+          collection = option.name,
+          drawable   = tonumber(live.drawable) or 0,
+          texture    = i - 1,
+        })
+      end,
+    })
   end
-  Menu.select(menu, 'Ausführung', {
-    items = texLabels,
-    index = texture + 1,
-    onChange = function(i)
-      local live = slotOf(kind, id) or {}
-      setSlot(kind, id, {
-        collection = option.name,
-        drawable   = tonumber(live.drawable) or 0,
-        texture    = i - 1,
-      })
-    end,
-  })
 
   return menu
 end
@@ -1703,10 +1688,8 @@ local function buildHairCategoryMenu()
       build = function() return buildSlotMenu('components', 2) end,
     })
   end
-  Menu.submenu(menu, 'Haarfarbe', {
-    description = 'Hauptfarbe und Strähnen.',
-    build = buildHairColourMenu,
-  })
+  -- Haarfarbe is now inside the Frisur slot menu (buildSlotMenu for slot 2),
+  -- directly below the Modell row. No separate submenu needed.
   return menu
 end
 
