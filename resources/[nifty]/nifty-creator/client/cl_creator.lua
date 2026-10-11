@@ -957,6 +957,17 @@ local face = {
   headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 },
 }
 
+--- The 9 realistic eye-colour indices in the GTA palette.
+---
+--- The engine ships 32 (0..31), but only 0..8 are things a human eye
+--- actually looks like - green, emerald, light/ocean blue, light/dark
+--- brown, hazel, dark/light grey. The rest are eye shadow tints
+--- (Tequila Sunrise, Warp, ECola) and outright monster eyes
+--- (Lizard, Dragon, Zombie, ...). A realistic-roleplay character
+--- creator offers the realistic subset, with the rest reachable only
+--- through admin commands.
+local REALISTIC_EYE_COLOUR_MAX = 8
+
 --- The whole appearance as the creator currently sees it.
 local function appearanceNow()
   return {
@@ -1435,12 +1446,23 @@ local function buildParentsMenu()
   return menu
 end
 
---- Eye colour: the game's thirty-two, in the engine's own order.
+--- Eye colour: the nine realistic shades, in the engine's own order.
+---
+--- GTA ships 32 (0..31); we offer 0..8, the indices that map to
+--- green, emerald, light/ocean blue, light/dark brown, hazel,
+--- dark/light grey. The slider value is clamped on read so a
+--- stored character with an eye colour above 8 (from before the
+--- realistic-only rule) falls back to the closest realistic index
+--- instead of going out of range.
 local function buildEyeColourMenu()
   local menu = Menu.menu({ title = 'Augenfarbe', dock = 'right' })
 
+  local current = face.eyeColour or 0
+  if current > REALISTIC_EYE_COLOUR_MAX then current = REALISTIC_EYE_COLOUR_MAX end
+  if current < 0 then current = 0 end
+
   Menu.slider(menu, 'Farbe', {
-    min = 0, max = AppearanceConfig.MAX_EYE_COLOUR, step = 1, value = face.eyeColour or 0,
+    min = 0, max = REALISTIC_EYE_COLOUR_MAX, step = 1, value = current,
     format = function(value)
       return Labels.EYE_COLOURS[value + 1] or ('Farbe %d'):format(value)
     end,
@@ -2086,7 +2108,7 @@ randomiseAll = function()
     highlight = (math.random(1, 3) <= 1) and math.random(0, #HAIR_PALETTE - 1) or 0,
   }
 
-  face.eyeColour = math.random(0, AppearanceConfig.MAX_EYE_COLOUR)
+  face.eyeColour = math.random(0, REALISTIC_EYE_COLOUR_MAX)
 
   -- Parents and weights. thirdWeight is capped at 0.2 so the third
   -- person stays a hint, not a third of the face. motherWeight and
