@@ -173,9 +173,10 @@ exports('select', function(...)
 end)
 
 exports('separator', function(...)
-  print(('[nifty-ui] separator called, n_args=%d, LastBuiltMenu=%s'):format(select('#', ...), tostring(LastBuiltMenu)))
+  local n_args = select('#', ...)
+  print(('[nifty-ui] separator called, n_args=%d, LastBuiltMenu=%s'):format(n_args, tostring(LastBuiltMenu)))
+  local label = ...
   local ok, result = pcall(function()
-    local label = ...
     print(('[nifty-ui]   label=%s'):format(tostring(label)))
     local item = UIMenuSeparatorItem.New()
     print(('[nifty-ui]   item created, type=%s'):format(type(item)))
