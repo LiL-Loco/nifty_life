@@ -171,8 +171,6 @@ export const RULEBOOK_QUESTIONS: RulebookQuestion[] = [
   },
 ];
 
-export const RULEBOOK_QUESTION_IDS = RULEBOOK_QUESTIONS.map((q) => q.id);
-
 /**
  * The rulebook wording, for the copied-answer check — EMPTY ON PURPOSE.
  *

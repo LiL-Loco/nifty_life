@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { authorizeUrl } from '@/lib/discord';
 import { discordConfigured } from '@/lib/config';
 import { decodeSession } from '@/lib/session';
-import { cookieOptions } from '@/lib/session';
+import { cookieOptions, SESSION_COOKIE } from '@/lib/session';
 
 /**
  * Start ATTACHING a Discord account.
@@ -22,7 +22,7 @@ import { cookieOptions } from '@/lib/session';
 export async function GET(request: Request) {
   const store = await cookies();
 
-  if (!decodeSession(store.get('nifty_session')?.value)) {
+  if (!decodeSession(store.get(SESSION_COOKIE)?.value)) {
     return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
   }
 

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { exchangeCode } from '@/lib/discord';
 import { linkDiscord, findUserByDiscordId } from '@/lib/users';
-import { decodeSession, encodeSession, cookieOptions } from '@/lib/session';
+import { decodeSession, encodeSession, cookieOptions, SESSION_COOKIE } from '@/lib/session';
 
 /**
  * Discord sends the person back here after they approved the round trip.
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 
     const response = NextResponse.redirect(new URL('/account', request.url));
     response.cookies.set(
-      'nifty_session',
+      SESSION_COOKIE,
       encodeSession({ userId: account.userId, email: account.email }),
       cookieOptions(),
     );
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
   }
 
   // ---- ATTACH -----------------------------------------------------------
-  const session = decodeSession(store.get('nifty_session')?.value);
+  const session = decodeSession(store.get(SESSION_COOKIE)?.value);
   if (!session) {
     return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
   }

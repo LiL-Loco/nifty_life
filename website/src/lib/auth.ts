@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 
-import { decodeSession, type Session } from './session';
+import { decodeSession, SESSION_COOKIE, type Session } from './session';
 import { findUser, linkedDiscord, type DiscordLink, type PortalUser } from './users';
 import { isStaff } from './identity';
 
@@ -49,7 +49,7 @@ export interface Account {
  */
 export const currentAccount = cache(async (): Promise<Account | null> => {
   const store = await cookies();
-  const session = decodeSession(store.get('nifty_session')?.value);
+  const session = decodeSession(store.get(SESSION_COOKIE)?.value);
   if (!session) return null;
 
   return resolveAccount(session);
@@ -96,18 +96,4 @@ export async function requireAccount(): Promise<Account> {
 export async function requireStaffAccount(): Promise<Account | null> {
   const account = await requireAccount();
   return account.isStaff ? account : null;
-}
-
-/**
- * The signed-in account, but only if it has a linked Discord account.
- *
- * Separate from `requireStaffAccount` on purpose. Linking Discord is what makes
- * somebody ADDRESSABLE by the game server, so everything keyed on the Discord ID
- * — an application, a character link, a pairing code — goes through this one, and
- * gets its own message when it fails. A person who has not linked yet is not an
- * error; they are one click away.
- */
-export async function requireLinkedAccount(): Promise<(Account & { discord: DiscordLink }) | null> {
-  const account = await requireAccount();
-  return account.discord ? (account as Account & { discord: DiscordLink }) : null;
 }

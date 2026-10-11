@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { currentAccount } from '@/lib/auth';
 import { existingCharacterForDiscord } from '@/lib/characters';
+import { CHARACTER_FORM_INTRO } from '@/lib/copy';
 import { Card } from '@/components/ui';
 import { CharacterForm } from '@/app/(site)/apply/character/character-form';
 
@@ -76,9 +77,7 @@ export default async function AccountCharacterPage() {
     <>
       <h1 className="px-5 sm:px-6">Charakter anlegen</h1>
       <p className="mb-8 px-5 text-muted-foreground sm:px-6">
-        Vorname, Nachname, Geschlecht und Geburtsdatum. Der Vorname ist
-        Pflicht; alles andere kann später im Spiel angepasst werden. Das
-        Aussehen wird im Spiel eingestellt, nicht hier.
+        {CHARACTER_FORM_INTRO}
       </p>
       <CharacterForm />
     </>

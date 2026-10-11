@@ -23,7 +23,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { config } from './config';
 
-const COOKIE_NAME = 'nifty_session';
+/**
+ * The one place the session cookie's name is written down.
+ *
+ * It used to be a literal at every read and every write, which meant a rename
+ * was six edits with no compiler help — and a missed one silently logs nobody
+ * out. The OAuth state cookie keeps its literal; it is set and cleared on
+ * adjacent lines and is not read outside the two routes that write it.
+ */
+export const SESSION_COOKIE = 'nifty_session';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 14; // 14 days
 
 /** A v4 UUID. Same shape `crypto.randomUUID()` produces and `newUuid()` stores. */
@@ -96,11 +104,6 @@ export function decodeSession(value: string | undefined): Session | null {
     return null;
   }
 }
-
-export const sessionCookie = {
-  name: COOKIE_NAME,
-  maxAge: MAX_AGE_SECONDS,
-};
 
 /** Cookie attributes. httpOnly keeps it away from scripts, and `lax` still lets a Discord redirect carry it back in. */
 export function cookieOptions() {

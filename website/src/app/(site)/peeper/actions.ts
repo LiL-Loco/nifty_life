@@ -190,22 +190,3 @@ export async function staffDelete(
   revalidatePath('/peeper');
   return { ok: 'Beitrag gelöscht.' };
 }
-
-/** Like or unlike as the team. */
-export async function staffToggleLike(
-  _prev: ActionState,
-  form: FormData,
-): Promise<ActionState> {
-  const account = await staffAccount();
-  if ('error' in account) return account;
-
-  const postId = String(form.get('post') ?? '');
-  if (form.get('liked') === '1') {
-    await staffUnlike(account.discord.discordId, postId);
-  } else {
-    await staffLike(account.discord.discordId, postId);
-  }
-
-  revalidatePath('/peeper');
-  return undefined;
-}

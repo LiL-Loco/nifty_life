@@ -41,35 +41,6 @@ export async function linkedCharacter(discordId: string): Promise<LinkedCharacte
 }
 
 /**
- * The display name to publish under.
- *
- * The website has no grant on `characters` - that is deliberate, and it is why
- * posts snapshot their author's name. Until a post exists there is nothing to
- * snapshot, so this reads the name the game server already exposed through the
- * post feed rather than reaching for a table we are not allowed to read.
- */
-export async function latestKnownName(
-  discordId: string,
-  characterId: string,
-): Promise<string | null> {
-  const row = await one<{ author_name: string }>(
-    `SELECT author_name
-       FROM peeper_posts
-      WHERE author_character = ?
-      ORDER BY created_at DESC
-      LIMIT 1`,
-    [characterId],
-  );
-
-  // discordId is intentionally unused here: it keeps the signature honest for
-  // callers that have one, and makes it obvious that the name cannot be
-  // attacker-supplied. It is derived from the session, never from a form.
-  void discordId;
-
-  return row?.author_name ?? null;
-}
-
-/**
  * Is this Discord account a member of the moderation team?
  *
  * Staff is a DISCORD ROLE, mirrored into the `staff` table by the bot in `bot/`.

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { encodeSession, cookieOptions } from '@/lib/session';
+import { encodeSession, cookieOptions, SESSION_COOKIE } from '@/lib/session';
 import { authenticate, issueEmailToken, register } from '@/lib/users';
 import { sendMail, mailConfigured, publicUrl } from '@/lib/mailer';
 
@@ -61,7 +61,7 @@ export async function registerAction(
   // asks you to confirm is one you have to be able to reach.
   const store = await cookies();
   store.set(
-    'nifty_session',
+    SESSION_COOKIE,
     encodeSession({ userId: result.user.id, email: result.user.email }),
     cookieOptions(),
   );
@@ -91,7 +91,7 @@ export async function signInAction(
 
   const store = await cookies();
   store.set(
-    'nifty_session',
+    SESSION_COOKIE,
     encodeSession({ userId: result.user.id, email: result.user.email }),
     cookieOptions(),
   );
