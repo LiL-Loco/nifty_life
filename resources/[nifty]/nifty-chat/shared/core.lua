@@ -21,7 +21,7 @@ Nifty = Nifty or {}
 --- Nil, not an error, when the base is not up. `dependencies` in fxmanifest orders
 --- the start, but a base that fails still leaves the system running against nil,
 --- and a loud error here beats a nil-index ten lines deeper.
-Nifty.core = exports['nifty-core']:facade()
+Nifty.core = IsDuplicityVersion() and exports['nifty-core']:facade()
 
 if not Nifty.core then
   print('[nifty-chat] nifty-core is not available - chat is disabled')
