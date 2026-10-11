@@ -22,12 +22,41 @@
   crossing, which is the point: the page can redraw the menu, a submenu can be
   restored after a focus change, and nothing the browser does can become a Lua
   call it was not given.
+
+  ---
+
+  FiveM's exports namespace auto-adds itself to every call. That is: the
+  function the user registered with exports('menu', function(spec) ... end)
+  is invoked with (Menu, spec) when the user code is `Menu.menu(spec)`,
+  and with (spec) when the call comes from inside this resource directly.
+  Every export below calls stripSelf(...) on its args; that helper detects
+  which case we are in and returns the slice starting at the real first
+  user arg. Without this the menu export receives the namespace as `spec`,
+  the namespace has no `title` or `items` field, and the resulting menu is
+  an empty table. Diagnosed 2026-10-11 (commit 3a0d06a -> 6275267).
 ]]
 
 local RESOURCE = GetCurrentResourceName()
 
 --- The broker, the only thing allowed to touch SetNuiFocus. See cl_focus.lua.
 local Focus = exports['nifty-core']
+
+--- This is the exports namespace itself. Every entry below uses it to detect
+--- whether FiveM has prepended the namespace as `self` to the call. We have
+--- to support both call patterns (FiveM auto-add AND a direct in-resource
+--- call); the helper does the routing.
+local Self = exports['nifty-core']
+
+--- Strip the leading `self` arg if it is the namespace. FiveM adds it on
+--- every call; an in-resource direct call does not. After the strip the
+--- returned values are exactly the user-passed args, in order.
+local function stripSelf(...)
+  local args = table.pack(...)
+  if args.n >= 1 and args[1] == Self then
+    return table.unpack(args, 2, args.n)
+  end
+  return table.unpack(args, 1, args.n)
+end
 
 --- What is on screen right now: the owner resource, its menu table, and a token.
 --- The token is what makes close events unambiguous — see `closeMenu` below.
@@ -70,25 +99,21 @@ local function push(menu, item)
   return menu
 end
 
-exports('menu', function(spec, ...)
-  -- FiveM's exports namespace auto-adds itself to every call, so by the
-  -- time we see the first arg it is `Menu`, the namespace table. The
-  -- actual spec the caller passed is the second arg. We have to ignore
-  -- the first.
-  local realSpec = select(2, ...) or spec
-  print(('[nifty-core] menu export: nargs=%d, realSpec type=%s'):format(
-    select('#', spec, ...) + 1, type(realSpec)))
-  return newMenu(type(realSpec) == 'table' and realSpec or {})
+exports('menu', function(...)
+  local spec = stripSelf(...)
+  return newMenu(type(spec) == 'table' and spec or {})
 end)
 
 --- A row that is drawn and does nothing. Used to break a long menu into readable
 --- groups; it carries no state and no callback.
-exports('separator', function(menu, label)
+exports('separator', function(...)
+  local menu, label = stripSelf(...)
   return push(menu, { kind = 'separator', label = label or '' })
 end)
 
 --- A button. `onSelect` fires on click and on Enter while the row is selected.
-exports('button', function(menu, label, spec)
+exports('button', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
   return push(menu, {
     kind = 'button',
@@ -100,7 +125,8 @@ exports('button', function(menu, label, spec)
 end)
 
 --- A checkbox. One boolean, toggled in place.
-exports('checkbox', function(menu, label, spec)
+exports('checkbox', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
   return push(menu, {
     kind = 'checkbox',
@@ -117,20 +143,17 @@ end)
 --- buttons: 0..100 is one row with a draggable handle, not a hundred targets. A
 --- step of 5 is only right where the underlying value is coarse — and the caller
 --- knows that, which is why it is a parameter and not a guess.
-exports('slider', function(menu, label, spec)
+exports('slider', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
-
   local min = tonumber(spec.min) or 0
   local max = tonumber(spec.max) or 100
   local step = tonumber(spec.step) or 1
-
   if max <= min then max = min + 1 end
   if step <= 0 then step = 1 end
-
   local value = tonumber(spec.value) or min
   if value < min then value = min end
   if value > max then value = max end
-
   return push(menu, {
     kind = 'slider',
     label = tostring(label or ''),
@@ -138,7 +161,7 @@ exports('slider', function(menu, label, spec)
     max = max,
     step = step,
     value = value,
-    format = spec.format or nil,   -- fn(value) -> string, for "12 / 100"
+    format = spec.format or nil,
     description = spec.description or nil,
     onChange = spec.onChange,
   })
@@ -155,7 +178,8 @@ end)
 --- length-checked for meaning and not trimmed — that is the resource that built
 --- the menu, and on the server, not the widget. All this does is carry characters
 --- a player typed to whoever asked for them.
-exports('input', function(menu, label, spec)
+exports('input', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
   return push(menu, {
     kind = 'input',
@@ -170,7 +194,8 @@ end)
 
 --- One of N, chosen from a list. Different from a list item in that it does not
 --- open anything: it changes a value in place, like a checkbox changes a boolean.
-exports('select', function(menu, label, spec)
+exports('select', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
   local items = {}
 
@@ -196,7 +221,8 @@ end)
 --- time the row is opened, so a menu with ten submenus is not built ten times at
 --- construction — and a submenu whose contents depend on state reads that state at
 --- open time rather than at construction time.
-exports('submenu', function(menu, label, spec)
+exports('submenu', function(...)
+  local menu, label, spec = stripSelf(...)
   spec = spec or {}
   return push(menu, {
     kind = 'submenu',
@@ -210,7 +236,8 @@ end)
 --- fires on click and on Enter. This is the one item kind that knows nothing about
 --- the payload: it hands it back untouched, so a caller can put a drawable index,
 --- a phone number or a property id in there without this file knowing which.
-exports('list', function(menu, spec)
+exports('list', function(...)
+  local menu, spec = stripSelf(...)
   spec = spec or {}
   local rows = {}
 
@@ -289,7 +316,8 @@ end
 --- A menu that silently replaced whatever was on screen would leave a player
 --- staring at a menu with dead controls, which is the exact class of bug the focus
 --- broker was written to make impossible.
-exports('openMenu', function(owner, menu)
+exports('openMenu', function(...)
+  local owner, menu = stripSelf(...)
   if type(menu) ~= 'table' or #menu.items == 0 then
     print(('[nifty-core] menu.openMenu(%s) -> REJECTED, items=%s, type=%s'):format(
       tostring(owner), tostring(type(menu) == 'table' and #menu.items or 'n/a'),
@@ -317,7 +345,8 @@ exports('openMenu', function(owner, menu)
 end)
 
 --- Replace the open menu with another, keeping focus. This is what a submenu is.
-exports('pushMenu', function(owner, menu)
+exports('pushMenu', function(...)
+  local owner, menu = stripSelf(...)
   if type(menu) ~= 'table' or #menu.items == 0 then
     print(('[nifty-core] menu.pushMenu(%s) -> REJECTED, items=%s'):format(
       tostring(owner), tostring(type(menu) == 'table' and #menu.items or 'n/a')))
@@ -361,16 +390,19 @@ local function close(current, reason)
   return true
 end
 
-exports('closeMenu', function(owner, reason)
+exports('closeMenu', function(...)
+  local owner, reason = stripSelf(...)
   if Current == nil or Current.owner ~= owner then return false end
   return close(Current, reason)
 end)
 
-exports('isOpen', function()
+exports('isOpen', function(...)
+  return Current ~= nil
   return Current ~= nil
 end)
 
-exports('holder', function()
+exports('holder', function(...)
+  return Holder
   return Current
 end)
 
