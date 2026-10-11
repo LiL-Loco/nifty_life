@@ -1,23 +1,23 @@
---- Identity (ADR-0014 layer 3).
----
---- Owns the character lifecycle and the session record:
----   connect -> whitelist -> load-or-create character -> play -> save -> end session
----
---- The rule this file exists to enforce is ADR-0001: a FiveM slot ID is never a
---- key. It is recorded once in `sessions` and nowhere else, and the in-memory
---- map from slot to character is runtime state that dies with the connection.
---- Every save is keyed by character UUID, which is why reconnecting restores the
---- right person even if the engine hands the same slot number to someone else.
+-- Identity (ADR-0014 layer 3).
+--
+-- Owns the character lifecycle and the session record:
+--   connect -> whitelist -> load-or-create character -> play -> save -> end session
+--
+-- The rule this file exists to enforce is ADR-0001: a FiveM slot ID is never a
+-- key. It is recorded once in `sessions` and nowhere else, and the in-memory
+-- map from slot to character is runtime state that dies with the connection.
+-- Every save is keyed by character UUID, which is why reconnecting restores the
+-- right person even if the engine hands the same slot number to someone else.
 
 local RESOURCE = GetCurrentResourceName()
 
 math.randomseed(os.time() + math.floor(os.clock() * 1000))
 
---- Runtime-only. Maps FiveM slot -> { characterId, sessionId }. Lost on
---- restart, which is fine: `sessions` is the durable record, this is a cache.
+-- Runtime-only. Maps FiveM slot -> { characterId, sessionId }. Lost on
+-- restart, which is fine: `sessions` is the durable record, this is a cache.
 local ActiveSessions = {}
 
---- Per-player attempt counters, so a client cannot spam character creation.
+-- Per-player attempt counters, so a client cannot spam character creation.
 local CreationAttempts = {}
 local MAX_CREATE_ATTEMPTS = 5
 
@@ -27,17 +27,17 @@ end
 
 Identity = {}
 
---- The Discord ID behind a connection, or nil.
----
---- Two APIs can answer this and only one is guaranteed to exist. `GetPlayerIdentifiers`
---- has been in the server runtime since forever and returns prefixed entries like
---- `discord:123456`. `GetPlayerIdentifiersByType` is a newer convenience wrapper that
---- is NOT present on every build — calling it unconditionally kills the resource on
---- the first connection, which is exactly what happened on this server. So the
---- guaranteed API is primary and the optional one is only used when it exists.
----
---- The returned value is normalised to a bare digit string, because the two APIs
---- disagree about the prefix and `accounts.discord_id` is stored bare.
+-- The Discord ID behind a connection, or nil.
+--
+-- Two APIs can answer this and only one is guaranteed to exist. `GetPlayerIdentifiers`
+-- has been in the server runtime since forever and returns prefixed entries like
+-- `discord:123456`. `GetPlayerIdentifiersByType` is a newer convenience wrapper that
+-- is NOT present on every build — calling it unconditionally kills the resource on
+-- the first connection, which is exactly what happened on this server. So the
+-- guaranteed API is primary and the optional one is only used when it exists.
+--
+-- The returned value is normalised to a bare digit string, because the two APIs
+-- disagree about the prefix and `accounts.discord_id` is stored bare.
 local function discordIdOf(src)
   local ids = nil
 
@@ -66,19 +66,19 @@ local function discordIdOf(src)
   return id
 end
 
---- Public because sv_main.lua's connection gate needs the same answer, and two
---- copies of this logic are two places for them to disagree.
+-- Public because sv_main.lua's connection gate needs the same answer, and two
+-- copies of this logic are two places for them to disagree.
 Identity.discordIdOf = discordIdOf
 
---- Resolve the account behind a connection. Identity comes from the connection,
---- never from anything the client sends.
----
---- `status = 'active'` is filtered HERE as well as in the `playerConnecting`
---- whitelist check. The connecting check is the gate, but this function is also
---- reached from `nifty:server:ready`, and a gate that only exists in one of two
---- paths to the same privilege is not a gate. A pending or suspended account must
---- resolve to nothing here, so that being whitelisted once and suspended later
---- actually stops something.
+-- Resolve the account behind a connection. Identity comes from the connection,
+-- never from anything the client sends.
+--
+-- `status = 'active'` is filtered HERE as well as in the `playerConnecting`
+-- whitelist check. The connecting check is the gate, but this function is also
+-- reached from `nifty:server:ready`, and a gate that only exists in one of two
+-- paths to the same privilege is not a gate. A pending or suspended account must
+-- resolve to nothing here, so that being whitelisted once and suspended later
+-- actually stops something.
 function Identity.resolveAccount(src)
   local discordId = discordIdOf(src)
   if not discordId then return nil end
@@ -101,31 +101,31 @@ function Identity.getCharacter(accountId)
   ]], { accountId }, 'identity:character')
 end
 
---- Create the character and its wallet together. A character without a wallet is
---- an unplayable state, so both rows go in one transaction or neither does.
---- Create the one character this account is allowed.
----
---- `number` is REQUIRED and comes from the caller, which got it from
---- `exports['nifty-phone']:reserve()`. That inversion is the reason the base has
---- no idea the phone system exists.
----
---- It used to: this function called `Phone.newNumber()` and
---- `Inventory.grantStartingItems(characterId)` directly, because all three lived in
---- one resource and a global was free. After the split a global is not free — it is
---- a resource boundary. Leaving those calls in would make nifty-core depend on
---- nifty-phone and nifty-inventory, while nifty-inventory already depends on
---- nifty-core for the database. Two resources that each need the other to have
---- started is a boot order with no valid first element, and FXServer resolves it by
---- failing one of them at random.
----
---- The orchestrator is nifty-world (sv_main.lua), which is allowed to know about
---- both systems because its whole job is the connect-to-play sequence.
----
---- The number still has to land in the SAME transaction as the character row
---- (ADR-0021) — a character without a number could never be messaged, and the
---- number is permanent, so it cannot be added afterwards as a convenience. Passing
---- it in rather than calling out preserves that: the INSERT below is still inside
---- this transaction, it just receives its value from outside.
+-- Create the character and its wallet together. A character without a wallet is
+-- an unplayable state, so both rows go in one transaction or neither does.
+-- Create the one character this account is allowed.
+--
+-- `number` is REQUIRED and comes from the caller, which got it from
+-- `exports['nifty-phone']:reserve()`. That inversion is the reason the base has
+-- no idea the phone system exists.
+--
+-- It used to: this function called `Phone.newNumber()` and
+-- `Inventory.grantStartingItems(characterId)` directly, because all three lived in
+-- one resource and a global was free. After the split a global is not free — it is
+-- a resource boundary. Leaving those calls in would make nifty-core depend on
+-- nifty-phone and nifty-inventory, while nifty-inventory already depends on
+-- nifty-core for the database. Two resources that each need the other to have
+-- started is a boot order with no valid first element, and FXServer resolves it by
+-- failing one of them at random.
+--
+-- The orchestrator is nifty-world (sv_main.lua), which is allowed to know about
+-- both systems because its whole job is the connect-to-play sequence.
+--
+-- The number still has to land in the SAME transaction as the character row
+-- (ADR-0021) — a character without a number could never be messaged, and the
+-- number is permanent, so it cannot be added afterwards as a convenience. Passing
+-- it in rather than calling out preserves that: the INSERT below is still inside
+-- this transaction, it just receives its value from outside.
 function Identity.createCharacter(src, payload, number)
   local attempts = (CreationAttempts[src] or 0) + 1
   CreationAttempts[src] = attempts
@@ -241,7 +241,7 @@ function Identity.createCharacter(src, payload, number)
   return Identity.getCharacter(account.id)
 end
 
---- Open a session. The slot ID goes in for auditing only.
+-- Open a session. The slot ID goes in for auditing only.
 function Identity.beginSession(src, characterId)
   local sessionId = Db.insert([[
     INSERT INTO sessions (character_id, fivem_slot_id, fivem_license)
@@ -257,27 +257,27 @@ function Identity.getActiveCharacter(src)
   return entry and entry.characterId or nil
 end
 
---- Every slot this resource currently believes is active.
----
---- Exists for the session watchdog, which has to compare this list against the
---- engine's player list to find slots the engine has released. Keeping the table
---- private is deliberate; exposing a copy of the keys is not the same as exposing
---- the table.
+-- Every slot this resource currently believes is active.
+--
+-- Exists for the session watchdog, which has to compare this list against the
+-- engine's player list to find slots the engine has released. Keeping the table
+-- private is deliberate; exposing a copy of the keys is not the same as exposing
+-- the table.
 function Identity.activeSlots()
   local slots = {}
   for src in pairs(ActiveSessions) do slots[#slots + 1] = src end
   return slots
 end
 
---- The DB session id for this connection, or nil. Used by the Stütze to link a
---- payout to the session it was paid in — ADR-0009 needs that link to tell
---- "someone stayed online too long" apart from "someone was paid too much".
+-- The DB session id for this connection, or nil. Used by the Stütze to link a
+-- payout to the session it was paid in — ADR-0009 needs that link to tell
+-- "someone stayed online too long" apart from "someone was paid too much".
 function Identity.getActiveSessionId(src)
   local entry = ActiveSessions[src]
   return entry and entry.sessionId or nil
 end
 
---- Persist a character's mutable state. Always keyed by character UUID.
+-- Persist a character's mutable state. Always keyed by character UUID.
 function Identity.saveCharacter(src, patch)
   local characterId = Identity.getActiveCharacter(src)
   if not characterId then return false end
@@ -299,6 +299,16 @@ function Identity.saveCharacter(src, patch)
     if not spawnPoint then return false end
     sets[#sets + 1] = 'spawn_point = ?'
     params[#params + 1] = spawnPoint
+  end
+
+  if patch.position ~= nil then
+    local position, err = Validate.position(patch.position)
+    if not position then
+      print(('[%s] refused to save position for %s: %s'):format(RESOURCE, characterId, tostring(err)))
+      return false
+    end
+    sets[#sets + 1] = 'position = ?'
+    params[#params + 1] = json.encode(position)
   end
 
   if #sets == 0 then return false end
@@ -323,13 +333,13 @@ function Identity.endSession(src)
   CreationAttempts[src] = nil
 end
 
---- Identity closes its own sessions.
----
---- This lived in sv_main and was moved here deliberately. sv_main orchestrates a
---- connection; the session belongs to this module. Registering it here also means
---- the guarantee is exercised by the harness, which loads this file but not
---- sv_main — and it keeps the rule "the guard drives teardown, the owner performs
---- it" free of exceptions.
+-- Identity closes its own sessions.
+--
+-- This lived in sv_main and was moved here deliberately. sv_main orchestrates a
+-- connection; the session belongs to this module. Registering it here also means
+-- the guarantee is exercised by the harness, which loads this file but not
+-- sv_main — and it keeps the rule "the guard drives teardown, the owner performs
+-- it" free of exceptions.
 SessionGuard.onClose('identity', Identity.endSession)
 
 exports('getActiveCharacter', Identity.getActiveCharacter)

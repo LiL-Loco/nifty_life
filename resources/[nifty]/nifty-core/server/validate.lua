@@ -1,24 +1,24 @@
---- Input validation (ADR-0007, ADR-0017).
----
---- Every value that crosses the client boundary passes through here before it
---- reaches a query or the database. Nothing in this project concatenates a
---- client value into SQL, and nothing stores a client value without a check
---- first. Those two rules together are what "the client is untrusted" means in
---- practice.
+-- Input validation (ADR-0007, ADR-0017).
+--
+-- Every value that crosses the client boundary passes through here before it
+-- reaches a query or the database. Nothing in this project concatenates a
+-- client value into SQL, and nothing stores a client value without a check
+-- first. Those two rules together are what "the client is untrusted" means in
+-- practice.
 
 Validate = {}
 
---- Characters. Names are stored for display and filtering, so they are kept to
---- a conservative charset: no angle brackets, no quotes, no control characters.
---- That keeps them safe in NUI without needing to escape at every render site.
----
---- The pattern asserts the CHARACTER SET only. The length is enforced by the
---- explicit `#value` check below, and deliberately not by a `{2,32}` repetition
---- in the pattern: pattern repetition quantifiers behaved inconsistently across
---- the Lua builds this project has been checked against (stock Lua 5.4.6 refused
---- `a{2}` in the container used by the headless harness). Splitting the two
---- concerns is clearer anyway, and it removes a dependency on a feature whose
---- behaviour was never in doubt on the real target but could not be verified.
+-- Characters. Names are stored for display and filtering, so they are kept to
+-- a conservative charset: no angle brackets, no quotes, no control characters.
+-- That keeps them safe in NUI without needing to escape at every render site.
+--
+-- The pattern asserts the CHARACTER SET only. The length is enforced by the
+-- explicit `#value` check below, and deliberately not by a `{2,32}` repetition
+-- in the pattern: pattern repetition quantifiers behaved inconsistently across
+-- the Lua builds this project has been checked against (stock Lua 5.4.6 refused
+-- `a{2}` in the container used by the headless harness). Splitting the two
+-- concerns is clearer anyway, and it removes a dependency on a feature whose
+-- behaviour was never in doubt on the real target but could not be verified.
 local NAME_PATTERN = "^[%w'%- ]+$"
 local DATE_PATTERN = "^(%d%d%d%d)%-(%d%d)%-(%d%d)$"
 
@@ -79,15 +79,34 @@ function Validate.spawnPoint(value)
   return value
 end
 
---- Validate one appearance slot: { collection = string, drawable = int, texture = int }
----
---- Returns `true, cleanedSlot` or `nil, errorMessage`. The two-value shape is
---- load-bearing: an earlier version returned the cleaned table ALONE, and the
---- callers read it as `local ok, clean = validateSlot(...)`. `ok` became the
---- table (truthy, so no error was raised) and `clean` was nil — so every
---- component and every prop was validated and then stored as nil. Characters
---- were created with a model and nothing else, and the appearance editor looked
---- like it was doing nothing. Always return the success flag first.
+-- Validate a world position { x = number, y = number, z = number }.
+--
+-- GTA V bounds are wide; the limits below are a sanity net against a
+-- malicious client claiming to be at 1e6, 1e6, 1e6 and pinning a future
+-- resume there. The hard cap on map size is ~ +/- 10 000, so these bounds
+-- leave the entire legal world inside.
+function Validate.position(value)
+  if value == nil then return nil end
+  if type(value) ~= 'table' then return nil, 'position must be an object' end
+  local x, y, z = tonumber(value.x), tonumber(value.y), tonumber(value.z)
+  if x == nil or y == nil or z == nil then
+    return nil, 'position coordinates must be numbers'
+  end
+  if x < -12000 or x > 12000 or y < -12000 or y > 12000 or z < -500 or z > 4000 then
+    return nil, 'position out of GTA V bounds'
+  end
+  return { x = x, y = y, z = z }
+end
+
+-- Validate one appearance slot: { collection = string, drawable = int, texture = int }
+--
+-- Returns `true, cleanedSlot` or `nil, errorMessage`. The two-value shape is
+-- load-bearing: an earlier version returned the cleaned table ALONE, and the
+-- callers read it as `local ok, clean = validateSlot(...)`. `ok` became the
+-- table (truthy, so no error was raised) and `clean` was nil — so every
+-- component and every prop was validated and then stored as nil. Characters
+-- were created with a model and nothing else, and the appearance editor looked
+-- like it was doing nothing. Always return the success flag first.
 local function validateSlot(slot, cfg)
   if type(slot) ~= 'table' then return nil, 'slot must be an object' end
 
@@ -115,12 +134,12 @@ local function validateSlot(slot, cfg)
   return true, { collection = collection, drawable = drawable, texture = texture }
 end
 
---- A finite number, or nil.
----
---- `tonumber('abc')` is nil and `tonumber('nan')` is a number that is not equal to
---- itself. Both would sail through a range check as false-positive "valid" values
---- if written as `if n < min or n > max`, because every comparison with NaN is
---- false - so the check has to be positive, not negative.
+-- A finite number, or nil.
+--
+-- `tonumber('abc')` is nil and `tonumber('nan')` is a number that is not equal to
+-- itself. Both would sail through a range check as false-positive "valid" values
+-- if written as `if n < min or n > max`, because every comparison with NaN is
+-- false - so the check has to be positive, not negative.
 local function finiteNumber(value)
   local n = tonumber(value)
   if n == nil then return nil end
@@ -129,7 +148,7 @@ local function finiteNumber(value)
   return n
 end
 
---- A whole number inside an inclusive range, or nil.
+-- A whole number inside an inclusive range, or nil.
 local function boundedInt(value, min, max)
   local n = finiteNumber(value)
   if n == nil or n ~= math.floor(n) then return nil end
@@ -137,18 +156,18 @@ local function boundedInt(value, min, max)
   return n
 end
 
---- A float inside an inclusive range, or nil.
+-- A float inside an inclusive range, or nil.
 local function boundedFloat(value, min, max)
   local n = finiteNumber(value)
   if n == nil or n < min or n > max then return nil end
   return n
 end
 
---- Face sliders: a sparse map `{ ['0'] = -0.35, ['7'] = 0.8, ... }`.
----
---- SPARSE on purpose. Twenty sliders at full precision for every character is a
---- stored blob nobody reads, and the ones nobody touched must not be able to
---- disagree with the ped. Only the keys the player actually moved survive.
+-- Face sliders: a sparse map `{ ['0'] = -0.35, ['7'] = 0.8, ... }`.
+--
+-- SPARSE on purpose. Twenty sliders at full precision for every character is a
+-- stored blob nobody reads, and the ones nobody touched must not be able to
+-- disagree with the ped. Only the keys the player actually moved survive.
 function Validate.faceFeatures(value)
   local out = {}
   if type(value) ~= 'table' then return out end
@@ -164,13 +183,13 @@ function Validate.faceFeatures(value)
   return out
 end
 
---- Head overlays: `{ ['1'] = { style=, opacity=, colourType=, colour=, secondColour= } }`.
----
---- A malformed overlay is DROPPED rather than rejected. The difference matters:
---- an overlay the player never touched is simply absent, and refusing to save the
---- whole appearance because one unrecognised slot came in would mean a client on
---- an older build can never change its hair. What is stored is always rebuilt
---- from these fields, so an entry that cannot be understood contributes nothing.
+-- Head overlays: `{ ['1'] = { style=, opacity=, colourType=, colour=, secondColour= } }`.
+--
+-- A malformed overlay is DROPPED rather than rejected. The difference matters:
+-- an overlay the player never touched is simply absent, and refusing to save the
+-- whole appearance because one unrecognised slot came in would mean a client on
+-- an older build can never change its hair. What is stored is always rebuilt
+-- from these fields, so an entry that cannot be understood contributes nothing.
 function Validate.headOverlays(value)
   local out = {}
   if type(value) ~= 'table' then return out end
@@ -203,7 +222,7 @@ function Validate.headOverlays(value)
   return out
 end
 
---- Hair colour: primary and highlight, both from the hair palette.
+-- Hair colour: primary and highlight, both from the hair palette.
 function Validate.hairColour(value)
   if type(value) ~= 'table' then return nil end
 
@@ -213,13 +232,13 @@ function Validate.hairColour(value)
   }
 end
 
---- A hair overlay: a facial decoration riding on top of a hairstyle.
----
---- `{ collection = <joaat>, preset = <joaat> }`. Both are 32-bit hashes, so the only
---- meaningful bound is "is this a number that fits in 32 unsigned bits". The server
---- cannot know whether the combination exists - see the note on `MAX_OVERLAY_STYLE`
---- in appearance_config. The creator resolves them through the tattoo-shop map and
---- a client that invents them gets a ped with no visible overlay, which is harmless.
+-- A hair overlay: a facial decoration riding on top of a hairstyle.
+--
+-- `{ collection = <joaat>, preset = <joaat> }`. Both are 32-bit hashes, so the only
+-- meaningful bound is "is this a number that fits in 32 unsigned bits". The server
+-- cannot know whether the combination exists - see the note on `MAX_OVERLAY_STYLE`
+-- in appearance_config. The creator resolves them through the tattoo-shop map and
+-- a client that invents them gets a ped with no visible overlay, which is harmless.
 function Validate.hairOverlay(value)
   if type(value) ~= 'table' then return nil end
 
@@ -233,17 +252,17 @@ function Validate.hairOverlay(value)
   return nil
 end
 
---- Tattoos, as a LIST rather than a map by slot.
----
---- A ped can wear several at once - they are facial decorations, and each call to
---- the native adds one without clearing the others. A map keyed by body zone would
---- be tidier and wrong: the game allows more than one per zone, and a map would
---- silently drop one of them.
----
---- The collection is checked against the allowlist, which makes this stronger than
---- the head overlays above: a client cannot name a collection the server has never
---- heard of. The preset is still only range-checked - it is a joaat hash and the
---- server has no table to look it up in.
+-- Tattoos, as a LIST rather than a map by slot.
+--
+-- A ped can wear several at once - they are facial decorations, and each call to
+-- the native adds one without clearing the others. A map keyed by body zone would
+-- be tidier and wrong: the game allows more than one per zone, and a map would
+-- silently drop one of them.
+--
+-- The collection is checked against the allowlist, which makes this stronger than
+-- the head overlays above: a client cannot name a collection the server has never
+-- heard of. The preset is still only range-checked - it is a joaat hash and the
+-- server has no table to look it up in.
 function Validate.tattoos(value)
   if type(value) ~= 'table' then return {} end
 
@@ -265,28 +284,28 @@ function Validate.tattoos(value)
   return out
 end
 
---- Eye colour index.
+-- Eye colour index.
 function Validate.eyeColour(value)
   local colour = boundedInt(value, 0, AppearanceConfig.MAX_EYE_COLOUR)
   return colour or 0
 end
 
---- Head blend: three presets and how much of each.
----
---- `SetPedHeadBlendData` takes THREE form presets, not two - mother, father and a
---- third, which is how a face can show all three at once. What it does not have
---- is three independent weights: the engine derives them from two numbers plus a
---- third blend, so the weights a player asks for have to be converted on the way
---- in. See `shapeMix` in nifty-world/client/cl_identity.lua, which is the one
---- place that conversion happens.
----
---- The weights are stored as the player set them, 0..1 and unnormalised. Storing
---- the engine's derived numbers instead would make the database disagree with
---- every slider on the menu.
----
---- `skinTone` is the mix between the two SKIN presets. It is separate from the
---- three shape weights because the engine gives it its own parameter - with the
---- third blend, which it shares, as the one unavoidable exception.
+-- Head blend: three presets and how much of each.
+--
+-- `SetPedHeadBlendData` takes THREE form presets, not two - mother, father and a
+-- third, which is how a face can show all three at once. What it does not have
+-- is three independent weights: the engine derives them from two numbers plus a
+-- third blend, so the weights a player asks for have to be converted on the way
+-- in. See `shapeMix` in nifty-world/client/cl_identity.lua, which is the one
+-- place that conversion happens.
+--
+-- The weights are stored as the player set them, 0..1 and unnormalised. Storing
+-- the engine's derived numbers instead would make the database disagree with
+-- every slider on the menu.
+--
+-- `skinTone` is the mix between the two SKIN presets. It is separate from the
+-- three shape weights because the engine gives it its own parameter - with the
+-- third blend, which it shares, as the one unavoidable exception.
 function Validate.headBlend(value)
   if type(value) ~= 'table' then return nil end
 
@@ -303,11 +322,11 @@ function Validate.headBlend(value)
   }
 end
 
---- Validate a whole appearance object (ADR-0017).
----
---- Returns a *rebuilt* structure rather than the input: only known keys survive,
---- with values coerced and bounded. Anything unrecognised is dropped, so extra
---- fields a client sends have no way to persist.
+-- Validate a whole appearance object (ADR-0017).
+--
+-- Returns a *rebuilt* structure rather than the input: only known keys survive,
+-- with values coerced and bounded. Anything unrecognised is dropped, so extra
+-- fields a client sends have no way to persist.
 function Validate.appearance(value)
   if value == nil then
     return {

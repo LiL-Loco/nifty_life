@@ -35,15 +35,16 @@ server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/sv_main.lua'
 server_script 'server/sv_actions.lua'
 
--- Order is load order: the spawn module first, because cl_identity calls
--- spawnPlayer the moment the server says the character is ready, and an export
--- that does not exist yet is a silent nil rather than an error.
-client_script 'client/cl_spawn.lua'
+-- Spawning is handled by Cfx's spawnmanager. nifty-world's enterWorld
+-- handler arms it for death respawns and registers the character's home
+-- as a spawn point so the respawn lands there too. There is no nifty
+-- dependency on a spawn resource of our own.
 client_script 'client/cl_identity.lua'
 client_script 'client/cl_world.lua'
 
 dependencies {
   'nifty-core',
+  'nifty-spawn',
   'nifty-economy',
   'nifty-inventory',
   'nifty-phone',
