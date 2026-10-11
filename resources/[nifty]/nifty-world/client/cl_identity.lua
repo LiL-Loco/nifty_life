@@ -1,40 +1,40 @@
---- Client identity (ADR-0014 layer 3).
----
---- Two jobs:
----   1. Apply a stored appearance to the player ped using COLLECTION natives
----      (ADR-0017). Not global indexes — those shift every Title Update.
----   2. Tell the server we are ready, and handle the two answers: the character
----      is finished, or it exists without an appearance and the creator has to
----      run first.
----
---- This side is an input surface, not a source of truth. The server re-validates
---- every appearance before storing it.
+-- Client identity (ADR-0014 layer 3).
+--
+-- Two jobs:
+--   1. Apply a stored appearance to the player ped using COLLECTION natives
+--      (ADR-0017). Not global indexes — those shift every Title Update.
+--   2. Tell the server we are ready, and handle the two answers: the character
+--      is finished, or it exists without an appearance and the creator has to
+--      run first.
+--
+-- This side is an input surface, not a source of truth. The server re-validates
+-- every appearance before storing it.
 
 local waitingForWorld = false
 
---- The appearance the ped is currently wearing, as collection-based data.
----
---- Tracked in Lua rather than read back from the ped. Reading it back would
---- mean re-deriving drawable state through the collection natives, and the
---- texture index in particular is awkward to recover. Tracking what we set is
---- exact, because the only thing that changes a ped's appearance is this file
---- (and, later, the creator, which calls applyAppearance too).
+-- The appearance the ped is currently wearing, as collection-based data.
+--
+-- Tracked in Lua rather than read back from the ped. Reading it back would
+-- mean re-deriving drawable state through the collection natives, and the
+-- texture index in particular is awkward to recover. Tracking what we set is
+-- exact, because the only thing that changes a ped's appearance is this file
+-- (and, later, the creator, which calls applyAppearance too).
 local currentAppearance = nil
 
---- The index spawnmanager hands back when we register the character's home
---- as a spawn point. Stored so playerDisconnected can remove it; otherwise
---- entries pile up across reconnects and the map's point list drifts.
+-- The index spawnmanager hands back when we register the character's home
+-- as a spawn point. Stored so playerDisconnected can remove it; otherwise
+-- entries pile up across reconnects and the map's point list drifts.
 local characterSpawnIndex = nil
 
---- The head-overlay natives, resolved ONCE at load.
----
---- Cfx registers several of these under an underscored name in the Lua runtime
---- (`_SetPedHeadOverlayColor`, `_SetPedHairColor`, `_GetNumHairColors`,
---- `_ClearPedFacialDecorations`) and the plain name in others. Which is which
---- varies by build, and there is no documentation that states it. Reading an
---- undefined global in Lua yields nil rather than raising, so this is a probe and
---- not a try/catch - and the result is logged, because "the beard did not change"
---- and "the native does not exist" must not look the same from the outside.
+-- The head-overlay natives, resolved ONCE at load.
+--
+-- Cfx registers several of these under an underscored name in the Lua runtime
+-- (`_SetPedHeadOverlayColor`, `_SetPedHairColor`, `_GetNumHairColors`,
+-- `_ClearPedFacialDecorations`) and the plain name in others. Which is which
+-- varies by build, and there is no documentation that states it. Reading an
+-- undefined global in Lua yields nil rather than raising, so this is a probe and
+-- not a try/catch - and the result is logged, because "the beard did not change"
+-- and "the native does not exist" must not look the same from the outside.
 local Natives = {
   setHeadBlendData  = SetPedHeadBlendData,
   setEyeColor       = _SetPedEyeColor or SetPedEyeColor,
@@ -55,9 +55,9 @@ local Natives = {
   getForcedComponent = GetForcedComponent,
 }
 
---- Which face natives this client actually has. Logged once, because the failure
---- mode without it is silent: the menu offers a beard, the slider moves, nothing
---- appears, and there is nothing anywhere to look.
+-- Which face natives this client actually has. Logged once, because the failure
+-- mode without it is silent: the menu offers a beard, the slider moves, nothing
+-- appears, and there is nothing anywhere to look.
 CreateThread(function()
   local missing = {}
   for name, fn in pairs(Natives) do
@@ -68,27 +68,27 @@ CreateThread(function()
   end
 end)
 
---- The part of an appearance that does NOT include changing the ped model.
----
---- Split out because the creator needs to re-apply face, overlays and colour while
---- the player is still choosing, and calling the full `applyAppearance` for that
---- would run `SetPlayerModel` on every slider nudge - which resets the ped and would
---- throw away the clothing the player just picked, roughly forty times a second.
---- Facial decorations: the hair overlay and the tattoos.
----
---- THEY SHARE ONE CHANNEL, and that is the whole reason this is one function
---- rather than two. `ClearPedDecorations` removes ALL decorations - hair overlay,
---- tattoos, everything - and `SetPedFacialDecoration` adds one without touching
---- the others. So applying a second tattoo without clearing would stack it on top
---- of the first, and clearing on every change would erase the hair overlay the
---- player has been wearing since they picked a hairstyle.
----
---- Therefore: clear ONCE, then add everything, every time. There is no partial
---- update and there cannot be one.
----
---- The hair overlay arrives already resolved - collection and preset, both hashes -
---- because resolving it needs natives the world resource has no reason to know
---- about. The creator does that once, when the hairstyle changes.
+-- The part of an appearance that does NOT include changing the ped model.
+--
+-- Split out because the creator needs to re-apply face, overlays and colour while
+-- the player is still choosing, and calling the full `applyAppearance` for that
+-- would run `SetPlayerModel` on every slider nudge - which resets the ped and would
+-- throw away the clothing the player just picked, roughly forty times a second.
+-- Facial decorations: the hair overlay and the tattoos.
+--
+-- THEY SHARE ONE CHANNEL, and that is the whole reason this is one function
+-- rather than two. `ClearPedDecorations` removes ALL decorations - hair overlay,
+-- tattoos, everything - and `SetPedFacialDecoration` adds one without touching
+-- the others. So applying a second tattoo without clearing would stack it on top
+-- of the first, and clearing on every change would erase the hair overlay the
+-- player has been wearing since they picked a hairstyle.
+--
+-- Therefore: clear ONCE, then add everything, every time. There is no partial
+-- update and there cannot be one.
+--
+-- The hair overlay arrives already resolved - collection and preset, both hashes -
+-- because resolving it needs natives the world resource has no reason to know
+-- about. The creator does that once, when the hairstyle changes.
 local function applyDecorations(ped, appearance)
   local n = Natives
 
@@ -203,7 +203,7 @@ local function applyFace(ped, appearance)
   applyDecorations(ped, appearance)
 end
 
---- Apply everything EXCEPT the model.
+-- Apply everything EXCEPT the model.
 local function applyAppearanceParts(ped, appearance)
   if not appearance then return ped end
 
@@ -240,10 +240,10 @@ local function applyAppearanceParts(ped, appearance)
   return ped
 end
 
---- Apply a saved appearance to a ped, model included.
---- Components and props are set per slot; anything the stored data omits is left
---- at the model's default, which is why a partially specified appearance still
---- produces a valid ped.
+-- Apply a saved appearance to a ped, model included.
+-- Components and props are set per slot; anything the stored data omits is left
+-- at the model's default, which is why a partially specified appearance still
+-- produces a valid ped.
 local function applyAppearance(ped, appearance)
   if not appearance then return end
 
@@ -261,78 +261,92 @@ local function applyAppearance(ped, appearance)
   return ped
 end
 
---- Hand the ped to the player and drop them into the world.
+-- The actual spawn sequence, factored out so enterWorld can call it either
+-- from the picker callback (first-time spawn) or directly (resume at the
+-- last saved position). The fade hides the model switch; without it the camera
+-- sits inside the old ped for a frame.
+local function doEnterWorldSpawn(x, y, z, heading, appearance, firstName, lastName)
+  DoScreenFadeOut(500)
+  while not IsScreenFadedOut() do Wait(0) end
+
+  if appearance and appearance.model then
+    local model = joaat(appearance.model)
+    SetPlayerModel(PlayerId(), model)
+    SetModelAsNoLongerNeeded(model)
+  end
+
+  applyAppearanceParts(PlayerPedId(), appearance)
+
+  local ped = PlayerPedId()
+  SetEntityCoords(ped, x, y, z, false, false, false, false)
+  SetEntityHeading(ped, heading or 0.0)
+
+  -- Register the chosen point with Cfx spawnmanager so death respawns
+  -- land here too. Removed on playerDisconnected to keep the map's point
+  -- list from leaking entries across reconnects.
+  characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
+    x, y, z, heading or 0.0, appearance and appearance.model
+  )
+
+  DoScreenFadeIn(500)
+  while not IsScreenFadedIn() do Wait(0) end
+
+  -- spawnmanager handles respawn on death from here on.
+  exports.spawnmanager:setAutoSpawn(true)
+
+  print(('[nifty-world] entered world as %s %s'):format(
+    firstName, lastName or ''))
+
+  TriggerEvent('nifty:client:worldReady')
+end
+
+-- Hand the ped to the player and drop them into the world.
+--
+-- Persistence contract: if the character row carries a `position` (saved on
+-- every disconnect/autosave), the player resumes there directly and the
+-- picker is skipped - that is the point of saving the column. If `position`
+-- is null (first time after the creator finished) the picker opens, the
+-- player picks, the choice becomes the new last position on the next save.
 RegisterNetEvent('nifty:client:enterWorld', function(data)
   waitingForWorld = false
 
   local appearance = data.character.appearance
+  local firstName  = data.character.firstName
+  local lastName   = data.character.lastName
 
-  -- Build the picker's location list. The character's DB spawn_point is the
-  -- default choice; the rest come from the shared config. The picker returns
-  -- the chosen coords, after which we do the model switch, dress, teleport and
-  -- hand the point to Cfx spawnmanager.
-  local PickerLocations = Spawn and Spawn.Locations or {}
-  local list = {}
-  for _, loc in ipairs(PickerLocations) do
-    list[#list + 1] = {
-      key      = loc.key,
-      label    = loc.label,
-      x        = loc.x,
-      y        = loc.y,
-      z        = loc.z,
-      heading  = loc.heading,
-    }
-  end
-
-  -- If the picker has nothing to offer, fall back to the DB spawn point
-  -- directly. Keeps a misconfigured boot from hanging the player.
-  if #list == 0 then
-    list[#list + 1] = {
-      key     = data.spawn and data.spawn.key or 'spawn',
-      label   = 'Spawn',
-      x       = data.spawn.x, y = data.spawn.y, z = data.spawn.z,
-      heading = data.spawn.heading or 0.0,
-    }
-  end
-
-  exports['nifty-spawn']:openSpawnPicker(list, function(x, y, z, heading)
-    -- The picker has closed and the cameras are down. Fade out, do the heavy
-    -- work while the screen is black, fade back in. Model switch is the part
-    -- that has to be hidden - it resets the ped and leaves the camera inside
-    -- the old one for a frame without a fade.
-    DoScreenFadeOut(500)
-    while not IsScreenFadedOut() do Wait(0) end
-
-    if appearance and appearance.model then
-      local model = joaat(appearance.model)
-      SetPlayerModel(PlayerId(), model)
-      SetModelAsNoLongerNeeded(model)
+  if data.usePicker then
+    -- Build the picker's location list from the shared config. A row that
+    -- carries a spawn_point that no longer exists falls back to a single
+    -- entry built from data.spawn, so a misconfigured boot cannot hang.
+    local list = {}
+    for _, loc in ipairs(Spawn and Spawn.Locations or {}) do
+      list[#list + 1] = {
+        key = loc.key, label = loc.label,
+        x = loc.x, y = loc.y, z = loc.z, heading = loc.heading,
+      }
+    end
+    if #list == 0 then
+      list[#list + 1] = {
+        key = data.spawn and data.spawn.key or 'spawn',
+        label = 'Spawn',
+        x = data.spawn.x, y = data.spawn.y, z = data.spawn.z,
+        heading = data.spawn.heading or 0.0,
+      }
     end
 
-    applyAppearanceParts(PlayerPedId(), appearance)
-
-    local ped = PlayerPedId()
-    SetEntityCoords(ped, x, y, z, false, false, false, false)
-    SetEntityHeading(ped, heading or 0.0)
-
-    -- Register the chosen point with Cfx spawnmanager so death respawns
-    -- land here too. Removed on playerDisconnected to keep the map's point
-    -- list from leaking entries across reconnects.
-    characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
-      x, y, z, heading or 0.0, appearance and appearance.model
+    exports['nifty-spawn']:openSpawnPicker(list, function(px, py, pz, ph)
+      doEnterWorldSpawn(px, py, pz, ph, appearance, firstName, lastName)
+    end)
+  else
+    -- data.spawn IS the last known position (or the configured default for a
+    -- row whose position was null and then a save happened to fail). The
+    -- server decided usePicker=false, so resume there without a detour.
+    doEnterWorldSpawn(
+      data.spawn.x, data.spawn.y, data.spawn.z,
+      data.spawn.heading or 0.0,
+      appearance, firstName, lastName
     )
-
-    DoScreenFadeIn(500)
-    while not IsScreenFadedIn() do Wait(0) end
-
-    -- spawnmanager handles respawn on death from here on.
-    exports.spawnmanager:setAutoSpawn(true)
-
-    print(('[nifty-world] entered world as %s %s'):format(
-      data.character.firstName, data.character.lastName or ''))
-
-    TriggerEvent('nifty:client:worldReady')
-  end)
+  end
 end)
 
 RegisterNetEvent('nifty:client:openCreator', function(data)
@@ -360,12 +374,12 @@ local function getCurrentAppearance()
   return currentAppearance
 end
 
---- Persist on the way out, opportunistically. ADR-0004: nothing is lost across a
---- restart.
----
---- This is a fast path, not the mechanism. Under OneSync big mode a player who
---- disconnects outside server range may never see this handler run, so the
---- periodic save below is what actually guarantees the appearance survives.
+-- Persist on the way out, opportunistically. ADR-0004: nothing is lost across a
+-- restart.
+--
+-- This is a fast path, not the mechanism. Under OneSync big mode a player who
+-- disconnects outside server range may never see this handler run, so the
+-- periodic save below is what actually guarantees the appearance survives.
 AddEventHandler('playerDisconnected', function()
   if not waitingForWorld then
     TriggerServerEvent('nifty:server:saveCharacter', {
@@ -379,8 +393,8 @@ AddEventHandler('playerDisconnected', function()
   end
 end)
 
---- Periodic save. Everything a player can change about themselves is stored, and
---- none of it is worth losing to an event that is documented not to fire reliably.
+-- Periodic save. Everything a player can change about themselves is stored, and
+-- none of it is worth losing to an event that is documented not to fire reliably.
 local AUTOSAVE_INTERVAL_MS = 60000
 
 CreateThread(function()
@@ -401,7 +415,7 @@ CreateThread(function()
   end
 end)
 
---- Signal readiness once the client is actually in the world.
+-- Signal readiness once the client is actually in the world.
 CreateThread(function()
   while not NetworkIsSessionStarted() do
     Wait(200)
@@ -416,12 +430,12 @@ exports('applyAppearance', applyAppearance)
 exports('applyAppearanceParts', applyAppearanceParts)
 exports('getCurrentAppearance', getCurrentAppearance)
 
---- The resolved face natives, for the creator to reuse.
----
---- Exported rather than duplicated on purpose: the whole point of resolving the
---- underscored spellings once is that there is one answer to "which name did we
---- get". A second probe in the creator could answer differently from this one and
---- the two halves of the same feature would disagree.
+-- The resolved face natives, for the creator to reuse.
+--
+-- Exported rather than duplicated on purpose: the whole point of resolving the
+-- underscored spellings once is that there is one answer to "which name did we
+-- get". A second probe in the creator could answer differently from this one and
+-- the two halves of the same feature would disagree.
 exports('faceNatives', function()
   return Natives
 end)

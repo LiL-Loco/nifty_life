@@ -1,65 +1,65 @@
---- Server main — the connect-to-play spine (ADR-0014 layers 2-3).
----
---- Flow:
----   playerConnecting  -> whitelist check (deferred, so a slow query is a
----                        loading screen rather than a timeout)
----   nifty:server:ready-> find the character (ADR-0008). It is created on the
----                        WEBSITE through create_character_from_web (migration
----                        021), not here. `appearance IS NULL` means "created but
----                        not finished" and opens the creator; anything else enters
----                        the world directly.
----   finishAppearance  -> save the look, then enter the world
----   play              -> save is keyed by character UUID, never by slot (ADR-0001)
----
---- Nothing below trusts a value that did not come from the connection itself.
+-- Server main — the connect-to-play spine (ADR-0014 layers 2-3).
+--
+-- Flow:
+--   playerConnecting  -> whitelist check (deferred, so a slow query is a
+--                        loading screen rather than a timeout)
+--   nifty:server:ready-> find the character (ADR-0008). It is created on the
+--                        WEBSITE through create_character_from_web (migration
+--                        021), not here. `appearance IS NULL` means "created but
+--                        not finished" and opens the creator; anything else enters
+--                        the world directly.
+--   finishAppearance  -> save the look, then enter the world
+--   play              -> save is keyed by character UUID, never by slot (ADR-0001)
+--
+-- Nothing below trusts a value that did not come from the connection itself.
 
 local RESOURCE = GetCurrentResourceName()
 
---- From the base facade, fetched by shared/core.lua at load. These were globals
---- when this file lived inside nifty-core.
----
---- THEY MUST BE DECLARED HERE, at the top of the file, not further down. A `local`
---- only exists from the line it appears to the end of the chunk, so a binding placed
---- next to the code that first uses it is invisible to everything above it — which
---- is how `discordIdOf` ended up at line 20 indexing a nil `Identity` while the
---- binding sat at line 74. Read the file top to bottom; the dependency has to come
---- before the dependent.
+-- From the base facade, fetched by shared/core.lua at load. These were globals
+-- when this file lived inside nifty-core.
+--
+-- THEY MUST BE DECLARED HERE, at the top of the file, not further down. A `local`
+-- only exists from the line it appears to the end of the chunk, so a binding placed
+-- next to the code that first uses it is invisible to everything above it — which
+-- is how `discordIdOf` ended up at line 20 indexing a nil `Identity` while the
+-- binding sat at line 74. Read the file top to bottom; the dependency has to come
+-- before the dependent.
 local Db = Nifty.Db
 local Identity = Nifty.Identity
 local SessionGuard = Nifty.SessionGuard
 
---- The systems this resource orchestrates.
----
---- This file is the ONLY place allowed to know that all of them exist, because the
---- connect-to-play sequence is what needs them together: a character is created,
---- gets a phone number, gets a starting inventory, and then the economy and the
---- Stütze start on top of it.
----
---- The dependency direction is one-way and that is the entire reason the base has
---- no cycles. nifty-core knows about the database and about identity. nifty-inventory
---- knows about the database. nifty-world knows about both, because it is the layer
---- above them. Nobody below knows anybody above.
----
---- Fetched once at load. An export call per player connect would be a cross-resource
---- round trip on the hot path, and a resource that is stopped mid-session would make
---- it fail at the worst moment.
+-- The systems this resource orchestrates.
+--
+-- This file is the ONLY place allowed to know that all of them exist, because the
+-- connect-to-play sequence is what needs them together: a character is created,
+-- gets a phone number, gets a starting inventory, and then the economy and the
+-- Stütze start on top of it.
+--
+-- The dependency direction is one-way and that is the entire reason the base has
+-- no cycles. nifty-core knows about the database and about identity. nifty-inventory
+-- knows about the database. nifty-world knows about both, because it is the layer
+-- above them. Nobody below knows anybody above.
+--
+-- Fetched once at load. An export call per player connect would be a cross-resource
+-- round trip on the hot path, and a resource that is stopped mid-session would make
+-- it fail at the worst moment.
 local Economy   = exports['nifty-economy']
 local Inventory = exports['nifty-inventory']
 local Stuetze   = exports['nifty-economy']   -- same resource, a second export
 local Phone     = exports['nifty-phone']
 
---- How many times a client may ask for bootstrap before we treat it as hostile.
+-- How many times a client may ask for bootstrap before we treat it as hostile.
 local BootstrapAttempts = {}
 local MAX_BOOTSTRAP_ATTEMPTS = 10
 
---- Identity.discordIdOf owns the identifier read (identity.lua). This file only
---- decides what an answer means.
+-- Identity.discordIdOf owns the identifier read (identity.lua). This file only
+-- decides what an answer means.
 local function discordIdOf(src)
   return Identity.discordIdOf(src)
 end
 
---- True when the account is active and not currently banned. The Discord ID is
---- read from the connection, so a client cannot present someone else's.
+-- True when the account is active and not currently banned. The Discord ID is
+-- read from the connection, so a client cannot present someone else's.
 local function isWhitelisted(discordId)
   if not discordId or discordId == '' then return false end
 
@@ -108,7 +108,7 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
   deferrals.done()
 end)
 
---- Send the client its character, open a session, and let the world begin.
+-- Send the client its character, open a session, and let the world begin.
 local function enterWorld(src, character, hasSession)
   if not hasSession then
     Identity.beginSession(src, character.id)
@@ -130,6 +130,17 @@ local function enterWorld(src, character, hasSession)
   Inventory:push(src, character.id)
   Stuetze:start(src, character.id)
 
+  -- Resume at the player's last known position if the column has one. A null
+  -- `position` means "first time after the creator finished" and the picker
+  -- opens. A malformed value falls back to the default spawn, same as null.
+  local lastPosition = nil
+  if character.position and character.position ~= '' then
+    local ok, decoded = pcall(json.decode, character.position)
+    if ok and type(decoded) == 'table' and decoded.x and decoded.y and decoded.z then
+      lastPosition = decoded
+    end
+  end
+
   TriggerClientEvent('nifty:client:enterWorld', src, {
     character = {
       id = character.id,
@@ -145,7 +156,8 @@ local function enterWorld(src, character, hasSession)
   -- appearance_config while the character row survives it), and a nil `spawn`
   -- kills the CLIENT on `data.spawn.x` at the exact moment the player was told
   -- they had entered the world.
-  spawn = SpawnPoints[character.spawn_point] or SpawnPoints.default,
+  spawn = lastPosition or (SpawnPoints[character.spawn_point] or SpawnPoints.default),
+  usePicker = lastPosition == nil,
   })
 
   -- The unread badge has to exist before the player first presses the key,
@@ -156,8 +168,8 @@ local function enterWorld(src, character, hasSession)
   end
 end
 
---- Client signals its resources are up. Used instead of guessing when the
---- player has finished connecting.
+-- Client signals its resources are up. Used instead of guessing when the
+-- player has finished connecting.
 RegisterNetEvent('nifty:server:ready', function()
   local src = source
 
@@ -207,12 +219,12 @@ RegisterNetEvent('nifty:server:ready', function()
   enterWorld(src, character)
 end)
 
---- The character already exists. The player has only chosen how it looks.
----
---- This replaces `nifty:server:createCharacter`. There is no name, no date of
---- birth, no birthplace and no gender in this payload, because none of those are
---- chosen here - the website wrote them, and the gender in particular is not a
---- preference but the fact that decides which ped model this character may wear.
+-- The character already exists. The player has only chosen how it looks.
+--
+-- This replaces `nifty:server:createCharacter`. There is no name, no date of
+-- birth, no birthplace and no gender in this payload, because none of those are
+-- chosen here - the website wrote them, and the gender in particular is not a
+-- preference but the fact that decides which ped model this character may wear.
 RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   local src = source
 
@@ -282,12 +294,12 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   enterWorld(src, Identity.getCharacter(account.id), true)
 end)
 
---- Leaving the creator on purpose.
----
---- The ped is frozen and invisible, so a player who closes the menu and stays
---- connected stands still in a dark void for as long as they like. Dropping them is
---- the honest outcome: nothing is lost, `appearance IS NULL` reopens the creator on
---- the next login, and there is no half-state to reason about.
+-- Leaving the creator on purpose.
+--
+-- The ped is frozen and invisible, so a player who closes the menu and stays
+-- connected stands still in a dark void for as long as they like. Dropping them is
+-- the honest outcome: nothing is lost, `appearance IS NULL` reopens the creator on
+-- the next login, and there is no half-state to reason about.
 RegisterNetEvent('nifty:server:cancelCreator', function()
   local src = source
   if Identity.getActiveCharacter(src) then return end
@@ -296,7 +308,7 @@ RegisterNetEvent('nifty:server:cancelCreator', function()
     'Dein Charakter bleibt erhalten - beim nächsten Verbinden geht es weiter.')
 end)
 
---- Save mutable character state. Keyed by the active session's character UUID.
+-- Save mutable character state. Keyed by the active session's character UUID.
 RegisterNetEvent('nifty:server:saveCharacter', function(payload)
   local src = source
 
@@ -304,6 +316,17 @@ RegisterNetEvent('nifty:server:saveCharacter', function(payload)
   -- that stops a client from saving as a character it is not playing.
   if not Identity.getActiveCharacter(src) then return end
   if type(payload) ~= 'table' then return end
+
+  -- Capture the player's current world position so the next login resumes
+  -- there. Server-side, not client-supplied: the client never gets to tell
+  -- the server "I am at 100000, 100000" - the server reads the ped's actual
+  -- coords. Identity.saveCharacter validates and writes them to the
+  -- `position` JSON column.
+  local ped = GetPlayerPed(src)
+  if ped and ped ~= 0 then
+    local coords = GetEntityCoords(ped)
+    payload.position = { x = coords.x, y = coords.y, z = coords.z }
+  end
 
   Identity.saveCharacter(src, payload)
 end)
