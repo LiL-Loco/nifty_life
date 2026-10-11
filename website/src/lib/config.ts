@@ -16,21 +16,34 @@
  * switch to bypass.
  */
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+/**
+ * `next build` runs with NODE_ENV=production on the machine that will later run
+ * the app in development. Any check has to fire when the app SERVES, not when it
+ * is compiled - otherwise a build on this machine could not happen at all.
+ *
+ * A container build is the strict case: Coolify/Nixpacks runs `next build`
+ * WITHOUT the runtime environment, because DB_* and SESSION_SECRET belong to
+ * the running container and are not in the build step at all. So "absent during
+ * a build" is the normal state, not a misconfiguration.
+ */
+const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
+
 function required(name: string, value: string | undefined): string {
   if (!value || value.trim() === '') {
+    // Nothing reads the database credentials or the session secret while the
+    // app is being COMPILED, so an empty value here costs nothing - the module
+    // is loaded, not used. At runtime the very same check still throws, so a
+    // server started without its environment fails on the first request with
+    // this message instead of quietly pooling against "".
+    if (isBuildPhase) return '';
     throw new Error(
       `Missing environment variable ${name}. Copy website/.env.example to website/.env and fill it in.`,
     );
   }
   return value;
 }
-
-const isProduction = process.env.NODE_ENV === 'production';
-
-// `next build` runs with NODE_ENV=production on the machine that will later run
-// the app in development. Any check has to fire when the app SERVES, not when it
-// is compiled - otherwise a build on this machine could not happen at all.
-const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
 
 /**
  * The redirect URI is the address Discord sends the player BACK to, and it must
