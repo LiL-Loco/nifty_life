@@ -5,6 +5,15 @@
 --   2. On E, ask the server to enrol us.
 --   3. After the server confirms we are in, play the right arm-wrestling
 --      move-network clip and stream the hand position to a NUI bar.
+--   4. Render the GTA-native 3-2-1 countdown and the win/lose banner on top of
+--      the move network, using the same scaleform movies the RAGE script uses
+--      (COUNTDOWN, MP_BIG_MESSAGE_FREEMODE). The scaleforms give the match
+--      an authentic look; the NUI bar carries the dynamic hand position
+--      because re-issuing scaleform SET_DATA_SLOT every 50 ms is wasteful
+--      and the bar's CSS transition smooths the dot.
+--   5. On win/lose, play the result pose and clean up.
+--   3. After the server confirms we are in, play the right arm-wrestling
+--      move-network clip and stream the hand position to a NUI bar.
 --   4. On win/lose, play the result pose and clean up.
 --
 -- The move network clips are defined in the `mini@arm_wrestling` dictionary.
@@ -43,8 +52,20 @@ local RESULT_WIN   = 'mp_player_int_uppersmoker'
 local myTable = nil      -- table index when the local player is in a match
 local mySide  = nil      -- 1 = side a, 2 = side b
 local myTEnd  = nil      -- os.clock() at which the server will end the match
+local myTStart = nil     -- os.clock() at which the server fired nifty:arm:start
 local myPos   = 0.5      -- last hand position received from the server (0..1)
 local promptActive = false
+
+-- Big-message banner: shown after a match ends, for BIG_MSG_DURATION
+-- seconds. Set by nifty:arm:win, cleared on leaveMatch.
+local myBigMsg = nil     -- { text, r, g, b, until } or nil
+local BIG_MSG_DURATION = 3.0
+
+-- The server runs MATCH_START_DELAY seconds of countdown before the hand
+-- phase. We render the COUNTDOWN scaleform during that window. The phases
+-- line up with the server's clock: countdown from myTStart, hand from
+-- myTStart + MATCH_START_DELAY, end at myTEnd.
+local MATCH_START_DELAY = 3.0
 
 -- ---------------------------------------------------------------- helpers
 
@@ -101,13 +122,88 @@ local function tickNui(pos)
   SendNUIMessage({ type = 'tick', pos = pos })
 end
 
+-- ---------------------------------------------------------- scaleform helpers
+
+-- Two GTA-native scaleform movies. They are requested on demand (one per
+-- match) and freed via SetScaleformMovieAsNoLongerNeeded at the end. The
+-- RAGE script keeps them in a struct field; we let the GC collect after
+-- the match leaves scope.
+
+-- COUNTDOWN: shows "3", "2", "1", "GO!" centred on screen. We push each
+-- number with SET_MESSAGE during the MATCH_START_DELAY window (3 s).
+-- BIG_MSG: shows the "Player WINS / Player LOSES" banner. The RAGE script
+-- loads it once at script start; we follow the same pattern.
+local sfCountdown = nil
+local sfBigMsg    = nil
+
+local function requireScaleform(name)
+  if not HasScaleformMovieLoaded(name) then
+    RequestScaleformMovie(name)
+    local deadline = GetGameTimer() + 3000
+    while not HasScaleformMovieLoaded(name) and GetGameTimer() < deadline do
+      Wait(0)
+    end
+  end
+  return GetScaleformMovieHandle(name) or nil
+end
+
+local function drawBigMessage(text, r, g, b, a)
+  -- MP_BIG_MESSAGE_FREEMODE setup the RAGE script does:
+  --   SET_BACKGROUND_COLOUR  0, 0, 0, 200
+  --   SET_MESSAGE             <text>
+  --   SET_COLOUR_OF_NEXT_TEXT_COMPONENT <HUD colour 12 = "HUD_COLOUR_BLUE">
+  -- and then DRAW the scaleform fullscreen every frame.
+  -- We follow the same pattern, except the colour is passed in directly
+  -- so we can use a green tint for wins and a red tint for losses.
+  if not sfBigMsg or sfBigMsg == 0 then return end
+  BeginScaleformMovieMethod(sfBigMsg, 'SET_BACKGROUND_COLOUR')
+  ScaleformMovieMethodAddParamFloat(0.0)
+  ScaleformMovieMethodAddParamFloat(0.0)
+  ScaleformMovieMethodAddParamFloat(0.0)
+  ScaleformMovieMethodAddParamFloat(200.0)
+  EndScaleformMovieMethod()
+
+  BeginScaleformMovieMethod(sfBigMsg, 'SET_MESSAGE')
+  BeginTextCommandScaleformString('STRING')
+  AddTextComponentSubstringPlayerName(text)
+  EndTextCommandScaleformString()
+  ScaleformMovieMethodAddParamInt(r)
+  ScaleformMovieMethodAddParamInt(g)
+  ScaleformMovieMethodAddParamInt(b)
+  ScaleformMovieMethodAddParamInt(a)
+  EndScaleformMovieMethod()
+
+  DrawScaleformMovieFullscreen(sfBigMsg, 255, 255, 255, 255, 0)
+end
+
+local function drawCountdown(text)
+  if not sfCountdown or sfCountdown == 0 then return end
+  -- COUNTDOWN takes the number / "GO!" via SET_MESSAGE too. The RAGE script
+  -- only ever pushes "CNTDWN_GO"; the 3-2-1 is implicit in the move network's
+  -- built-in timing. We push each number explicitly so the countdown is
+  -- legible even if the move network clips early.
+  BeginScaleformMovieMethod(sfCountdown, 'SET_MESSAGE')
+  BeginTextCommandScaleformString('STRING')
+  AddTextComponentSubstringPlayerName(text)
+  EndTextCommandScaleformString()
+  ScaleformMovieMethodAddParamInt(255)
+  ScaleformMovieMethodAddParamInt(255)
+  ScaleformMovieMethodAddParamInt(255)
+  ScaleformMovieMethodAddParamInt(255)
+  EndScaleformMovieMethod()
+
+  DrawScaleformMovieFullscreen(sfCountdown, 255, 255, 255, 255, 0)
+end
+
 -- ---------------------------------------------------------------- actions
 
 local function enterMatch(tableIdx, side)
   myTable = tableIdx
   mySide  = side
   myTEnd  = nil
+  myTStart = nil
   myPos   = 0.5
+  myBigMsg = nil
 
   local ped = getMyPed()
   local t = TABLES[tableIdx]
@@ -119,17 +215,22 @@ local function enterMatch(tableIdx, side)
   SetEntityCollision(ped, false, false)
 
   -- Face the table.
-  local headingRad = math.rad(t.heading + (side == 1 and 90 or -90))
   SetEntityHeading(ped, t.heading + (side == 1 and 90 or -90))
 
   loadAnimDict(ANIM_DICT)
   TaskMoveNetworkByName(ped, 'arm_wrestling_sweep_paired_a_rev3', 0.0, true, ANIM_DICT, 0)
   showNui(true)
+
+  -- Pre-load the two scaleforms. We request them on demand because each
+  -- one is a fairly heavy asset; once the match is over we drop them.
+  sfCountdown = requireScaleform('COUNTDOWN')
+  sfBigMsg    = requireScaleform('MP_BIG_MESSAGE_FREEMODE')
 end
 
 local function startHold(tEnd)
-  myTEnd = tEnd
-  myPos = 0.5
+  myTEnd   = tEnd
+  myTStart = os.clock()
+  myPos    = 0.5
 end
 
 local function leaveMatch()
@@ -139,10 +240,16 @@ local function leaveMatch()
   SetEntityCollision(ped, true, true)
   ClearPedTasks(ped)
   showNui(false)
-  myTable = nil
-  mySide  = nil
-  myTEnd  = nil
-  myPos   = 0.5
+  if sfCountdown and sfCountdown ~= 0 then SetScaleformMovieAsNoLongerNeeded(sfCountdown) end
+  if sfBigMsg    and sfBigMsg    ~= 0 then SetScaleformMovieAsNoLongerNeeded(sfBigMsg)    end
+  sfCountdown = nil
+  sfBigMsg    = nil
+  myTable  = nil
+  mySide   = nil
+  myTEnd   = nil
+  myTStart = nil
+  myPos    = 0.5
+  myBigMsg = nil
 end
 
 local function playResult(won)
@@ -154,6 +261,16 @@ local function playResult(won)
   -- the same trick with REQUEST_CLIP_SET + TASK_PLAY_ANIM; we do it
   -- through TaskPlayAnim with a finite duration.
   TaskPlayAnim(ped, ANIM_DICT, clip, 8.0, -8.0, 2000, 0, 0.0, false, false, false)
+
+  -- Schedule the big-message banner. The RAGE script shows the winner's
+  -- name to both players with a green tint for wins and a red tint for
+  -- losses. We do the same with the player's own first name.
+  local name = GetPlayerName(PlayerId()) or 'Du'
+  if won then
+    myBigMsg = { text = name .. ' gewinnt',  r = 80, g = 220, b = 110, a = 255, untilAt = os.clock() + BIG_MSG_DURATION }
+  else
+    myBigMsg = { text = name .. ' verliert', r = 220, g = 70,  b = 70,  a = 255, untilAt = os.clock() + BIG_MSG_DURATION }
+  end
 end
 
 -- ---------------------------------------------------------------- events
@@ -207,9 +324,32 @@ CreateThread(function()
     end
 
     if myTable then
-      -- already in a match; the server is the source of truth for the
-      -- hand position, which it streams via nifty:arm:tick.
-      Wait(50)
+      -- already in a match; render the countdown + big-message overlays
+      -- in addition to whatever else the server is driving.
+
+      -- Countdown: visible for the first MATCH_START_DELAY seconds after
+      -- startHold() recorded myTStart. We show 3-2-1-GO at one number per
+      -- second; on the GO tick we leave the scaleform up for the rest of
+      -- the second so it doesn't blank between numbers.
+      if myTStart then
+        local elapsed = os.clock() - myTStart
+        if elapsed < MATCH_START_DELAY then
+          local phase = math.floor(elapsed) + 1
+          local text
+          if phase >= 4 then text = 'GO!'
+          else text = tostring(4 - phase) end
+          drawCountdown(text)
+        end
+      end
+
+      -- Big-message banner: shown for BIG_MSG_DURATION seconds after
+      -- a match result. Wins green, losses red, both with the player's
+      -- own first name as the headline.
+      if myBigMsg and os.clock() < myBigMsg.untilAt then
+        drawBigMessage(myBigMsg.text, myBigMsg.r, myBigMsg.g, myBigMsg.b, myBigMsg.a)
+      end
+
+      Wait(0)
       goto continue
     end
 
