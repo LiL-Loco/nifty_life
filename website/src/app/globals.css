@@ -249,3 +249,66 @@ button:hover,
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* ---------------------------------------------------------------------------
+   The application answer list (admin review screen).
+
+   Twenty questions rendered as twenty cards stop reading as twenty ANSWERS —
+   each card looks like a section of the page instead of a prompt and a reply.
+   What makes a review workable is that a question and its answer cannot be
+   separated by scrolling: a fixed number, the question, the answer indented
+   beneath it, a hairline between pairs.
+
+   The number is not decoration. Reviewing twenty answers means saying "question
+   7" in a Discord conversation an hour later, and an ordinal is the only
+   identifier that survives a reworded rulebook.
+   --------------------------------------------------------------------------- */
+.answers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.answers > li {
+  padding: 1rem 1.1rem;
+  border-top: 1px solid var(--line);
+}
+
+.answers > li:first-child {
+  border-top: none;
+}
+
+.answers .q {
+  display: flex;
+  gap: 0.7rem;
+  align-items: baseline;
+  font-weight: 500;
+}
+
+.answers .q-num {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.answers .q-text {
+  flex: 1;
+}
+
+.answers .a {
+  margin: 0.5rem 0 0 2.1rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--accent);
+  white-space: pre-wrap;
+}

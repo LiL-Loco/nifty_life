@@ -113,9 +113,22 @@ $websiteDenied = @(
   @{ name = 'read the pairing codes';          sql = 'SELECT * FROM web_pairing_codes' },
   @{ name = 'read wallets';                    sql = 'SELECT * FROM wallets' },
   @{ name = 'delete a post';                   sql = "DELETE FROM peeper_posts WHERE id='nobody'" },
-  @{ name = 'un-delete a post';                sql = "UPDATE peeper_posts SET deleted_at=NOW() WHERE id='nobody'" },
+  @{ name = 'soft-delete a post';              sql = "UPDATE peeper_posts SET deleted_at=NOW() WHERE id='nobody'" },
+  @{ name = 'rewrite a post body';             sql = "UPDATE peeper_posts SET body='x' WHERE id='nobody'" },
   @{ name = 'resolve a report';                sql = "UPDATE peeper_reports SET status='dismissed' WHERE id='nobody'" },
   @{ name = 'remove another like';             sql = "DELETE FROM peeper_likes WHERE character_id<>'nobody'" },
+  # A destructive boundary check is a boundary check that destroys the thing it
+  # protects. The id below matches no real row on purpose: the column grant is
+  # verified before any row is matched, and a post a moderator actually removed
+  # stays removed.
+  @{ name = 'soft-delete a post';              sql = "UPDATE peeper_posts SET deleted_at=NOW() WHERE id='00000000-0000-0000-0000-000000000000'" },
+  # Migration 012 let a post be authored by a Discord account as well as by a
+  # character, and the public pool holds INSERT on this table. Migration 014
+  # column-scopes that grant so `author_discord_id` is NOT grantable here — this
+  # statement must therefore fail, or a website compromise could forge posts as
+  # the owner.
+  @{ name = 'post as a Discord identity';      sql = "INSERT INTO peeper_posts (id, author_character, author_discord_id, author_name, body) VALUES (UUID(), NULL, '1', 'x', 'y')" },
+  @{ name = 'like as a Discord identity';      sql = "INSERT INTO peeper_likes (post_id, character_id, author_discord_id) VALUES ('x', NULL, '1')" },
   @{ name = 'delete an application';           sql = "DELETE FROM applications WHERE discord_id='nobody'" },
   # The staff mirror. BOTH web accounts hold SELECT only — the bot in `bot/` is
   # the sole writer, using the GAME account. If any of these three ever pass, a
@@ -143,21 +156,23 @@ $adminDenied = @(
   @{ name = 'read the pairing codes';          sql = 'SELECT * FROM web_pairing_codes' },
   @{ name = 'read wallets';                    sql = 'SELECT * FROM wallets' },
   @{ name = 'delete a post';                   sql = "DELETE FROM peeper_posts WHERE id='nobody'" },
-  @{ name = 'un-delete a post';                sql = "UPDATE peeper_posts SET deleted_at=NOW() WHERE id='nobody'" },
+  @{ name = 'rewrite a post body';             sql = "UPDATE peeper_posts SET body='x' WHERE id='nobody'" },
   @{ name = 'resolve a report';                sql = "UPDATE peeper_reports SET status='dismissed' WHERE id='nobody'" },
   @{ name = 'rewrite the submitted answers';   sql = "UPDATE applications SET answers='{}' WHERE discord_id='nobody'" },
   @{ name = 'delete an application';           sql = "DELETE FROM applications WHERE discord_id='nobody'" },
-  # The admin pool cannot read the feed or the character links. That looks like an
+  # The admin pool cannot READ the feed or the character links. That looks like an
   # oversight and is not: the admin routes resolve those through the PUBLIC pool on
   # purpose, because deciding whether to trust the privileged connection must not
   # itself require the privileged connection. Feed moderation stays in game (ADR-0022).
-  @{ name = 'read the feed';                   sql = "SELECT id FROM peeper_posts WHERE deleted_at IS NULL LIMIT 1" },
   @{ name = 'read own link';                   sql = "SELECT character_id FROM web_links WHERE discord_id='nobody' LIMIT 1" },
   # Admin decides applications. It does NOT appoint staff: `isStaff()` runs on
   # the public pool and reads a mirror only the bot can write.
   @{ name = 'appoint themselves staff';        sql = "INSERT INTO staff (discord_id, role_id) VALUES ('nobody','1')" },
   @{ name = 'promote a staff row';             sql = "UPDATE staff SET role_id='1' WHERE discord_id='nobody'" },
-  @{ name = 'demote a moderator';              sql = "DELETE FROM staff WHERE discord_id='nobody'" }
+  @{ name = 'demote a moderator';              sql = "DELETE FROM staff WHERE discord_id='nobody'" },
+  # Still no physical delete for ANY account. A removed post stays in the table as
+  # evidence; only `deleted_at` is written.
+  @{ name = 'erase a post for good';           sql = "DELETE FROM peeper_posts WHERE id='nobody'" }
 )
 
 $adminAllowed = @(
@@ -165,7 +180,19 @@ $adminAllowed = @(
   @{ name = 'read accounts';              sql = 'SELECT id, status FROM accounts LIMIT 1' },
   @{ name = 'read bans';                  sql = 'SELECT id, discord_id FROM bans LIMIT 1' },
   @{ name = 'read the staff mirror';      sql = 'SELECT discord_id FROM staff LIMIT 1' },
-  @{ name = 'approve an application';     sql = "UPDATE applications SET status='approved', reviewed_at=NOW(), reviewed_by_discord_id='1', decision_note=NULL WHERE discord_id='nobody'" }
+  @{ name = 'approve an application';     sql = "UPDATE applications SET status='approved', reviewed_at=NOW(), reviewed_by_discord_id='1', decision_note=NULL WHERE discord_id='nobody'" },
+  # The team writes on P&R without a linked character. Inserting author_discord_id
+  # is what makes a post attributable to the team instead of to nobody.
+  #
+  # EXPLAIN, not INSERT: MariaDB checks column privileges before it matches any
+  # row, so EXPLAIN proves the grant and writes nothing. A real INSERT here would
+  # leave a staff post in the live feed that the script has no privilege to
+  # remove — the admin account has no DELETE on this table, which is the point.
+  @{ name = 'insert a staff post';        sql = "EXPLAIN INSERT INTO peeper_posts (id, author_discord_id, author_name, body, source) VALUES (UUID(), '1', 'Team', 'Hinweis', 'staff')" },
+  # Same reasoning: the column grant is what is under test, so the WHERE clause
+  # deliberately matches nothing. A soft delete against real posts would be a
+  # boundary test that destroys the thing it is protecting.
+  @{ name = 'soft-delete a post';         sql = "UPDATE peeper_posts SET deleted_at=NOW(), deleted_by_discord_id='1', deleted_reason='probe' WHERE deleted_at IS NULL AND id = '00000000-0000-0000-0000-000000000000'" }
 )
 
 switch ($Section) {

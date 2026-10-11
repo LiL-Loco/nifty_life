@@ -95,15 +95,17 @@ export default async function AdminApplication({ params }: { params: Promise<{ i
           </p>
         </div>
       ) : (
-        answers.map((answer, index) => (
-          <div className="card" key={answer.id}>
-            <p className="small muted" style={{ margin: '0 0 0.35rem' }}>
-              Frage {index + 1} · <code>{answer.id}</code>
-            </p>
-            <p style={{ margin: '0 0 0.75rem', fontWeight: 500 }}>{answer.question}</p>
-            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{answer.answer}</p>
-          </div>
-        ))
+        <ol className="answers">
+          {answers.map((answer, index) => (
+            <li key={answer.id}>
+              <div className="q">
+                <span className="q-num">{index + 1}</span>
+                <span className="q-text">{answer.question}</span>
+              </div>
+              <div className="a">{answer.answer}</div>
+            </li>
+          ))}
+        </ol>
       )}
 
       <h2>Entscheidung</h2>

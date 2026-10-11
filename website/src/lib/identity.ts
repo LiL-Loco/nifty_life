@@ -100,6 +100,55 @@ export async function isStaff(discordId: string): Promise<boolean> {
 }
 
 /**
+ * Who is writing on P&R right now.
+ *
+ * This is the ONE place that answers "which identity does this Discord account
+ * publish under", because the two answers need different code paths and getting
+ * them out of sync is how a moderator ends up publishing anonymously.
+ *
+ * Staff is checked FIRST and deliberately wins. A moderator who also has a
+ * character can still post as that character — the page offers both composers —
+ * but moderation actions and staff announcements must never be traceable to a
+ * person who happens to share an account with the owner of the server.
+ *
+ * Neither branch is anonymous. A staff post stores the Discord ID; a character
+ * post stores the character id. Both are attributable, which is the point of
+ * ADR-0022 and the reason `peeper_posts` grew a second authorship column rather
+ * than allowing posts with no author at all.
+ */
+export type PeeperActor =
+  | { kind: 'staff'; discordId: string; name: string }
+  | { kind: 'character'; characterId: string; name: string | null }
+  | { kind: 'none'; discordId: string };
+
+export async function peeperActor(discordId: string, sessionName: string): Promise<PeeperActor> {
+  if (await isStaff(discordId)) {
+    return { kind: 'staff', discordId, name: sessionName };
+  }
+
+  const link = await linkedCharacter(discordId);
+  if (!link) return { kind: 'none', discordId };
+
+  // A character that has never published has no public name yet, and inventing
+  // one here would be worse than asking the player to post once in game.
+  return { kind: 'character', characterId: link.characterId, name: await publishedName(link.characterId) };
+}
+
+/** The most recent published name of a character, or null. */
+async function publishedName(characterId: string): Promise<string | null> {
+  const row = await one<{ author_name: string }>(
+    `SELECT author_name
+       FROM peeper_posts
+      WHERE author_character = ?
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [characterId],
+  );
+
+  return row?.author_name ?? null;
+}
+
+/**
  * Submit a pairing request.
  *
  * The code was generated in game and typed here. We store it and nothing else —

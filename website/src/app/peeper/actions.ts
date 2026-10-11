@@ -2,17 +2,27 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireSession } from '@/lib/auth';
-import { createPost, likePost, reportPost, unlikePost } from '@/lib/peeper';
-import { linkedCharacter } from '@/lib/identity';
+import { requireSession, currentSession } from '@/lib/auth';
+import {
+  createPost,
+  likePost,
+  reportPost,
+  staffDeletePost,
+  staffLike,
+  staffPost,
+  staffReport,
+  staffUnlike,
+  unlikePost,
+} from '@/lib/peeper';
+import { linkedCharacter, peeperActor, isStaff } from '@/lib/identity';
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
 /**
  * Resolve the session to the character it speaks as.
  *
- * Every write needs this. A caller that is not linked gets a message rather than
- * an anonymous write - there is no "post as nobody" on this surface.
+ * Only the PLAYER path uses this. The team goes through `peeperActor` and the
+ * admin connection, because a moderator has no character by design.
  */
 async function actor() {
   const session = await requireSession();
@@ -43,16 +53,20 @@ export async function toggleLike(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  const who = await actor();
-  if (!who) return { error: 'Verknüpfe zuerst deinen Charakter im Spiel.' };
+  const session = await requireSession();
+  const actor = await peeperActor(session.discordId, session.username);
 
   const postId = String(form.get('post') ?? '');
   const liked = form.get('liked') === '1';
 
-  if (liked) {
-    await unlikePost(who.characterId, postId);
+  if (actor.kind === 'staff') {
+    if (liked) await staffUnlike(actor.discordId, postId);
+    else await staffLike(actor.discordId, postId);
+  } else if (actor.kind === 'character') {
+    if (liked) await unlikePost(actor.characterId, postId);
+    else await likePost(actor.characterId, postId);
   } else {
-    await likePost(who.characterId, postId);
+    return { error: 'Verknüpfe zuerst deinen Charakter im Spiel.' };
   }
 
   revalidatePath('/peeper');
@@ -63,17 +77,109 @@ export async function report(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  const who = await actor();
-  if (!who) return { error: 'Verknüpfe zuerst deinen Charakter im Spiel.' };
+  const session = await requireSession();
+  const actor = await peeperActor(session.discordId, session.username);
 
-  const result = await reportPost(
-    who.characterId,
-    String(form.get('post') ?? ''),
-    String(form.get('reason') ?? 'other'),
+  // A moderator reports through the admin connection; a player through their
+  // character. `peeperActor` resolves which, so this function does not care.
+  const result =
+    actor.kind === 'staff'
+      ? await staffReport(
+          actor.discordId,
+          String(form.get('post') ?? ''),
+          String(form.get('reason') ?? 'other'),
+        )
+      : actor.kind === 'character'
+        ? await reportPost(
+            actor.characterId,
+            String(form.get('post') ?? ''),
+            String(form.get('reason') ?? 'other'),
+          )
+        : ({ ok: false, error: 'Verknüpfe zuerst deinen Charakter im Spiel.' } as const);
+
+  if (!result.ok) return { error: result.error };
+
+  revalidatePath('/peeper');
+  return { ok: 'Gemeldet.' };
+}
+
+// ---------------------------------------------------------------------------
+// Moderation team. Every action below re-checks staff on the PUBLIC connection
+// before touching the admin one — deciding whether to trust the privileged
+// connection must not itself require the privileged connection.
+// ---------------------------------------------------------------------------
+
+/** Shared guard. Returns the session or a ready-made error state. */
+async function staffSession() {
+  const session = await currentSession();
+  if (!session || !(await isStaff(session.discordId))) {
+    return { error: 'Nicht autorisiert.' } as const;
+  }
+  return session;
+}
+
+/** Publish as the team. No character required. */
+export async function staffPublish(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const session = await staffSession();
+  if ('error' in session) return session;
+
+  const result = await staffPost(
+    session.discordId,
+    session.username,
+    String(form.get('body') ?? ''),
+    form.get('place') ? String(form.get('place')) : null,
   );
 
   if (!result.ok) return { error: result.error };
 
   revalidatePath('/peeper');
-  return { ok: 'Gemeldet. Nur Teammitglieder können eine Meldung bearbeiten.' };
+  return { ok: 'Beitrag veröffentlicht.' };
+}
+
+/**
+ * Soft-delete a post.
+ *
+ * The reason is optional but worth taking: it is the only record of why
+ * something disappeared, and without it the deletion is just a gap in a feed.
+ */
+export async function staffDelete(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const session = await staffSession();
+  if ('error' in session) return session;
+
+  const raw = form.get('reason');
+  const result = await staffDeletePost(
+    String(form.get('post') ?? ''),
+    session.discordId,
+    typeof raw === 'string' && raw.trim() ? raw : null,
+  );
+
+  if (!result.ok) return { error: result.error };
+
+  revalidatePath('/peeper');
+  return { ok: 'Beitrag gelöscht.' };
+}
+
+/** Like or unlike as the team. */
+export async function staffToggleLike(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const session = await staffSession();
+  if ('error' in session) return session;
+
+  const postId = String(form.get('post') ?? '');
+  if (form.get('liked') === '1') {
+    await staffUnlike(session.discordId, postId);
+  } else {
+    await staffLike(session.discordId, postId);
+  }
+
+  revalidatePath('/peeper');
+  return undefined;
 }

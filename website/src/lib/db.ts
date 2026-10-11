@@ -142,6 +142,53 @@ export async function adminUpdateApplication(
   return (result as mysql.ResultSetHeader).affectedRows;
 }
 
+/**
+ * The soft-delete columns on `peeper_posts`.
+ *
+ * A whitelist for the same reason as the application one: the column names come
+ * from here, never from a caller, so "edit the body of a post" is not a typo
+ * away. `deleted_by` stays NULL on this surface — the team deletes by Discord ID
+ * — and the game server keeps the character-keyed path.
+ */
+const ADMIN_WRITABLE_POST_COLUMNS = [
+  'deleted_at',
+  'deleted_by_discord_id',
+  'deleted_reason',
+] as const;
+
+/**
+ * Soft-delete one post, but only if it is not already deleted.
+ *
+ * The `deleted_at IS NULL` in the WHERE clause is load-bearing: without it a
+ * second moderator clicking delete would overwrite the first one's reason and
+ * timestamp, and the surviving record would be the LAST decision rather than the
+ * first one. Zero affected rows means "already gone", which the caller reports
+ * rather than silently overwriting.
+ */
+export async function adminSoftDeletePost(
+  postId: string,
+  values: Partial<Record<(typeof ADMIN_WRITABLE_POST_COLUMNS)[number], unknown>>,
+): Promise<number> {
+  const sets: string[] = [];
+  const params: any[] = [];
+
+  for (const column of ADMIN_WRITABLE_POST_COLUMNS) {
+    if (values[column] === undefined) continue;
+    sets.push(`${column} = ?`);
+    params.push(values[column]);
+  }
+
+  if (sets.length === 0) return 0;
+
+  params.push(postId);
+  const [result] = await adminDb().execute(
+    `UPDATE peeper_posts SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+    params,
+  );
+
+  return (result as mysql.ResultSetHeader).affectedRows;
+}
+
 /** Run a SELECT and get rows back. */
 export async function query<T = Record<string, unknown>>(
   sql: string,

@@ -69,9 +69,29 @@ GRANT SELECT         ON nifty_life.properties  TO 'nifty_website'@'localhost';
 -- ---------------------------------------------------------------------------
 GRANT SELECT, INSERT ON nifty_life.web_link_requests TO 'nifty_website'@'localhost';
 GRANT SELECT         ON nifty_life.web_links            TO 'nifty_website'@'localhost';
-GRANT SELECT, INSERT ON nifty_life.peeper_posts         TO 'nifty_website'@'localhost';
-GRANT SELECT, INSERT ON nifty_life.peeper_likes         TO 'nifty_website'@'localhost';
+GRANT SELECT         ON nifty_life.peeper_posts         TO 'nifty_website'@'localhost';
+GRANT SELECT         ON nifty_life.peeper_likes         TO 'nifty_website'@'localhost';
 GRANT SELECT, INSERT ON nifty_life.peeper_reports       TO 'nifty_website'@'localhost';
+
+-- COLUMN-SCOPED, deliberately (migration 014). A post has two possible authors
+-- since migration 012 — a character, or a Discord account for the moderation
+-- team — and a table-level INSERT cannot express "every column except that one".
+-- So the public pool is granted the columns that make a CHARACTER post and is
+-- not granted `author_discord_id` at all: the driver rejects it, rather than a
+-- reviewer having to notice.
+--
+-- This matters because the public pool is the one account a compromised website
+-- would actually hold. Without the column scoping, any write path on the web
+-- server could put words in the owner's mouth and attribute them to his Discord
+-- ID. The CHECK constraint in migration 014 covers the other half: `source =
+-- 'staff'` requires a Discord author, so the public pool cannot label a
+-- character's post as a Team post either.
+GRANT INSERT (id, author_character, author_name, parent_id, body, place_name, source)
+  ON nifty_life.peeper_posts TO 'nifty_website'@'localhost';
+GRANT INSERT (post_id, character_id)
+  ON nifty_life.peeper_likes TO 'nifty_website'@'localhost';
+GRANT INSERT (id, reporter, post_id, reason)
+  ON nifty_life.peeper_reports TO 'nifty_website'@'localhost';
 
 -- ---------------------------------------------------------------------------
 -- Role resolution (2026-10-11).
@@ -137,6 +157,29 @@ GRANT SELECT ON nifty_life.staff     TO 'nifty_admin'@'localhost';
 -- the admin connection must not itself require the admin connection.
 -- ---------------------------------------------------------------------------
 GRANT SELECT ON nifty_life.staff TO 'nifty_website'@'localhost';
+
+-- ---------------------------------------------------------------------------
+-- P&R for the moderation team (migrations 012/013).
+--
+-- The team posts and deletes on P&R WITHOUT a linked character, so these grants
+-- go to `nifty_admin` and NOT to `nifty_website`. That split is the whole design:
+-- the public pool can read the feed and write as a character, and can do
+-- nothing else; the admin pool can publish as the team and soft-delete, and can
+-- still not touch a character's own data.
+--
+-- Deletion is column-scoped to the three soft-delete columns that migration 009
+-- already created. There is no DELETE grant on `peeper_posts` for ANY account:
+-- a removed post stays as evidence, and only the game server can erase one.
+--
+-- `nifty_admin` keeps a table-level INSERT because it needs BOTH author columns:
+-- a staff post has `author_character = NULL` and `author_discord_id` set, which
+-- the column-scoped grant for the public pool could not express.
+-- ---------------------------------------------------------------------------
+GRANT SELECT, INSERT ON nifty_life.peeper_posts TO 'nifty_admin'@'localhost';
+GRANT UPDATE (deleted_at, deleted_by, deleted_by_discord_id, deleted_reason)
+  ON nifty_life.peeper_posts TO 'nifty_admin'@'localhost';
+GRANT SELECT, INSERT ON nifty_life.peeper_likes TO 'nifty_admin'@'localhost';
+GRANT SELECT, INSERT ON nifty_life.peeper_reports TO 'nifty_admin'@'localhost';
 
 -- Verification, alongside the ones below:
 --   INSERT INTO applications (...)                    -- denied: no INSERT
