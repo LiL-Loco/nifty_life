@@ -1,0 +1,309 @@
+/* nifty-ui/ui/menu.css
+ *
+ * Menu chrome for the in-house NUI. Palette and typography come from
+ * the same place as the original nifty-core/ui/menu.css: gold #d6b469
+ * accent on a blue header gradient, Pacifico for the title, Segoe UI for
+ * the body. CSS variables on :root are written by the theme bridge
+ * (themes/nifty.json -> theme:load NUI event -> setProperty), so a future
+ * theme swap re-themes without touching this file.
+ */
+
+.menu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.menu[data-dock="right"] {
+  justify-content: flex-end;
+  padding-right: 1.25rem;
+}
+
+.menu[data-dock="center"] {
+  justify-content: center;
+}
+
+.menu.hidden {
+  display: none !important;
+}
+
+.menu:not(.hidden) {
+  pointer-events: auto;
+}
+
+.menuPanel {
+  width: 26rem;
+  max-width: calc(100vw - 2.5rem);
+  max-height: calc(100vh - 2.5rem);
+  background: rgba(12, 12, 14, 0.90);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.5rem;
+  box-shadow: 0 0.75rem 3rem rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color: var(--text, #f2f2f4);
+  user-select: none;
+}
+
+.menuHeader {
+  background: linear-gradient(180deg, #1f4d8a 0%, #173f6f 55%, #0f2a52 100%);
+  padding: 0.875rem 1rem 0.75rem;
+  text-align: center;
+}
+
+.menuTitle {
+  font-family: Pacifico, 'Brush Script MT', 'Lucida Handwriting', cursive;
+  font-size: 1.875rem;
+  font-weight: 400;
+  color: #fff;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.menuSubtitle {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 400;
+}
+
+.menuSubtitle.hidden {
+  display: none;
+}
+
+.menuSection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 1rem;
+  background: #0c2546;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.menuSection.hidden {
+  display: none;
+}
+
+.menuList {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.menuList::-webkit-scrollbar { width: 0.4rem; }
+.menuList::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 0.2rem; }
+.menuList::-webkit-scrollbar-track { background: transparent; }
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background-color 80ms linear, border-color 80ms linear;
+  gap: 0.5rem;
+  min-height: 1.6rem;
+}
+
+.menuItem:hover:not(.menuItem--disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.menuItem--selected {
+  background: var(--accent-dim, rgba(214, 180, 105, 0.18));
+  border-left-color: var(--accent, #d6b469);
+}
+
+.menuItem--disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.menuItem--separator {
+  cursor: default;
+  padding: 0.45rem 1rem 0.25rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  min-height: 0;
+}
+
+.menuItem__label {
+  flex: 1 1 auto;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menuItem__desc {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 400;
+  margin-top: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menuItem__chev {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.menuItem--button.menuItem--has-submenu .menuItem__label::after,
+.menuItem--button .menuItem__chev {
+  /* chevron rendered by JS for submenus */
+}
+
+.menuItem__icon {
+  width: 1rem;
+  text-align: center;
+  color: var(--accent, #d6b469);
+  font-size: 0.95rem;
+  flex: 0 0 auto;
+}
+
+.menuItem__right {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+}
+
+/* Checkbox */
+.menuItem--checkbox .menuItem__icon {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  width: 1rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.menuItem--checkbox.menuItem--on .menuItem__icon {
+  background: var(--accent, #d6b469);
+  border-color: var(--accent, #d6b469);
+  color: #121212;
+}
+
+/* Slider */
+.menuSlider {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 8rem;
+}
+
+.menuSlider__track {
+  flex: 1 1 auto;
+  height: 0.2rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.menuSlider__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent, #d6b469);
+  width: 50%;
+}
+
+.menuSlider__value {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+/* Input (rendered from zUI-v2's textarea item) */
+.menuInput {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.25rem;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+}
+
+.menuInput:focus {
+  border-color: var(--accent, #d6b469);
+}
+
+.menuItem--input {
+  display: block;
+  padding: 0.55rem 1rem;
+  cursor: default;
+}
+
+.menuItem--input .menuItem__label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+/* List / select */
+.menuList__sublist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.menuList__sublist .menuItem {
+  padding-left: 1.5rem;
+}
+
+/* Footer */
+.menuFooter {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.45rem 0.6rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.menuHint__key {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  margin-right: 0.3rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.2rem;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 0.65rem;
+  vertical-align: baseline;
+  line-height: 1;
+}

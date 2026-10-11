@@ -1,0 +1,51 @@
+{
+  "menu": {
+    "width": "26rem",
+    "displayBanner": false,
+    "displayInformations": false,
+    "displayControlsIndicator": true,
+    "cornersRadius": 0.5,
+    "perspective": false,
+    "margin": false,
+    "shadow": true,
+    "hoverStyle": "modern",
+    "animations": {
+      "entry": "slideInHorizontal",
+      "exit": "slideOutHorizontal",
+      "onSwitch": false,
+      "onScroll": true
+    },
+    "colors": {
+      "primary": "#d6b469",
+      "background": "rgba(12, 12, 14, 0.9)",
+      "description": "rgba(255, 255, 255, 0.55)",
+      "informations": "rgba(255, 255, 255, 0.55)",
+      "controlsIndicator": "rgba(255, 255, 255, 0.5)",
+      "itemSelected": "#d6b469",
+      "banner": "#1f4d8a"
+    },
+    "keyPressDelay": 80,
+    "sound": false,
+    "font": "https://fonts.googleapis.com/css2?family=Pacifico&family=Segoe+UI:wght@400;600;700&display=swap",
+    "maxVisibleItems": 8
+  },
+  "info": {
+    "width": "20rem",
+    "cornerRadius": 0.5,
+    "perspective": false,
+    "shadow": true,
+    "animations": {
+      "entry": "zoomIn",
+      "exit": "slideOutHorizontal"
+    },
+    "colors": {
+      "primary": "#d6b469",
+      "background": "rgba(12, 12, 14, 0.9)"
+    },
+    "font": "https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&display=swap"
+  },
+  "editMod": {
+    "menu": false,
+    "info": false
+  }
+}
