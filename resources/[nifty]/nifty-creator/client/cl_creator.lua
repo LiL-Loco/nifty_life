@@ -78,11 +78,13 @@ function Menu.menu(spec)
 end
 
 function Menu.separator(menu, label)
-  -- UIMenuSeparatorItem's New() has a bug in the upstream library where
-  -- Text/Description are not parameter names but undef globals, so the
-  -- label is hardcoded "N/A" until we set it via :Text().
-  local item = UIMenuSeparatorItem.New()
-  item:Text(label or '')
+  -- MrMathias154's fork does not ship UIMenuSeparatorItem. We approximate
+  -- it with a disabled UIMenuItem whose label acts as the section heading.
+  -- Visually a grayed-out row rather than a thin line, but it groups the
+  -- following items clearly.
+  local text = (label and label ~= '') and label or '—'
+  local item = NativeUI.CreateItem(text, '')
+  item:Enabled(false)
   menu:AddItem(item)
 end
 

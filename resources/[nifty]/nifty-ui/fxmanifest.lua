@@ -3,9 +3,9 @@ game 'gta5'
 lua54 'yes'
 
 name 'nifty-ui'
-author 'Nifty Life 2.0 (vendor: dhawton/NativeUILua_Reloaded)'
-description 'NativeUI-Lua-Reloaded library. Vendored so other resources can load it via @nifty-ui/... paths. No exports, no client logic - just the library files and texture atlases.'
-version '2.0.0'
+author 'Nifty Life 2.0 (vendor: MrMathias154/NativeUILua-Reloaded)'
+description 'NativeUI-Lua-Reloaded library (MrMathias154 fork). Vendored so other resources can load it via @nifty-ui/... paths. No exports, no client logic - just the library files and texture atlases.'
+version '3.0.0'
 
 -- Pure library resource. Other nifty resources (nifty-creator, nifty-core,
 -- nifty-clothing) consume the NativeUI library directly via @nifty-ui/...
@@ -13,75 +13,60 @@ version '2.0.0'
 -- was removed when every caller moved to the lbg-char pattern of
 -- loading the library in-process (no cross-resource boundary).
 --
--- The nifty-chat page still references a base.js that used to come from
--- this resource. That file was a CSS / NUI helper, not a menu concern;
--- chat and phone have their own NUI pages and do not need anything from
--- nifty-ui anymore.
+-- The source is MrMathias154's fork of NativeUILua-Reloaded (a fork of
+-- dhawton's). The directory layout is flatter than the dhawton one
+-- (base/, elements/, items/, panels/, share/, windows/ instead of
+-- UIMenu/, UIElements/, UITimerBar/, UIProgressBar/, Wrapper/). The
+-- public API (NativeUI.CreateMenu, CreateItem, CreateListItem, etc.)
+-- is the same - no caller code needs to change beyond the file paths
+-- in the manifests.
 --
--- FiveM's require resolver walks a resource-relative path; the @ prefix
--- means "starting from another resource's directory". So the consumer
--- reads
---   client_script '@nifty-ui/UIMenu/UIMenu.lua'
--- and FiveM looks at resources/[nifty]/nifty-ui/UIMenu/UIMenu.lua. The
--- consumer must list nifty-ui in its dependencies block for this to load.
+-- The texture atlases in stream/ are dhawton's - the MrMathias154 fork
+-- does not ship them. They are the same GTA stock textures (commonmenu,
+-- etc.) and the menu library looks for them by the exact same YTD names.
+-- FiveM's streaming system registers them once from this resource and
+-- every consumer's NativeUI.* call uses the registered copy.
 dependencies { 'nifty-core' }
 
 files {
   'stream/*.ytd',
 }
 
--- Load order matches the original __resource.lua.
--- 1. Wrapper (utility helpers)
--- 2. UIElements (Sprite, UIResText, UIResRectangle, UIVisual)
--- 3. UIMenu elements (Badge, Colours, ColoursPanel, StringMeasurer)
--- 4. UIMenu items (Item, Checkbox, List, Slider variants, Coloured, Progress, Separator)
--- 5. UIMenu windows (Heritage)
--- 6. UIMenu panels (Grid, Colour, Percentage, Statistics, etc.)
--- 7. UIMenu (the main UIMenu class) and MenuPool
--- 8. UIProgressBar / UITimerBar pools
--- 9. NativeUI.lua (top-level NativeUI.* factory)
+-- Load order matches MrMathias154's __resource.lua.
+-- 1. Share (utility helpers)
+-- 2. Elements (Sprite, UIResText, UIResRectangle, etc.)
+-- 3. Items (Item, Checkbox, List, Slider variants, Coloured, Progress)
+-- 4. Windows (Heritage)
+-- 5. Panels (Grid, Colour, Percentage)
+-- 6. Base (UIMenu, MenuPool)
+-- 7. NativeUI.lua (top-level NativeUI.* factory)
 client_scripts {
-  'Wrapper/Utility.lua',
+  'share/Utils.lua',
 
-  'UIElements/UIVisual.lua',
-  'UIElements/UIResRectangle.lua',
-  'UIElements/UIResText.lua',
-  'UIElements/Sprite.lua',
+  'elements/UIResRectangle.lua',
+  'elements/UIResText.lua',
+  'elements/Sprite.lua',
+  'elements/StringMeasurer.lua',
+  'elements/Badge.lua',
+  'elements/Colours.lua',
+  'elements/ColoursPanel.lua',
 
-  'UIMenu/elements/Badge.lua',
-  'UIMenu/elements/Colours.lua',
-  'UIMenu/elements/ColoursPanel.lua',
-  'UIMenu/elements/StringMeasurer.lua',
+  'items/UIMenuItem.lua',
+  'items/UIMenuCheckboxItem.lua',
+  'items/UIMenuListItem.lua',
+  'items/UIMenuSliderItem.lua',
+  'items/UIMenuSliderHeritageItem.lua',
+  'items/UIMenuColouredItem.lua',
+  'items/UIMenuProgressItem.lua',
 
-  'UIMenu/items/UIMenuItem.lua',
-  'UIMenu/items/UIMenuCheckboxItem.lua',
-  'UIMenu/items/UIMenuListItem.lua',
-  'UIMenu/items/UIMenuSliderItem.lua',
-  'UIMenu/items/UIMenuSliderHeritageItem.lua',
-  'UIMenu/items/UIMenuColouredItem.lua',
-  'UIMenu/items/UIMenuProgressItem.lua',
-  'UIMenu/items/UIMenuSliderProgressItem.lua',
-  'UIMenu/items/UIMenuSeparatorItem.lua',
+  'windows/UIMenuHeritageWindow.lua',
 
-  'UIMenu/windows/UIMenuHeritageWindow.lua',
+  'panels/UIMenuGridPanel.lua',
+  'panels/UIMenuColourPanel.lua',
+  'panels/UIMenuPercentagePanel.lua',
 
-  'UIMenu/panels/UIMenuGridPanel.lua',
-  'UIMenu/panels/UIMenuHorizontalOneLineGridPanel.lua',
-  'UIMenu/panels/UIMenuVerticalOneLineGridPanel.lua',
-  'UIMenu/panels/UIMenuColourPanel.lua',
-  'UIMenu/panels/UIMenuPercentagePanel.lua',
-  'UIMenu/panels/UIMenuStatisticsPanel.lua',
-
-  'UIMenu/UIMenu.lua',
-  'UIMenu/MenuPool.lua',
-
-  'UITimerBar/UITimerBarPool.lua',
-  'UITimerBar/items/UITimerBarItem.lua',
-  'UITimerBar/items/UITimerBarProgressItem.lua',
-  'UITimerBar/items/UITimerBarProgressWithIconItem.lua',
-
-  'UIProgressBar/UIProgressBarPool.lua',
-  'UIProgressBar/items/UIProgressBarItem.lua',
+  'base/UIMenu.lua',
+  'base/MenuPool.lua',
 
   'NativeUI.lua',
 }

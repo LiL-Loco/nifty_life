@@ -94,47 +94,37 @@ client_scripts {
   'client/cl_gamedata.lua',
 
   -- NativeUI-Lua-Reloaded library, loaded in the same order nifty-ui uses.
-  '@nifty-ui/Wrapper/Utility.lua',
+  '@nifty-ui/share/Utils.lua',
 
-  '@nifty-ui/UIElements/UIVisual.lua',
-  '@nifty-ui/UIElements/UIResRectangle.lua',
-  '@nifty-ui/UIElements/UIResText.lua',
-  '@nifty-ui/UIElements/Sprite.lua',
+  -- UIVisual and UIMenuSeparatorItem are not in MrMathias154's repo; we
+  -- do not use them, so the entries are gone.
+  '@nifty-ui/elements/UIResRectangle.lua',
+  '@nifty-ui/elements/UIResText.lua',
+  '@nifty-ui/elements/Sprite.lua',
 
-  '@nifty-ui/UIMenu/elements/Badge.lua',
-  '@nifty-ui/UIMenu/elements/Colours.lua',
-  '@nifty-ui/UIMenu/elements/ColoursPanel.lua',
-  '@nifty-ui/UIMenu/elements/StringMeasurer.lua',
+  '@nifty-ui/elements/Badge.lua',
+  '@nifty-ui/elements/Colours.lua',
+  '@nifty-ui/elements/ColoursPanel.lua',
+  '@nifty-ui/elements/StringMeasurer.lua',
 
-  '@nifty-ui/UIMenu/items/UIMenuItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuCheckboxItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuListItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderHeritageItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuColouredItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuProgressItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSliderProgressItem.lua',
-  '@nifty-ui/UIMenu/items/UIMenuSeparatorItem.lua',
+  '@nifty-ui/items/UIMenuItem.lua',
+  '@nifty-ui/items/UIMenuCheckboxItem.lua',
+  '@nifty-ui/items/UIMenuListItem.lua',
+  '@nifty-ui/items/UIMenuSliderItem.lua',
+  '@nifty-ui/items/UIMenuSliderHeritageItem.lua',
+  '@nifty-ui/items/UIMenuColouredItem.lua',
+  '@nifty-ui/items/UIMenuProgressItem.lua',
+  -- UIMenuSliderProgressItem and UIMenuSeparatorItem are not in the
+  -- MrMathias154 fork; we do not use them, so the entries are gone.
 
-  '@nifty-ui/UIMenu/windows/UIMenuHeritageWindow.lua',
+  '@nifty-ui/windows/UIMenuHeritageWindow.lua',
 
-  '@nifty-ui/UIMenu/panels/UIMenuGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuHorizontalOneLineGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuVerticalOneLineGridPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuColourPanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuPercentagePanel.lua',
-  '@nifty-ui/UIMenu/panels/UIMenuStatisticsPanel.lua',
+  '@nifty-ui/panels/UIMenuGridPanel.lua',
+  '@nifty-ui/panels/UIMenuColourPanel.lua',
+  '@nifty-ui/panels/UIMenuPercentagePanel.lua',
 
-  '@nifty-ui/UIMenu/UIMenu.lua',
-  '@nifty-ui/UIMenu/MenuPool.lua',
-
-  '@nifty-ui/UITimerBar/UITimerBarPool.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarItem.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarProgressItem.lua',
-  '@nifty-ui/UITimerBar/items/UITimerBarProgressWithIconItem.lua',
-
-  '@nifty-ui/UIProgressBar/UIProgressBarPool.lua',
-  '@nifty-ui/UIProgressBar/items/UIProgressBarItem.lua',
+  '@nifty-ui/base/UIMenu.lua',
+  '@nifty-ui/base/MenuPool.lua',
 
   '@nifty-ui/NativeUI.lua',
 

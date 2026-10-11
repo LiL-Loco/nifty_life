@@ -43,8 +43,11 @@ function M.button(menu, label, spec)
 end
 
 function M.separator(menu, label)
-  local item = UIMenuSeparatorItem.New()
-  item:Text(label or '')
+  -- MrMathias154's fork does not ship UIMenuSeparatorItem. We approximate
+  -- it with a disabled UIMenuItem whose label acts as a section heading.
+  local text = (label and label ~= '') and label or '—'
+  local item = NativeUI.CreateItem(text, '')
+  item:Enabled(false)
   menu:AddItem(item)
 end
 
