@@ -36,8 +36,7 @@ INSERT INTO job_defs (code, name, kind, is_emergency, base_x, base_y, base_z) VA
   ('mechanic', 'Mechanic',                     'civilian',   0, -338.87, -135.35, 39.03),
   ('trucker',  'LKW-Fahrer',                   'civilian',   0, -1150.53, 1789.02, 78.77),
   ('tow',      'Abschleppdienst',              'civilian',   0, 826.31, -1223.50, 41.51),
-  ('fire',     'Feuerwehr',                    'department', 1, 1191.55, -1614.21, 34.86),
-  ('bounty',   'Kopfgeldjäger',                'civilian',   0, 172.90, -1922.42, 29.33)
+  ('fire',     'Feuerwehr',                    'department', 1, 1191.55, -1614.21, 34.86)
 ON DUPLICATE KEY UPDATE
   -- Coordinates only. `name` and `kind` are owned by migration 003 and must not
   -- drift from the confirmed roster.
@@ -62,7 +61,6 @@ INSERT INTO settings (`key`, value, value_type, category, description) VALUES
   ('job.wage_per_hour.taxi',       '70.00',  'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
   ('job.wage_per_hour.trucker',    '95.00',  'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
   ('job.wage_per_hour.tow',        '80.00',  'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
-  ('job.wage_per_hour.bounty',     '120.00', 'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
   ('job.wage_per_hour.police',     '110.00', 'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
   ('job.wage_per_hour.ems',        '115.00', 'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
   ('job.wage_per_hour.fire',       '115.00', 'decimal', 'economy', 'Placeholder hourly wage (ADR-0009).'),
