@@ -336,3 +336,78 @@
   color: var(--text, #f2f2f4);
   border-color: var(--accent, #d6b469);
 }
+
+/* ---------------------------------------------------- quantity picker
+   Modal with a numeric input. The right-click menu opens this when
+   the action needs a quantity (split, partial give, partial drop).
+   Two-button row + numeric input styled like the rest of the panel. */
+.inv__picker {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.inv__picker__card {
+  background: rgba(20, 20, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  padding: 18px 20px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text, #f2f2f4);
+  font-size: 13px;
+}
+.inv__picker__title {
+  font-size: 14px;
+  color: var(--accent, #d6b469);
+  letter-spacing: 0.04em;
+}
+.inv__picker__hint {
+  font-size: 12px;
+  color: var(--text-dim, #9a9aa4);
+}
+.inv__picker__input {
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: var(--text, #f2f2f4);
+  padding: 8px 12px;
+  font-size: 18px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+  outline: none;
+}
+.inv__picker__input:focus {
+  border-color: var(--accent, #d6b469);
+}
+.inv__picker__row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.inv__picker__ok,
+.inv__picker__cancel {
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.inv__picker__ok {
+  background: var(--accent, #d6b469);
+  color: #1c1810;
+  border: 1px solid var(--accent, #d6b469);
+}
+.inv__picker__ok:hover { filter: brightness(1.08); }
+.inv__picker__cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text-dim, #9a9aa4);
+}
+.inv__picker__cancel:hover { color: var(--text, #f2f2f4); }

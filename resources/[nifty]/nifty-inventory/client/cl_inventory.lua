@@ -143,6 +143,16 @@ RegisterNUICallback('discardItem', function(data, cb)
   cb({ ok = true })
 end)
 
+-- Split a stack into two. The NUI's quantity picker passes the qty
+-- for the original row; the rest stays together as a fresh row.
+RegisterNUICallback('splitStack', function(data, cb)
+  TriggerServerEvent('nifty:server:splitStack', {
+    itemId   = data and data.itemId,
+    quantity = (data and tonumber(data.quantity)) or 1,
+  })
+  cb({ ok = true })
+end)
+
 -- Discard on the ground: server removes the inventory row AND spawns
 -- a placeholder world prop at the player's current position. The
 -- client passes its own coords so a hostile client cannot make items

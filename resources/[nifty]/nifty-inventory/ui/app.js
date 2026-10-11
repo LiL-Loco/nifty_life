@@ -157,35 +157,77 @@
     menu.style.left = x + 'px';
     menu.style.top  = y + 'px';
 
-    const useBtn = el('button', 'inv__menu-item', 'Benutzen');
+    // Stackable items (max_stack > 1) get a quantity-picker prompt before
+    // any of the action buttons fire. Non-stackable items (max_stack = 1)
+    // skip the prompt and pass quantity=1 directly.
+    const isStackable = item.quantity > 1;
+
+    const useBtn = el('button', 'inv__menu-item',
+      isStackable ? 'Benutzen...' : 'Benutzen');
     useBtn.addEventListener('click', () => {
-      dismissMenu();
-      fetchNui('useItem', {
-        code: item.code, quantity: 1, itemId: item.id,
-      });
+      if (isStackable) {
+        showQuantityPicker(item, item.quantity, (qty) => {
+          fetchNui('useItem', { code: item.code, quantity: qty, itemId: item.id });
+        });
+      } else {
+        dismissMenu();
+        fetchNui('useItem', { code: item.code, quantity: 1, itemId: item.id });
+      }
     });
     menu.appendChild(useBtn);
 
-    const giveBtn = el('button', 'inv__menu-item', 'Geben');
+    const giveBtn = el('button', 'inv__menu-item',
+      isStackable ? 'Geben...' : 'Geben');
     giveBtn.addEventListener('click', () => {
-      dismissMenu();
-      // Server arms give mode and returns the candidate list.
-      fetchNui('enterGiveMode', {
-        code: item.code, quantity: 1, itemId: item.id,
-      }).then(({ ok, targets }) => {
-        if (ok) showTargetPicker(item, targets || []);
-      });
+      if (isStackable) {
+        showQuantityPicker(item, item.quantity, (qty) => {
+          fetchNui('enterGiveMode', {
+            code: item.code, quantity: qty, itemId: item.id,
+          }).then(({ ok, targets }) => {
+            if (ok) showTargetPicker(item, qty, targets || []);
+          });
+        });
+      } else {
+        dismissMenu();
+        fetchNui('enterGiveMode', {
+          code: item.code, quantity: 1, itemId: item.id,
+        }).then(({ ok, targets }) => {
+          if (ok) showTargetPicker(item, 1, targets || []);
+        });
+      }
     });
     menu.appendChild(giveBtn);
 
-    const dropBtn = el('button', 'inv__menu-item', 'Wegwerfen');
+    const dropBtn = el('button', 'inv__menu-item',
+      isStackable ? 'Wegwerfen...' : 'Wegwerfen');
     dropBtn.addEventListener('click', () => {
-      dismissMenu();
-      fetchNui('discardItemOnGround', {
-        code: item.code, quantity: 1, itemId: item.id,
-      });
+      if (isStackable) {
+        showQuantityPicker(item, item.quantity, (qty) => {
+          fetchNui('discardItemOnGround', {
+            code: item.code, quantity: qty, itemId: item.id,
+          });
+        });
+      } else {
+        dismissMenu();
+        fetchNui('discardItemOnGround', {
+          code: item.code, quantity: 1, itemId: item.id,
+        });
+      }
     });
     menu.appendChild(dropBtn);
+
+    // Aufteilen is only meaningful for stackable items. It splits the
+    // stack into two rows, with the picked qty staying in place and the
+    // rest moving to a fresh slot.
+    if (isStackable) {
+      const splitBtn = el('button', 'inv__menu-item', 'Aufteilen...');
+      splitBtn.addEventListener('click', () => {
+        showQuantityPicker(item, item.quantity - 1, (qty) => {
+          fetchNui('splitStack', { itemId: item.id, quantity: qty });
+        }, { min: 1 });
+      });
+      menu.appendChild(splitBtn);
+    }
 
     const cancelBtn = el('button', 'inv__menu-item inv__menu-item--cancel',
       'Abbrechen');
@@ -201,6 +243,83 @@
     }, 0);
   }
 
+  // -------------------------------------------------------------- quantity picker
+  // A small modal with a numeric input. The user types how many of the
+  // item to operate on; on confirm, onConfirm(quantity) is called and
+  // the picker closes. Closes on outside-click or ESC.
+  //
+  // The picker runs on top of the right-click menu, so the right-click
+  // menu stays in DOM and is dismissed by the picker's own close path
+  // (avoids two stacked menus interacting).
+  let pickerState = null;
+
+  function showQuantityPicker(item, defaultQty, onConfirm, opts) {
+    dismissMenu();
+    dismissTargetPicker();
+
+    const overlay = el('div', 'inv__picker');
+    const card = el('div', 'inv__picker__card');
+
+    card.appendChild(el('div', 'inv__picker__title',
+      `${item.name || item.code} (x${item.quantity})`));
+    card.appendChild(el('div', 'inv__picker__hint',
+      'Wie viele?'));
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = String((opts && opts.min) || 1);
+    input.max = String(item.quantity);
+    input.value = String(defaultQty);
+    input.className = 'inv__picker__input';
+    input.autocomplete = 'off';
+    card.appendChild(input);
+
+    const row = el('div', 'inv__picker__row');
+    const ok = el('button', 'inv__picker__ok', 'OK');
+    const cancel = el('button', 'inv__picker__cancel', 'Abbrechen');
+    row.append(ok, cancel);
+    card.appendChild(row);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    pickerState = { overlay, input };
+
+    // Focus the input so the user can type immediately.
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+
+    const close = () => {
+      if (pickerState && pickerState.overlay) {
+        pickerState.overlay.remove();
+        pickerState = null;
+      }
+    };
+
+    // Outside-click on the dark backdrop dismisses. We only act when the
+    // click target is the overlay itself, not the card.
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        ok.click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    });
+
+    ok.addEventListener('click', () => {
+      let v = parseInt(input.value, 10);
+      if (Number.isNaN(v) || v < 1) v = 1;
+      if (v > item.quantity) v = item.quantity;
+      close();
+      onConfirm(v);
+    });
+    cancel.addEventListener('click', close);
+  }
+
   // -------------------------------------------------------------- target picker
   // Modal overlay listing nearby players the giver can pick. Click on
   // a row -> confirmGive to the server. The overlay dismisses either
@@ -214,7 +333,8 @@
     }
   }
 
-  function showTargetPicker(item, targets) {
+  function showTargetPicker(item, qty, targets) {
+    if (qty === undefined) qty = 1;
     dismissTargetPicker();
 
     const overlay = el('div', 'inv__target-picker');
@@ -234,7 +354,7 @@
         row.appendChild(el('span', 'inv__target-row__dist',
           t.distance.toFixed(1) + ' m'));
         row.addEventListener('click', () => {
-          fetchNui('confirmGive', { targetSrc: t.src }).then(({ ok }) => {
+          fetchNui('confirmGive', { targetSrc: t.src, quantity: qty }).then(({ ok }) => {
             dismissTargetPicker();
             if (ok) {
               const note = el('div', 'inv__target-success',

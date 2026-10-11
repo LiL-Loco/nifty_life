@@ -399,6 +399,95 @@ function Inventory.has(characterId, code, quantity)
   return Inventory.count(characterId, code) >= (tonumber(quantity) or 1)
 end
 
+-- Split a stack: leave `quantity` in the original row, move the rest to a
+-- new row. Both rows carry the same metadata so the wardrobe render
+-- keeps the (von X) suffix on the carried-over batch and the
+-- transferred batch alike.
+--
+-- Used by the wardrobe's "Aufteilen" right-click action when the
+-- player wants to give away SOME of a stack, not all of it. We refuse
+-- if the requested split would leave zero on either side, or if the
+-- item is not stackable in the first place (max_stack = 1).
+function Inventory.splitStack(characterId, itemId, qty)
+  qty = math.floor(tonumber(qty) or 0)
+  if qty <= 0 then return false, 'bad quantity' end
+
+  local row = Db.one([[
+    SELECT id, character_id, item_code, quantity, metadata, slot
+      FROM inventory_items
+     WHERE character_id = ? AND id = ?
+     LIMIT 1
+  ]], { characterId, tostring(itemId) }, 'inventory:split:read')
+  if not row or not row.id then return false, 'no row' end
+
+  local def = Inventory.getDefinition(row.item_code)
+  if not def then return false, 'unknown item' end
+  if not def.stackable then return false, 'not stackable' end
+
+  local total = tonumber(row.quantity) or 0
+  if qty >= total then return false, 'would leave zero' end
+  if total - qty == 0 then return false, 'would leave zero' end
+  if qty > def.maxStack then return false, 'exceeds max stack' end
+
+  -- Find a free destination slot. Same constraint as the rest of
+  -- the inventory: a stack-merge candidate is fine, and non-stackable
+  -- items cannot share a slot with themselves.
+  local dstSlot
+  local existing = Db.all([[
+    SELECT slot, quantity FROM inventory_items
+     WHERE character_id = ? AND item_code = ? AND metadata = ?
+  ]], { characterId, row.item_code, row.metadata or '' }, 'inventory:split:slots')
+
+  local used = {}
+  for _, r in ipairs(existing) do used[tonumber(r.slot)] = true end
+
+  if def.stackable then
+    for _, r in ipairs(existing) do
+      local held = tonumber(r.quantity) or 0
+      if held + qty <= def.maxStack then
+        dstSlot = tonumber(r.slot)
+        break
+      end
+    end
+  end
+
+  if not dstSlot then
+    for s = 0, slotCapacity() - 1 do
+      if not used[s] then dstSlot = s break end
+    end
+  end
+  if not dstSlot then return false, 'no free slot' end
+
+  local okTxn = Db.transaction({
+    {
+      sql = [[UPDATE inventory_items SET quantity = ? WHERE id = ? AND character_id = ?]],
+      params = { tostring(total - qty), row.id, characterId },
+    },
+    {
+      sql = (row.metadata ~= nil and row.metadata ~= '')
+        and [[INSERT INTO inventory_items
+                (id, character_id, slot, item_code, quantity, metadata)
+              VALUES (?, ?, ?, ?, ?, ?)]]
+        or  [[INSERT INTO inventory_items
+                (id, character_id, slot, item_code, quantity)
+              VALUES (?, ?, ?, ?, ?)]],
+      params = (function()
+        local newId = Nifty.newUuid()
+        if row.metadata ~= nil and row.metadata ~= '' then
+          return { newId, characterId, tostring(dstSlot),
+                   row.item_code, tostring(qty), row.metadata }
+        end
+        return { newId, characterId, tostring(dstSlot),
+                 row.item_code, tostring(qty) }
+      end)(),
+    },
+  }, 'inventory:split:tx')
+
+  if not okTxn then return false, 'split failed' end
+
+  return true, nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Moving and using
 -- ---------------------------------------------------------------------------
@@ -719,6 +808,7 @@ exports('registerUseHandler', Inventory.registerUseHandler)
 exports('unregisterUseHandler', Inventory.unregisterUseHandler)
 exports('transferBetween', Inventory.transferBetween)
 exports('stampMetadata', Inventory.stampMetadata)
+exports('splitStack', Inventory.splitStack)
 
 -- ---------------------------------------------------------------------------
 -- NUI-driven actions
@@ -744,6 +834,20 @@ RegisterNetEvent('nifty:server:discardItem', function(payload)
   local cid = Identity.getActiveCharacter(src)
   if not cid then return end
   Inventory.remove(cid, payload.code, payload.quantity, payload.itemId)
+end)
+
+-- Split a stack. Used by the inventory UI's "Aufteilen" right-click
+-- action. qty = how many stay in the original row; the rest (total-qty)
+-- move to a fresh row. Refused when the item is not stackable, the
+-- split would leave zero on either side, or the destination would
+-- exceed max_stack.
+RegisterNetEvent('nifty:server:splitStack', function(payload)
+  local src = source
+  if type(payload) ~= 'table' then return end
+  local cid = Identity.getActiveCharacter(src)
+  if not cid then return end
+  local ok, err = Inventory.splitStack(cid, payload.itemId, payload.quantity)
+  TriggerClientEvent('nifty:client:splitStack', src, { ok = ok, reason = err })
 end)
 
 -- Drop-to-world: removes the inventory row and spawns a placeholder
