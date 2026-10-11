@@ -6,7 +6,11 @@
 --
 -- Two players at the same table = the same match. Two players at different
 -- tables = two independent matches.
-return {
+--
+-- Assigned to a global rather than returned, matching the project's
+-- shared-file convention (nifty-core sets `Validate`, `Identity`, etc. as
+-- globals; `require('shared/positions')` is not the path).
+positions = {
   { x =  1116.5148, y = -3153.2751, z =   -37.569, heading =  90.000 },
   { x =  1003.2322, y = -3165.7360, z =   -34.598, heading =   0.000 },
   { x =  1443.3403, y = -2219.0103, z =   60.349, heading = 105.023 },

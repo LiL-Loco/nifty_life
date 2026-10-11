@@ -34,7 +34,7 @@
 --                                              the match without a result (the
 --                                              other side left, or admin).
 
-local TABLES = require('shared/positions')
+local TABLES = positions  -- set by shared/positions.lua as a global
 local MATCH_HOLD_SECONDS  = 12     -- how long a round lasts (server ticks the hand)
 local MATCH_START_DELAY   = 3.0    -- "ready... set... go!" countdown
 local INTERACT_DISTANCE   = 1.6    -- how close the player must be to a table

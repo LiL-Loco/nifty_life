@@ -27,7 +27,7 @@
 -- arbitrary units, and the server has no view of it). We use the server's
 -- own tick instead: see server/sv_armwrestling.lua for the model.
 
-local TABLES = require('shared/positions')
+local TABLES = positions  -- set by shared/positions.lua as a global
 local INTERACT_DISTANCE = 1.6
 local PROXIMITY_TRIGGER = 2.0
 local NUI_DRAW_DISTANCE  = 18.0   -- we only show the NUI while in this range
