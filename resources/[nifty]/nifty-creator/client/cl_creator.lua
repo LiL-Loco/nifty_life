@@ -1727,17 +1727,125 @@ buildSlotMenu = function(kind, id)
   return menu
 end
 
---- The root menu: one row per available slot, then the actions.
+--- Category containers. The root menu lists five of them; each opens
+--- a submenu that holds the items for that category. The build
+--- functions exist so a submenu can lazy-build the right items, and
+--- so an openRoot (Escape from a category) lands back at the root.
+
+--- Heritage: parents (with the heritage window) and eye colour.
+local function buildHeritageCategoryMenu()
+  local menu = Menu.menu({ title = 'Heritage', dock = 'right' })
+  Menu.submenu(menu, 'Eltern', {
+    description = 'Vater, Mutter und die Mischungen daraus.',
+    build = buildParentsMenu,
+  })
+  Menu.submenu(menu, 'Augenfarbe', {
+    description = 'Eine von dreissigzwei.',
+    build = buildEyeColourMenu,
+  })
+  return menu
+end
+
+--- Face features: the twenty grid panels.
+local function buildFaceFeaturesCategoryMenu()
+  return buildFaceMenu()
+end
+
+--- Hair: hairstyle picker (component slot 2) and hair colour.
+local function buildHairCategoryMenu()
+  local menu = Menu.menu({ title = 'Haare', dock = 'right' })
+  local hairSlot = slots.components[2]
+  if hairSlot then
+    Menu.submenu(menu, 'Frisur', {
+      description = ('Slot 2 - %d Kollektionen'):format(#hairSlot),
+      build = function() return buildSlotMenu('components', 2) end,
+    })
+  end
+  Menu.submenu(menu, 'Haarfarbe', {
+    description = 'Hauptfarbe und Strähnen.',
+    build = buildHairColourMenu,
+  })
+  return menu
+end
+
+--- Makeup: the face overlays (0..9). Body overlays (10..12) live in
+--- Outfit, where the rest of the body-shaping choices sit.
+local function buildMakeupCategoryMenu()
+  local menu = Menu.menu({ title = 'Makeup', dock = 'right' })
+  for id = AppearanceConfig.MIN_OVERLAY_ID, 9 do
+    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
+      description = 'Stil, Deckkraft und Farbe.',
+      build = function() return buildOverlayMenu(id) end,
+    })
+  end
+  return menu
+end
+
+--- Outfit: clothing (every component slot except the hair one, which
+--- lives in Haare), accessoires (props), tattoos grouped by zone, and
+--- the body overlays 10..12.
+local function buildOutfitCategoryMenu()
+  local menu = Menu.menu({ title = 'Outfit', dock = 'right' })
+
+  Menu.separator(menu, 'Kleidung')
+  local componentIds = {}
+  for id in pairs(slots.components) do componentIds[#componentIds + 1] = id end
+  table.sort(componentIds)
+  for _, id in ipairs(componentIds) do
+    if id ~= 2 then  -- slot 2 is hair, in the Haare category
+      Menu.submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
+        description = ('Slot %d - %d Kollektionen'):format(id, #slots.components[id]),
+        build = function() return buildSlotMenu('components', id) end,
+      })
+    end
+  end
+
+  local propIds = propIdsSorted()
+  if #propIds > 0 then
+    Menu.separator(menu, 'Accessoires')
+    for _, id in ipairs(propIds) do
+      Menu.submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
+        description = ('Prop %d - %d Kollektionen'):format(id, #slots.props[id]),
+        build = function() return buildSlotMenu('props', id) end,
+      })
+    end
+  end
+
+  local tattooZones = GameData.tattooZones()
+  if #tattooZones > 0 then
+    Menu.separator(menu, 'Tattoos')
+    for _, zoneId in ipairs(tattooZones) do
+      Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
+        description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
+        build = function() return buildTattooMenu(zoneId) end,
+      })
+    end
+  end
+
+  -- Body overlays sit in Outfit, not Makeup, because they decorate the
+  -- body, not the face. The hair overlay is NOT here - the game ties
+  -- exactly one decal to each hairstyle, so picking the hair picks the
+  -- overlay. A list to choose from would offer a combination the game
+  -- has no way to draw.
+  for id = 10, AppearanceConfig.MAX_OVERLAY_ID do
+    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
+      description = 'Stil und Deckkraft.',
+      build = function() return buildOverlayMenu(id) end,
+    })
+  end
+
+  return menu
+end
+
+--- The root menu: five category buttons, then the actions.
+--- Section bar reads "Uebersicht 1 / 5" so the player knows the
+--- creator is at the top of a five-stop tree.
 buildRootMenu = function()
   local menu = Menu.menu({
     title    = 'Charakter erstellen',
     subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
     dock     = 'right',
-    -- Section bar data: shown as "Features 1 / 11" in the dark strip
-    -- under the gradient header. The creator's top-level menu is step 1
-    -- of 11 (Features submenu, then the eleven submenus it opens).
-    -- Submenus carry their own section data; see buildSlotMenu.
-    section  = { name = 'Features', current = 1, total = 11 },
+    section  = { name = 'Uebersicht', current = 1, total = 5 },
     onClose  = function(reason)
       -- Escape or Backspace at the root is the same event as pressing Abbrechen.
       -- Leaving the ped frozen with no menu and no way out is not a state anybody
@@ -1776,78 +1884,28 @@ buildRootMenu = function()
     end
   end
 
-  Menu.separator(menu, 'Kleidung')
-  -- Iterate the component IDs the actual model exposes, not a hardcoded
-  -- COMPONENT_ORDER. The original list had a 12 that the mp_m_freemode_01
-  -- model does not expose (12 component slots, IDs 0-11), so 1 in 12 submenus
-  -- silently never appeared. Sort the discovered IDs so the menu order is
-  -- stable.
-  local componentIds = {}
-  for id in pairs(slots.components) do componentIds[#componentIds + 1] = id end
-  table.sort(componentIds)
-  for _, id in ipairs(componentIds) do
-    local options = slots.components[id]
-    Menu.submenu(menu, COMPONENT_LABELS[id] or ('Slot ' .. id), {
-      description = ('Slot %d - %d Kollektionen'):format(id, #options),
-      build = function() return buildSlotMenu('components', id) end,
-    })
-  end
+  Menu.separator(menu, 'Kategorien')
 
-  local propIds = propIdsSorted()
-  if #propIds > 0 then
-    Menu.separator(menu, 'Accessoires')
-    for _, id in ipairs(propIds) do
-      Menu.submenu(menu, PROP_LABELS[id] or ('Prop ' .. id), {
-        description = ('Prop %d - %d Kollektionen'):format(id, #slots.props[id]),
-        build = function() return buildSlotMenu('props', id) end,
-      })
-    end
-  end
-
-  Menu.separator(menu, 'Gesicht')
-  Menu.submenu(menu, 'Eltern', {
-    description = 'Vater, Mutter und die beiden Mischungen.',
-    build = buildParentsMenu,
+  Menu.submenu(menu, 'Heritage', {
+    description = 'Eltern und Augenfarbe.',
+    build = buildHeritageCategoryMenu,
   })
-
-  Menu.submenu(menu, 'Augenfarbe', {
-    description = 'Eine von dreissigzwei.',
-    build = buildEyeColourMenu,
+  Menu.submenu(menu, 'Gesichtszuege', {
+    description = 'Nasen, Wangen, Kinn, Brauen, ...',
+    build = buildFaceFeaturesCategoryMenu,
   })
-
-  Menu.separator(menu, 'Merkmale')
-
-  for id = AppearanceConfig.MIN_OVERLAY_ID, AppearanceConfig.MAX_OVERLAY_ID do
-    Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
-      description = 'Stil, Deckkraft und Farbe.',
-      build = function() return buildOverlayMenu(id) end,
-    })
-  end
-
-  Menu.submenu(menu, 'Haarfarbe', {
-    description = 'Hauptfarbe und Strähnen.',
-    build = buildHairColourMenu,
+  Menu.submenu(menu, 'Haare', {
+    description = 'Frisur und Haarfarbe.',
+    build = buildHairCategoryMenu,
   })
-
-  Menu.submenu(menu, 'Gesichtsform', {
-    description = 'Die zwanzig Gesichtsschieberegler.',
-    build = buildFaceMenu,
+  Menu.submenu(menu, 'Makeup', {
+    description = 'Bart, Augenbrauen, Makeup, Lippenstift, ...',
+    build = buildMakeupCategoryMenu,
   })
-
-  -- Tattoos, grouped by the body part they go on. The hair overlay is NOT here:
-  -- the game ties exactly one decal to each hairstyle, so picking the hair picks
-  -- the overlay. A list to choose from would offer a combination the game has no
-  -- way to draw.
-  local tattooZones = GameData.tattooZones()
-  if #tattooZones > 0 then
-    Menu.separator(menu, 'Tattoos')
-    for _, zoneId in ipairs(tattooZones) do
-      Menu.submenu(menu, ZONE_LABELS[zoneId] or ('Zone ' .. zoneId), {
-        description = ('%d Tattoo(s)'):format(#GameData.tattoosByZone(zoneId)),
-        build = function() return buildTattooMenu(zoneId) end,
-      })
-    end
-  end
+  Menu.submenu(menu, 'Outfit', {
+    description = 'Kleidung, Accessoires, Tattoos.',
+    build = buildOutfitCategoryMenu,
+  })
 
   Menu.separator(menu, 'Aktionen')
 
