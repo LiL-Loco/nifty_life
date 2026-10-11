@@ -14,5 +14,8 @@ next-env.d.ts
 # misc
 .DS_Store
 *.tsbuildinfo
+
+# dev-server output. `*.log` alone was not enough: a stray `.devtest.err` got
+# committed because `.err` (no star) only matches a file named exactly `.err`.
 *.log
-.err
+*.err
