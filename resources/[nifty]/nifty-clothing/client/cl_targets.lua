@@ -91,29 +91,36 @@ CreateThread(function()
   while true do
     local ped = PlayerPedId()
     if ped and ped ~= 0 then
-      local px, py, pz = GetEntityCoords(ped)
-      local nearestId, nearestDist = nil, 9999.0
+      local coords = GetEntityCoords(ped)
 
-      for id, m in pairs(markers) do
-        local s = m.store
-        local dx, dy, dz = px - s.x, py - s.y, pz - s.z
-        local d2 = dx * dx + dy * dy + dz * dz
-        if d2 < nearestDist then
-          nearestDist = d2
-          nearestId = id
+      -- GetEntityCoords can briefly return a vector with nil components
+      -- (very early spawn, teleport, or hidden ped). Skip this tick rather
+      -- than crash on arithmetic below.
+      if coords and coords.x and coords.y and coords.z then
+        local px, py, pz = coords.x, coords.y, coords.z
+        local nearestId, nearestDist = nil, 9999.0
+
+        for id, m in pairs(markers) do
+          local s = m.store
+          local dx, dy, dz = px - s.x, py - s.y, pz - s.z
+          local d2 = dx * dx + dy * dy + dz * dz
+          if d2 < nearestDist then
+            nearestDist = d2
+            nearestId = id
+          end
         end
-      end
 
-      -- Only redraw the marker when the nearest store changes - leaves the
-      -- on-screen state stable for the most part.
-      currentStoreId = nearestId
+        -- Only redraw the marker when the nearest store changes - leaves
+        -- the on-screen state stable for the most part.
+        currentStoreId = nearestId
 
-      if nearestId and nearestDist <= (PROXIMITY * PROXIMITY) then
-        local s = markers[nearestId].store
-        DrawMarker(MARKER_TYPE, s.x, s.y, s.z - 1.0, 0, 0, 0,
-          0, 0, 0, 0.6, 0.6, 0.3, 168, 80, 168, 100,
-          false, true, 2, false, nil, nil, false)
-        DrawText3D(s.x, s.y, s.z + 0.3, ('K - %s'):format(s.name))
+        if nearestId and nearestDist <= (PROXIMITY * PROXIMITY) then
+          local s = markers[nearestId].store
+          DrawMarker(MARKER_TYPE, s.x, s.y, s.z - 1.0, 0, 0, 0,
+            0, 0, 0, 0.6, 0.6, 0.3, 168, 80, 168, 100,
+            false, true, 2, false, nil, nil, false)
+          DrawText3D(s.x, s.y, s.z + 0.3, ('K - %s'):format(s.name))
+        end
       end
     end
 
