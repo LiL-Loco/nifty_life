@@ -108,6 +108,7 @@ end)
 --- groups; it carries no state and no callback.
 exports('separator', function(...)
   local menu, label = stripSelf(...)
+  print(('[nifty-core] separator: menu=%s, label=%s'):format(tostring(menu), tostring(label)))
   return push(menu, { kind = 'separator', label = label or '' })
 end)
 
