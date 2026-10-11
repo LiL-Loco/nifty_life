@@ -53,6 +53,7 @@ export interface ApplicationAnswers {
 
 export interface Application {
   id: string;
+  user_id: string | null;
   discord_id: string;
   status: ApplicationStatus;
   answers: string;
@@ -187,26 +188,38 @@ export function validateAnswers(form: FormData): ApplicationAnswers | string {
 /**
  * Submit an application.
  *
- * `discordId` comes from the signed session and from nowhere else. A form field
- * named `discord_id` would be ignored even if it were present.
+ * Two identities, and both come from the signed session rather than from a form:
+ * `userId` is whose application this is, `discordId` is the whitelist entry the
+ * game server will create. A form field named `user_id` or `discord_id` is
+ * ignored even if it were present.
  *
- * One application per person, ever. The rule is a UNIQUE index
- * (`uq_applications_discord`, migration 010), so the check below is a courtesy
- * that produces a readable message and the duplicate-key catch is what actually
- * enforces it. Both exist because the pre-check loses races — two tabs, a double
- * click, a client retry — and the constraint does not.
+ * `discordId` is not optional, and that is the requirement the owner set: you
+ * cannot apply without having proven a Discord account. Before portal accounts
+ * existed, having a Discord ID was the same thing as being signed in; now it is a
+ * separate, deliberate step on /account, and this function refuses to paper over
+ * its absence by inventing a key.
+ *
+ * One application per person, twice over. `uq_applications_user` (migration 015)
+ * is one per ACCOUNT and `uq_applications_discord` (migration 010) is one per
+ * DISCORD — so neither holding a second account nor re-linking a different
+ * Discord opens a second application. The checks below only produce readable
+ * sentences; the constraints are what enforce it.
  */
 export async function submitApplication(
+  userId: string,
   discordId: string,
   answers: ApplicationAnswers,
 ): Promise<SubmitResult> {
-  if (!/^\d{5,32}$/.test(discordId)) {
+  if (!/^[0-9a-f-]{36}$/.test(userId)) {
     return { ok: false, error: 'Deine Sitzung ist ungültig. Bitte melde dich erneut an.' };
+  }
+  if (!/^\d{5,32}$/.test(discordId)) {
+    return { ok: false, error: DISCORD_REQUIRED };
   }
 
   const existing = await one<{ id: string; status: ApplicationStatus }>(
-    'SELECT id, status FROM applications WHERE discord_id = ? LIMIT 1',
-    [discordId],
+    'SELECT id, status FROM applications WHERE user_id = ? OR discord_id = ? LIMIT 1',
+    [userId, discordId],
   );
 
   if (existing) {
@@ -219,19 +232,18 @@ export async function submitApplication(
   const id = newUuid();
 
   try {
-    await insert('INSERT INTO applications (id, discord_id, answers) VALUES (?, ?, ?)', [
-      id,
-      discordId,
-      JSON.stringify(answers),
-    ]);
+    await insert(
+      'INSERT INTO applications (id, user_id, discord_id, answers) VALUES (?, ?, ?, ?)',
+      [id, userId, discordId, JSON.stringify(answers)],
+    );
   } catch (error) {
     // ER_DUP_ENTRY. Somebody got in between the check above and this INSERT —
-    // two tabs, or a retry. The unique index caught it, and the applicant is
-    // told the same thing either way.
+    // two tabs, or a retry. A unique index caught it, and the applicant is told
+    // the same thing either way.
     if (isDuplicateKey(error)) {
       const current = await one<{ status: ApplicationStatus }>(
-        'SELECT status FROM applications WHERE discord_id = ? LIMIT 1',
-        [discordId],
+        'SELECT status FROM applications WHERE user_id = ? OR discord_id = ? LIMIT 1',
+        [userId, discordId],
       );
       return {
         ok: false,
@@ -250,6 +262,10 @@ export async function submitApplication(
 
   return { ok: true, id };
 }
+
+/** The refusal for "you have a portal account but no Discord account". */
+export const DISCORD_REQUIRED =
+  'Verknüpfe zuerst dein Discord-Konto, dann kannst du dich bewerben.';
 
 /**
  * The refusal, worded for the state they are actually in.
@@ -282,32 +298,64 @@ function isDuplicateKey(error: unknown): boolean {
 /**
  * This account's application.
  *
- * There is only ever one (`uq_applications_discord`, migration 010), so this is
- * the application rather than the latest of several. The ORDER BY is kept as
- * documentation rather than as logic: if the unique index were ever dropped,
- * the page would silently start showing a different row.
+ * There is only ever one (`uq_applications_user`, migration 015), so this is the
+ * application rather than the latest of several. The Discord half of the predicate
+ * is kept because one pre-portal row still exists with a NULL `user_id`; a person
+ * who once applied through the old Discord login must still see their application
+ * after the session moved to `userId`, or they would be told they never applied.
+ *
+ * The ORDER BY is kept as documentation rather than as logic: if the unique index
+ * were ever dropped, the page would silently start showing a different row.
  */
 export async function latestApplication(
-  discordId: string,
+  userId: string,
+  discordId: string | null,
 ): Promise<Application | null> {
+  if (!discordId) {
+    return one<Application>(
+      `SELECT id, user_id, discord_id, status, answers, submitted_at, reviewed_at, decision_note
+         FROM applications
+        WHERE user_id = ?
+        ORDER BY submitted_at DESC, id DESC
+        LIMIT 1`,
+      [userId],
+    );
+  }
+
   return one<Application>(
-    `SELECT id, discord_id, status, answers, submitted_at, reviewed_at, decision_note
+    `SELECT id, user_id, discord_id, status, answers, submitted_at, reviewed_at, decision_note
        FROM applications
-      WHERE discord_id = ?
+      WHERE user_id = ? OR discord_id = ?
       ORDER BY submitted_at DESC, id DESC
       LIMIT 1`,
-    [discordId],
+    [userId, discordId],
   );
 }
 
-export async function applicationHistory(discordId: string, limit = 5) {
+export async function applicationHistory(
+  userId: string,
+  discordId: string | null,
+  limit = 5,
+) {
+  // Same two-part predicate as `latestApplication`, for the same reason.
+  if (!discordId) {
+    return query<Application>(
+      `SELECT id, status, submitted_at, reviewed_at, decision_note
+         FROM applications
+        WHERE user_id = ?
+        ORDER BY submitted_at DESC, id DESC
+        LIMIT ${Number(limit)}`,
+      [userId],
+    );
+  }
+
   return query<Application>(
     `SELECT id, status, submitted_at, reviewed_at, decision_note
        FROM applications
-      WHERE discord_id = ?
+      WHERE user_id = ? OR discord_id = ?
       ORDER BY submitted_at DESC, id DESC
       LIMIT ${Number(limit)}`,
-    [discordId],
+    [userId, discordId],
   );
 }
 

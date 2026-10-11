@@ -1,17 +1,19 @@
 /**
  * Environment configuration.
  *
- * Two rules live here and both are load-bearing:
+ * The one rule that is load-bearing here: the database user must be the
+ * restricted one. `nifty_website` has no UPDATE grant on `applications` and no
+ * grant at all on `portal_users.email_verified_at`, which is what makes "the
+ * website can never approve anybody and can never confirm its own address" a
+ * property of the database rather than of code someone can get wrong. Pointing
+ * this at `nifty` or `root` removes that boundary silently - no test fails, no
+ * log line appears.
  *
- *  1. The database user must be the restricted one. `nifty_website` has no
- *     UPDATE grant anywhere, which is what makes "the website can never approve
- *     an application" a property of the database rather than of code someone can
- *     get wrong. Pointing this at `nifty` or `root` removes that boundary
- *     silently - no test fails, no log line appears.
- *
- *  2. Development auth must never survive into production. It lets anyone claim
- *     any Discord ID, so it is a complete authentication bypass. We refuse to
- *     boot rather than trust that nobody flipped a flag.
+ * There used to be a second rule here, refusing `DEV_AUTH` in production. That
+ * development login let anybody claim any Discord ID, and it existed because
+ * Discord WAS the login. It is gone with the login itself (migration 015): the
+ * account is now made here with a password, so there is nothing left for a
+ * switch to bypass.
  */
 
 function required(name: string, value: string | undefined): string {
@@ -26,19 +28,9 @@ function required(name: string, value: string | undefined): string {
 const isProduction = process.env.NODE_ENV === 'production';
 
 // `next build` runs with NODE_ENV=production on the machine that will later run
-// the app in development. The guard therefore has to fire when the app SERVES,
-// not when it is compiled - otherwise a developer-auth build cannot be built at
-// all, and the fix would be to delete the guard.
+// the app in development. Any check has to fire when the app SERVES, not when it
+// is compiled - otherwise a build on this machine could not happen at all.
 const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
-
-const devAuthWanted = process.env.DEV_AUTH === 'true';
-
-if (!isBuildPhase && isProduction && devAuthWanted) {
-  throw new Error(
-    'DEV_AUTH=true is refused while NODE_ENV=production. It is a full ' +
-      'authentication bypass and must never be reachable from the internet.',
-  );
-}
 
 /**
  * The redirect URI is the address Discord sends the player BACK to, and it must
@@ -85,7 +77,6 @@ function validateRedirectUri(uri: string): string {
 
 export const config = {
   isProduction,
-  devAuth: devAuthWanted,
 
   db: {
     host: required('DB_HOST', process.env.DB_HOST),
@@ -121,26 +112,24 @@ export const config = {
     clientSecret: process.env.DISCORD_CLIENT_SECRET ?? '',
     redirectUri:
       process.env.DISCORD_REDIRECT_URI ?? 'http://localhost:3000/auth/callback',
-    // Development login is only offered when Discord is not configured at all.
-    devDiscordId: process.env.DEV_DISCORD_ID ?? '',
   },
 };
 
-/** True when a real Discord OAuth round trip is possible. */
+/**
+ * True when a Discord round trip is possible at all.
+ *
+ * Used for exactly two decisions now: whether /account can offer the "connect
+ * Discord" button, and whether the landing page's portal door leads somewhere
+ * useful. It is NOT an authentication mode — there is no longer a Discord login
+ * to fall back from.
+ */
 export const discordConfigured = Boolean(
   config.discord.clientId && config.discord.clientSecret,
 );
 
 // Only validated when Discord is actually in play - a deployment that has not
-// created an application yet should still start and say so on the login page
+// created an application yet should still start and say so on the account page
 // rather than crash on a placeholder value.
 if (discordConfigured && !isBuildPhase) {
   validateRedirectUri(config.discord.redirectUri);
-}
-
-/** Which login paths this instance will actually offer. */
-export function loginMode(): 'discord' | 'dev' | 'unavailable' {
-  if (discordConfigured) return 'discord';
-  if (config.devAuth) return 'dev';
-  return 'unavailable';
 }

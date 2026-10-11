@@ -309,6 +309,19 @@ export async function linkedDiscord(userId: string): Promise<DiscordLink | null>
 }
 
 /**
+ * Why an attach failed, as a code rather than as text.
+ *
+ * The route needs to tell two refusals apart — the Discord account is already
+ * attached elsewhere, versus everything else — so it can send the person to a
+ * page that says something true. Matching on the German sentence instead would
+ * work exactly until somebody reworded the message, and would then break
+ * silently rather than loudly.
+ */
+export type LinkFailure = 'discord-taken' | 'invalid-discord' | 'write-failed';
+
+export type LinkResult = { ok: true } | { ok: false; error: string; code: LinkFailure };
+
+/**
  * Attach a Discord account.
  *
  * The caller must hold a signed-in session; this never runs anonymous. And the
@@ -325,12 +338,12 @@ export async function linkDiscord(
   userId: string,
   discordId: string,
   username: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<LinkResult> {
   if (!/^\d{5,32}$/.test(discordId)) {
-    return { ok: false, error: 'Ungültige Discord-ID.' };
+    return { ok: false, error: 'Ungültige Discord-ID.', code: 'invalid-discord' };
   }
   if (!username || username.length > 64) {
-    return { ok: false, error: 'Ungültiger Discord-Name.' };
+    return { ok: false, error: 'Ungültiger Discord-Name.', code: 'invalid-discord' };
   }
 
   const holder = await one<{ user_id: string }>(
@@ -344,6 +357,7 @@ export async function linkDiscord(
     return {
       ok: false,
       error: 'Dieses Discord-Konto ist bereits mit einem Portal-Konto verknüpft.',
+      code: 'discord-taken',
     };
   }
 
@@ -359,9 +373,14 @@ export async function linkDiscord(
       return {
         ok: false,
         error: 'Dieses Discord-Konto ist bereits mit einem Portal-Konto verknüpft.',
+        code: 'discord-taken',
       };
     }
-    return { ok: false, error: 'Die Verknüpfung konnte nicht gespeichert werden.' };
+    return {
+      ok: false,
+      error: 'Die Verknüpfung konnte nicht gespeichert werden.',
+      code: 'write-failed',
+    };
   }
 
   return { ok: true };

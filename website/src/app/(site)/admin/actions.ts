@@ -19,8 +19,7 @@ export async function decideAction(
   formData: FormData,
 ) {
   const { decide } = await import('@/lib/admin');
-  const { currentSession } = await import('@/lib/auth');
-  const { isStaff } = await import('@/lib/identity');
+  const { currentAccount } = await import('@/lib/auth');
 
   const id = formData.get('id');
   const status = formData.get('status');
@@ -41,8 +40,8 @@ export async function decideAction(
   // Decided on the PUBLIC connection, before the admin connection is ever
   // touched: whether to trust the privileged connection must not itself require
   // the privileged connection.
-  const session = await currentSession();
-  if (!session || !(await isStaff(session.discordId))) {
+  const account = await currentAccount();
+  if (!account || !account.isStaff) {
     return { ok: false as const, error: 'Nicht autorisiert.' };
   }
 

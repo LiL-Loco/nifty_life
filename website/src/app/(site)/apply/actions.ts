@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireSession } from '@/lib/auth';
-import { submitApplication, validateAnswers } from '@/lib/applications';
+import { requireAccount } from '@/lib/auth';
+import { DISCORD_REQUIRED, submitApplication, validateAnswers } from '@/lib/applications';
 
 export type ApplyState = { error?: string } | undefined;
 
@@ -16,14 +16,22 @@ export async function submit(
   _prev: ApplyState,
   form: FormData,
 ): Promise<ApplyState> {
-  const session = await requireSession();
+  const account = await requireAccount();
+
+  // Refused here as well as in `submitApplication`. The page hides the form in
+  // this state, so a refusal reaching the action means somebody posted to it
+  // directly — and a direct post must get the same sentence the page would have
+  // given, not a stranger's error page.
+  if (!account.discord) {
+    return { error: DISCORD_REQUIRED };
+  }
 
   const answers = validateAnswers(form);
   if (typeof answers === 'string') {
     return { error: answers };
   }
 
-  const result = await submitApplication(session.discordId, answers);
+  const result = await submitApplication(account.user.id, account.discord.discordId, answers);
   if (!result.ok) {
     return { error: result.error };
   }

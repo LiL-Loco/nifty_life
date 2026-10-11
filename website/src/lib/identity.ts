@@ -106,6 +106,11 @@ export async function isStaff(discordId: string): Promise<boolean> {
  * publish under", because the two answers need different code paths and getting
  * them out of sync is how a moderator ends up publishing anonymously.
  *
+ * `discordId` and `displayName` are both resolved from the signed-in ACCOUNT, not
+ * read out of the session: the session carries a user ID, and the Discord identity
+ * belongs to `portal_user_discord`. A caller that still passed a session field here
+ * would not type-check, which is the point — the old shape is not reachable.
+ *
  * Staff is checked FIRST and deliberately wins. A moderator who also has a
  * character can still post as that character — the page offers both composers —
  * but moderation actions and staff announcements must never be traceable to a
@@ -121,9 +126,12 @@ export type PeeperActor =
   | { kind: 'character'; characterId: string; name: string | null }
   | { kind: 'none'; discordId: string };
 
-export async function peeperActor(discordId: string, sessionName: string): Promise<PeeperActor> {
+export async function peeperActor(
+  discordId: string,
+  displayName: string,
+): Promise<PeeperActor> {
   if (await isStaff(discordId)) {
-    return { kind: 'staff', discordId, name: sessionName };
+    return { kind: 'staff', discordId, name: displayName };
   }
 
   const link = await linkedCharacter(discordId);

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { currentSession } from '@/lib/auth';
+import { currentAccount } from '@/lib/auth';
 import {
   activeBan,
   applicationHistory,
@@ -28,20 +28,35 @@ export default async function StatusPage({
 }: {
   searchParams: Promise<{ submitted?: string }>;
 }) {
-  const [session, params] = await Promise.all([currentSession(), searchParams]);
-  if (!session) redirect('/');
+  const [account, params] = await Promise.all([currentAccount(), searchParams]);
+  if (!account) redirect('/login');
 
+  const discordId = account.discord?.discordId ?? null;
+
+  // A ban is keyed on the Discord ID, so with no link there is nothing that can
+  // be banned and nothing to look up. Asking anyway with a NULL would return no
+  // rows and read as "not banned" — technically true and quietly misleading.
   const [application, history, ban] = await Promise.all([
-    latestApplication(session.discordId),
-    applicationHistory(session.discordId),
-    activeBan(session.discordId),
+    latestApplication(account.user.id, discordId),
+    applicationHistory(account.user.id, discordId),
+    discordId ? activeBan(discordId) : Promise.resolve(null),
   ]);
 
   return (
     <>
       <h1>Deine Bewerbung</h1>
       <p className="lede">
-        Discord-ID <span className="small">{session.discordId}</span>
+        {account.user.email}
+        {account.discord ? (
+          <>
+            {' · '}Discord <span className="small">{account.discord.discordId}</span>
+          </>
+        ) : (
+          <>
+            {' · '}
+            <Link href="/account">kein Discord-Konto verknüpft</Link>
+          </>
+        )}
       </p>
 
       {params.submitted ? (

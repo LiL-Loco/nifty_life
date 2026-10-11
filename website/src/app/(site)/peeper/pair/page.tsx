@@ -1,6 +1,8 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { currentSession } from '@/lib/auth';
+import { currentAccount } from '@/lib/auth';
+import { discordConfigured } from '@/lib/config';
 import { linkedCharacter, pairingRequests } from '@/lib/identity';
 import { pair } from './actions';
 
@@ -9,19 +11,47 @@ export default async function PairPage({
 }: {
   searchParams: Promise<{ sent?: string; error?: string }>;
 }) {
-  const [session, params] = await Promise.all([currentSession(), searchParams]);
-  if (!session) redirect('/');
+  const [account, params] = await Promise.all([currentAccount(), searchParams]);
+  if (!account) redirect('/login');
+
+  // A pairing request is keyed on the Discord ID, because the game server proves
+  // it against `web_links.discord_id`. With no Discord account there is nothing to
+  // request a pairing FOR, so the page says which step is missing instead of
+  // offering a form that would be rejected on submit.
+  if (!account.discord) {
+    return (
+      <div className="card" style={{ maxWidth: '32rem' }}>
+        <h1 style={{ marginTop: 0 }}>Zuerst Discord verknüpfen</h1>
+        <p>
+          Die Verknüpfung bindet genau einen Charakter an dein Discord-Konto. Ohne
+          dieses Konto gibt es nichts zu binden.
+        </p>
+        <p style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {discordConfigured ? (
+            <Link className="button" href="/auth/discord/connect?next=/peeper/pair">
+              Discord-Konto verknüpfen
+            </Link>
+          ) : null}
+          <Link className="button secondary" href="/account">
+            Zur Kontoseite
+          </Link>
+        </p>
+      </div>
+    );
+  }
+
+  const discordId = account.discord.discordId;
 
   const [link, requests] = await Promise.all([
-    linkedCharacter(session.discordId),
-    pairingRequests(session.discordId),
+    linkedCharacter(discordId),
+    pairingRequests(discordId),
   ]);
 
   return (
     <>
       <h1>Charakter verknüpfen</h1>
       <p className="lede">
-        Peeper wird von Charakteren geschrieben. Die Verknüpfung bindet dieses
+        Peeper wird von Charakteren geschrieben. Die Verknüpfung bindet dein
         Discord-Konto an genau einen deiner Charaktere.
       </p>
 

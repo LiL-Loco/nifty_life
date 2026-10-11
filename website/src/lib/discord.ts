@@ -1,16 +1,22 @@
 /**
- * Discord OAuth (ADR-0007).
+ * Discord OAuth (ADR-0007, revised 2026-10-11).
  *
- * The whitelist identity is the Discord ID, and it is only trustworthy because it
- * comes back from Discord rather than from a form. Every write on this site
- * reads it out of the signed session instead of accepting one as input.
+ * Discord is NO LONGER THE LOGIN. It is what an account ATTACHES, and attaching
+ * it is what an application needs, because the game server gates on
+ * `accounts.discord_id` and that is the only identity it knows.
  *
- * A development login exists so the site can be built before an application
- * exists, but `config.ts` refuses to boot with it enabled in production.
+ * So the callback does not write a session. It writes `portal_user_discord` for
+ * the account that is already signed in, which requires a portal session to exist
+ * — you cannot attach a Discord account without proving you are both the account
+ * holder and the Discord account holder. That is why `authorizeUrl` is only ever
+ * reachable from an authenticated page.
+ *
+ * Scope is `identify` and nothing else. `email`, `guilds` and `openid` would each
+ * add a personal identifier this site has no use for.
  */
 import 'server-only';
 
-import { config, discordConfigured, loginMode } from './config';
+import { config, discordConfigured } from './config';
 
 const DISCORD_AUTHORIZE = 'https://discord.com/oauth2/authorize';
 const DISCORD_TOKEN = 'https://discord.com/api/oauth2/token';
@@ -24,7 +30,14 @@ export interface DiscordIdentity {
   avatar: string | null;
 }
 
-/** Where to send the browser to start the login round trip. */
+/**
+ * Where to send the browser to start the ATTACH round trip.
+ *
+ * `next` is the same-site return path the callback honours after a successful
+ * link. It is echoed back through `state`, which is what stops a stranger from
+ * feeding a forged `state` to the callback: the cookie was written by the server
+ * and only this site's own start route can produce one.
+ */
 export function authorizeUrl(state: string): string {
   if (!discordConfigured) {
     throw new Error('Discord OAuth is not configured.');
@@ -46,8 +59,8 @@ export function authorizeUrl(state: string): string {
  * Exchange an authorization code for the identity behind it.
  *
  * Returns null for anything that is not a usable identity - a rejected exchange,
- * a malformed payload, or an ID that is not a Discord snowflake. A login that
- * half-succeeded must not produce a session.
+ * a malformed payload, or an ID that is not a Discord snowflake. An attach that
+ * half-succeeded must not leave a link behind.
  */
 export async function exchangeCode(
   code: string,
@@ -94,23 +107,8 @@ export async function exchangeCode(
       avatar: me.avatar ?? null,
     };
   } catch {
-    // A network failure or a malformed JSON body are both "login did not
+    // A network failure or a malformed JSON body are both "the attach did not
     // happen". They must not throw their way into a 500 that looks like a bug.
     return null;
   }
-}
-
-/**
- * The development identity, used when Discord is not configured.
- *
- * Returns null in production and whenever the ID is not set, so a half-filled
- * .env cannot quietly open the site.
- */
-export function devIdentity(): DiscordIdentity | null {
-  if (config.isProduction || loginMode() !== 'dev') return null;
-
-  const id = config.discord.devDiscordId;
-  if (!/^\d{5,32}$/.test(id)) return null;
-
-  return { id, username: `dev#${id.slice(-4)}`, avatar: null };
 }

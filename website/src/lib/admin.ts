@@ -14,12 +14,15 @@
 import 'server-only';
 
 import { adminQuery, adminUpdateApplication } from './db';
-import { requireStaff } from './auth';
+import { requireStaffAccount } from './auth';
 import type { ApplicationStatus } from './applications';
 
 export interface QueueEntry {
   id: string;
+  user_id: string | null;
   discord_id: string;
+  /** NULL for the one pre-portal application. Shown, never hidden. */
+  email: string | null;
   status: ApplicationStatus;
   submitted_at: string;
   reviewed_at: string | null;
@@ -37,6 +40,12 @@ const STATUSES: ApplicationStatus[] = ['submitted', 'under_review', 'approved', 
  * is not tidiness: it keeps a single place where applications are read as a
  * list, so if the grant is ever tightened, this view is already on the account
  * that would still have it.
+ *
+ * The LEFT JOIN to `portal_users` is what puts a mail address next to a
+ * reviewer. An application is keyed on a Discord ID, and a Discord ID is no
+ * longer the login — so without this join the reviewer would have a snowflake and
+ * no way to answer the person. `nifty_admin` holds SELECT on `portal_users`;
+ * the public pool does too, but this module is the admin surface by definition.
  */
 export async function queue(
   status?: ApplicationStatus | null,
@@ -47,10 +56,12 @@ export async function queue(
   const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
 
   return adminQuery<QueueEntry>(
-    `SELECT id, discord_id, status, submitted_at, reviewed_at, reviewed_by_discord_id
-       FROM applications
-      WHERE (? IS NULL OR status = ?)
-      ORDER BY submitted_at ASC
+    `SELECT a.id, a.user_id, a.discord_id, u.email, a.status, a.submitted_at,
+            a.reviewed_at, a.reviewed_by_discord_id
+       FROM applications a
+       LEFT JOIN portal_users u ON u.id = a.user_id
+      WHERE (? IS NULL OR a.status = ?)
+      ORDER BY a.submitted_at ASC
       LIMIT ${safeLimit}`,
     [status ?? null, status ?? null],
   );
@@ -58,7 +69,9 @@ export async function queue(
 
 export interface ApplicationRow {
   id: string;
+  user_id: string | null;
   discord_id: string;
+  email: string | null;
   status: ApplicationStatus;
   /** JSON column. The driver may hand this over already parsed, so the shape is
    *  asserted at the render boundary rather than here. */
@@ -74,10 +87,11 @@ export async function application(id: string): Promise<ApplicationRow | null> {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
 
   const rows = await adminQuery<ApplicationRow>(
-    `SELECT id, discord_id, status, answers, submitted_at, reviewed_at,
-            reviewed_by_discord_id, decision_note
-       FROM applications
-      WHERE id = ?
+    `SELECT a.id, a.user_id, a.discord_id, u.email, a.status, a.answers,
+            a.submitted_at, a.reviewed_at, a.reviewed_by_discord_id, a.decision_note
+       FROM applications a
+       LEFT JOIN portal_users u ON u.id = a.user_id
+      WHERE a.id = ?
       LIMIT 1`,
     [id],
   );
@@ -100,18 +114,19 @@ export async function queueCounts(): Promise<Record<string, number>> {
 /**
  * Approve or reject an application.
  *
- * `reviewed_by_discord_id` is the DECIDER'S DISCORD ID, taken from the signed
- * session and from nowhere else. It used to be a character id, which forced the
- * decision through `web_links` — meaning nobody could decide anything until they
- * had already played the game. A moderator is appointed; a character is created.
+ * `reviewed_by_discord_id` is the DECIDER'S DISCORD ID, taken from the signed-in
+ * account's LINKED Discord account and from nowhere else. It used to be a
+ * character id, which forced the decision through `web_links` — meaning nobody
+ * could decide anything until they had already played the game. A moderator is
+ * appointed; a character is created.
  */
 export async function decide(
   id: string,
   status: ApplicationStatus,
   decisionNote: string | null,
 ): Promise<AdminResult> {
-  const staff = await requireStaff();
-  if (!staff) return { ok: false, error: 'Nicht autorisiert.' };
+  const staff = await requireStaffAccount();
+  if (!staff || !staff.discord) return { ok: false, error: 'Nicht autorisiert.' };
 
   if (!/^[0-9a-f-]{36}$/.test(id)) {
     return { ok: false, error: 'Unbekannte Bewerbung.' };
@@ -130,7 +145,7 @@ export async function decide(
     const affected = await adminUpdateApplication(id, {
       status,
       reviewed_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      reviewed_by_discord_id: staff.discordId,
+      reviewed_by_discord_id: staff.discord.discordId,
       decision_note: note,
     });
 

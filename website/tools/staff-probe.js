@@ -5,7 +5,7 @@
  *
  *   Discord role  ->  bot writes the row (simulated here with the GAME account)
  *                 ->  website reads it with the RESTRICTED website account
- *                 ->  requireStaff() resolves
+ *                 ->  the signed-in account resolves as staff
  *
  * The middle step is the one that matters. It used to run through `web_links` and
  * `characters.is_staff`, which meant the admin area could not be reached until a

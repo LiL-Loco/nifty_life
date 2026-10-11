@@ -9,7 +9,7 @@
  * server refuses it", and only the second one protects the review queue.
  *
  * Run:
- *   npx tsc src/lib/applications.ts src/lib/db.ts src/lib/rulebook.ts src/lib/config.ts \
+ *   npx tsc src/lib/{applications,rulebook,config,identity,copycheck,db,session}.ts \
  *     --outDir .tmp-test --module commonjs --target es2022 --moduleResolution node \
  *     --esModuleInterop --skipLibCheck
  *   node tools/validation-tests.js
@@ -32,9 +32,20 @@ Module._resolveFilename = function (request, ...rest) {
   return originalResolve.call(this, request, ...rest);
 };
 
+// `config.ts` refuses to load without database credentials, and the session
+// module needs it for SESSION_SECRET. These are throwaway values: nothing below
+// opens a connection, and `decodeSession` only compares HMACs.
+process.env.DB_HOST ||= '127.0.0.1';
+process.env.DB_USER ||= 'probe';
+process.env.DB_PASSWORD ||= 'probe';
+process.env.DB_NAME ||= 'probe';
+process.env.SESSION_SECRET ||= 'probe-secret-not-used-for-anything-real';
+
 const { validateAnswers } = require('../.tmp-test/applications.js');
 const { RULEBOOK_QUESTIONS } = require('../.tmp-test/rulebook.js');
 const { checkForCopying, copyWarningMessage } = require('../.tmp-test/copycheck.js');
+const { encodeSession, decodeSession } = require('../.tmp-test/session.js');
+const { createHmac } = require('crypto');
 
 let pass = 0;
 let fail = 0;
@@ -308,6 +319,67 @@ check('a sentence that is NOT in the reference passes',
     answers: [{ id: 'q1', question: 'A', answer: 'Ich finde das unfair, weil es niemandem hilft.' }],
     rulebookReferenceText: 'Vereinbart wird hier nicht uebertragen.',
   }).suspicious === false);
+
+// --- The session cookie ----------------------------------------------------
+// The session moved from a Discord ID to a portal user UUID, and the failure
+// this guards against is specific and quiet: a cookie minted by the PREVIOUS
+// build still verifies its HMAC perfectly well, so without an explicit shape
+// check it decodes into an object with `userId: undefined`, every `findUser`
+// call stringifies that into "WHERE id = undefined", and the site answers
+// "signed in" to everybody holding a stale cookie while doing nothing useful.
+const GOOD_UUID = '3f9b1c2e-4a5d-4e6f-8a7b-1c2d3e4f5061';
+const cookie = encodeSession({ userId: GOOD_UUID, email: 'probe@example.test' });
+
+const decoded = decodeSession(cookie);
+check('a fresh cookie round-trips', decoded !== null && decoded.userId === GOOD_UUID);
+check('a fresh cookie keeps the email', decoded !== null && decoded.email === 'probe@example.test');
+check('a missing cookie is not a session', decodeSession(undefined) === null);
+check('an empty cookie is not a session', decodeSession('') === null);
+check('a cookie without a signature is not a session', decodeSession('abc.def') === null);
+
+// The old format, re-signed with the CURRENT secret so the signature is valid.
+// This is the exact shape a signed-in visitor had yesterday.
+//
+// It is refused by BOTH shape checks — it has no `userId` AND no `email` — so
+// this assertion on its own cannot tell you the `userId` check works. That is
+// what the counter-test showed: deleting the UUID check left this test green and
+// turned only the non-UUID case red. The two are kept together for that reason:
+// this one proves the real-world upgrade path is closed, the one below isolates
+// the `userId` half.
+const legacyPayload = Buffer.from(
+  JSON.stringify({
+    discordId: '230143751857766400',
+    username: 'lilloco',
+    avatar: null,
+    expiresAt: Date.now() + 60_000,
+  }),
+).toString('base64url');
+const legacySignature = createHmac('sha256', process.env.SESSION_SECRET)
+  .update(legacyPayload)
+  .digest('base64url');
+check(
+  'a correctly-signed cookie from the OLD format is refused',
+  decodeSession(`${legacyPayload}.${legacySignature}`) === null,
+);
+
+check('a cookie with a non-UUID user id is refused',
+  decodeSession(encodeSession({ userId: 'not-a-uuid', email: 'probe@example.test' })) === null);
+check('a cookie whose signature was tampered with is refused',
+  decodeSession(cookie.slice(0, -2) + 'xy') === null);
+
+// `encodeSession` always stamps a future expiry, so an expired cookie has to be
+// built by hand — with a valid signature, which is the point: expiry is a claim
+// inside the payload, not something the signature covers differently.
+const expiredPayload = Buffer.from(
+  JSON.stringify({ userId: GOOD_UUID, email: 'probe@example.test', expiresAt: 1 }),
+).toString('base64url');
+const expiredSignature = createHmac('sha256', process.env.SESSION_SECRET)
+  .update(expiredPayload)
+  .digest('base64url');
+check(
+  'an expired cookie is refused',
+  decodeSession(`${expiredPayload}.${expiredSignature}`) === null,
+);
 
 console.log('');
 if (fail === 0) {

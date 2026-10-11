@@ -59,6 +59,34 @@ main {
   gap: 1.25rem;
 }
 
+/* The team's own bar inside /admin. Deliberately NOT the site header: the site
+   navigation already differs for staff, and having two bars that look alike would
+   make it unclear which one applies. This one is a tab strip over the team
+   area, and it deliberately offers no link to the application form — the team
+   reads applications, it does not submit them. */
+.team-nav {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.75rem 0;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.team-nav a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid transparent;
+}
+
+.team-nav a:hover {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
 .wordmark {
   font-weight: 600;
   letter-spacing: -0.01em;

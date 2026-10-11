@@ -76,7 +76,8 @@ export default async function AdminQueue({
             <thead>
               <tr>
                 <th style={cellHead}>Eingegangen</th>
-                <th style={cellHead}>Discord-ID</th>
+                <th style={cellHead}>E-Mail</th>
+                <th style={cellHead}>Discord</th>
                 <th style={cellHead}>Status</th>
                 <th style={cellHead}>Entschieden</th>
                 <th style={cellHead}></th>
@@ -86,6 +87,14 @@ export default async function AdminQueue({
               {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td style={cell}>{formatDate(entry.submitted_at)}</td>
+                  <td style={{ ...cell, fontFamily: 'inherit' }}>
+                    {entry.email ?? (
+                      // The one application that predates portal accounts. Said
+                      // out loud rather than left blank, so nobody reads the
+                      // empty cell as a bug.
+                      <span className="muted small">kein Portal-Konto</span>
+                    )}
+                  </td>
                   <td style={{ ...cell, fontFamily: 'monospace' }}>{entry.discord_id}</td>
                   <td style={cell}>{LABELS[entry.status] ?? entry.status}</td>
                   <td style={{ ...cell, color: 'var(--muted)' }}>

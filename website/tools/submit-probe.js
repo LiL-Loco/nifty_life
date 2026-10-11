@@ -9,8 +9,15 @@
  * This is the only test that proves the insert is actually permitted by the
  * grant. Everything else is logic.
  *
- * The row it writes is deleted again in `finally`. If the process dies first,
- * one probe row is left behind; it is identifiable by the marker below.
+ * TWO identities now go into `submitApplication` (migration 015): the portal
+ * account it belongs to, and the linked Discord ID the game server will key the
+ * whitelist entry on. The probe creates a real portal account to submit through,
+ * because an application with no account behind it is exactly the row the
+ * one-per-person rules are supposed to prevent.
+ *
+ * The rows it writes are deleted again in `finally`. If the process dies first,
+ * one probe account and one probe application are left behind; both are
+ * identifiable by the markers below.
  *
  * Run: node tools/submit-probe.js
  */
@@ -37,12 +44,18 @@ for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
   if (at > 0) process.env[line.slice(0, at).trim()] = line.slice(at + 1).trim();
 }
 
-const { validateAnswers, submitApplication } = require('../.tmp-test/applications.js');
+const { validateAnswers, submitApplication, DISCORD_REQUIRED } =
+  require('../.tmp-test/applications.js');
 const { query } = require('../.tmp-test/db.js');
+const { register } = require('../.tmp-test/users.js');
 const { RULEBOOK_QUESTIONS } = require('../.tmp-test/rulebook.js');
 
 const PROBE_DISCORD_ID = '999000999000999999';
+const PROBE_EMAIL = 'probe.submit@example.test';
+const PROBE_PASSWORD = 'ein-langes-passwort-123';
+
 let probeId = null;
+let probeUserId = null;
 let pass = 0;
 let fail = 0;
 
@@ -101,14 +114,42 @@ function probeForm() {
     const answers = validateAnswers(probeForm());
     check('validation passes before anything is written', typeof answers === 'object');
 
-    const result = await submitApplication(PROBE_DISCORD_ID, answers);
+    // An application belongs to an ACCOUNT. Submitting with a made-up UUID would
+    // prove nothing about the real path, so the probe makes a real account.
+    const account = await register(PROBE_EMAIL, PROBE_PASSWORD);
+    check('a portal account exists to apply through', account.ok, account.error);
+    if (!account.ok) return finish();
+    probeUserId = account.user.id;
+
+    // The Discord requirement, checked BEFORE the happy path so a refusal cannot
+    // be confused with a failure later on.
+    const withoutDiscord = await submitApplication(probeUserId, '', answers);
+    check(
+      'an application without a linked Discord account is refused',
+      !withoutDiscord.ok && withoutDiscord.error === DISCORD_REQUIRED,
+      JSON.stringify(withoutDiscord),
+    );
+    const leaked = await query('SELECT COUNT(*) AS c FROM applications WHERE user_id = ?', [
+      probeUserId,
+    ]);
+    check('the refusal wrote nothing', Number(leaked[0].c) === 0, 'got ' + leaked[0].c);
+
+    const result = await submitApplication(probeUserId, PROBE_DISCORD_ID, answers);
     check('the insert is permitted by the grant', result.ok, result.error);
     if (!result.ok) return finish();
 
     probeId = result.id;
 
-    const rows = await query('SELECT id, discord_id, status, answers FROM applications WHERE id = ?', [probeId]);
+    const rows = await query(
+      'SELECT id, user_id, discord_id, status, answers FROM applications WHERE id = ?',
+      [probeId],
+    );
     check('the row is readable back', rows.length === 1);
+    // Both identities are stored. `user_id` answers "whose application is this"
+    // for the portal, `discord_id` answers "whose whitelist entry will be
+    // created" for the game server — and the second is the one the server checks.
+    check('the row carries the portal account', rows[0] && rows[0].user_id === probeUserId);
+    check('the row carries the Discord ID', rows[0] && rows[0].discord_id === PROBE_DISCORD_ID);
 
     // mysql2 parses JSON columns into objects on the way out, so the value may
     // already be parsed depending on driver path. Accept both rather than
@@ -131,16 +172,18 @@ function probeForm() {
     check('it lands as "submitted", not approved',
       rows[0] && rows[0].status === 'submitted');
 
-    // ---- One application per person, ever (migration 010) ------------------
-    // The rule is a UNIQUE index. The pre-check inside submitApplication is only
-    // a courtesy that produces a readable message, so the thing worth proving is
-    // the raw constraint: a second row for the same Discord ID must be refused by
-    // the database even when nothing in the application layer is consulted.
+    // ---- One application per person, twice over ----------------------------
+    // Two UNIQUE indexes, from two migrations, and both matter now:
+    //   uq_applications_user    (015) one per ACCOUNT
+    //   uq_applications_discord (010) one per DISCORD
+    // The pre-checks inside submitApplication only produce readable sentences, so
+    // what is worth proving is the raw constraint — a second row must be refused
+    // by the database even when nothing in the application layer is consulted.
     let secondInsert = 'allowed';
     try {
       await query(
-        'INSERT INTO applications (id, discord_id, answers) VALUES (?, ?, ?)',
-        [newProbeUuid(), PROBE_DISCORD_ID, JSON.stringify({ probe: true })],
+        'INSERT INTO applications (id, user_id, discord_id, answers) VALUES (?, ?, ?, ?)',
+        [newProbeUuid(), probeUserId, PROBE_DISCORD_ID, JSON.stringify({ probe: true })],
       );
     } catch (error) {
       secondInsert = error.errno === 1062 ? 'refused' : `error:${error.code}`;
@@ -148,8 +191,27 @@ function probeForm() {
     check('the unique index refuses a second application for the same person',
       secondInsert === 'refused', 'got ' + secondInsert);
 
+    // A SECOND ACCOUNT with the same Discord ID must not open a door either.
+    // This is the case the Discord index exists for: holding two portal accounts
+    // must not mean two applications.
+    let crossInsert = 'allowed';
+    const other = await register('probe.submit.b@example.test', 'ein-anderes-passwort-456');
+    if (other.ok) {
+      try {
+        await query(
+          'INSERT INTO applications (id, user_id, discord_id, answers) VALUES (?, ?, ?, ?)',
+          [newProbeUuid(), other.user.id, PROBE_DISCORD_ID, JSON.stringify({ probe: true })],
+        );
+      } catch (error) {
+        crossInsert = error.errno === 1062 ? 'refused' : `error:${error.code}`;
+      }
+      await cleanupUser(other.user.id);
+    }
+    check('a second account cannot reuse the same Discord ID for a second application',
+      crossInsert === 'refused', 'got ' + crossInsert);
+
     // And the application-level refusal is readable, not a driver message.
-    const second = await submitApplication(PROBE_DISCORD_ID, answers);
+    const second = await submitApplication(probeUserId, PROBE_DISCORD_ID, answers);
     check('a second submit through the app is refused with a sentence',
       !second.ok && second.error.includes('bereits'),
       'got ' + JSON.stringify(second));
@@ -166,14 +228,18 @@ function probeForm() {
   } catch (error) {
     check('the probe ran without throwing', false, error.message);
   } finally {
+    // The APPLICATION first, then the ACCOUNT: `applications.user_id` is a plain
+    // column with no foreign key (migration 015), so deleting the account first
+    // would leave an application behind pointing at nobody. That is a real
+    // property of the schema and the cleanup order has to respect it.
     if (probeId) {
       try {
         // The website account cannot DELETE, which is the boundary working. The
         // cleanup therefore has to be an admin connection.
-        await cleanup(probeId);
-        console.log('  ----  probe row deleted');
+        await cleanup(probeId, probeUserId);
+        console.log('  ----  probe rows deleted');
       } catch (error) {
-        console.log('  ----  probe row ' + probeId + ' left behind: ' + error.message);
+        console.log('  ----  probe rows left behind: ' + error.message);
       }
     }
     finish();
@@ -191,17 +257,32 @@ function newProbeUuid() {
  * negotiate, and adding a second privileged credential to a test harness for the
  * sake of one DELETE is a poor trade.
  */
-async function cleanup(id) {
+async function cleanup(applicationId, userId) {
+  const conn = await privilegedConnection();
+  await conn.execute('DELETE FROM applications WHERE id = ?', [applicationId]);
+  if (userId) {
+    // Cascades to the tokens and the Discord link on its own.
+    await conn.execute('DELETE FROM portal_users WHERE id = ?', [userId]);
+  }
+  await conn.end();
+}
+
+/** Same account, used for the mid-probe teardown of the second account. */
+async function cleanupUser(userId) {
+  const conn = await privilegedConnection();
+  await conn.execute('DELETE FROM portal_users WHERE id = ?', [userId]);
+  await conn.end();
+}
+
+function privilegedConnection() {
   const mysql = require('mysql2/promise');
-  const conn = await mysql.createConnection({
+  return mysql.createConnection({
     host: process.env.DB_HOST,
     port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_GAME_USER,
     password: process.env.DB_GAME_PASSWORD,
     database: process.env.DB_NAME,
   });
-  await conn.execute('DELETE FROM applications WHERE id = ?', [id]);
-  await conn.end();
 }
 
 function finish() {

@@ -1,15 +1,30 @@
 import Link from 'next/link';
 
+import { currentAccount } from '@/lib/auth';
+
 /**
  * The portal's chrome — every page inside `app/(site)`.
  *
- * Navigation is public-only on purpose. The team area is not in it: a nav entry
- * a stranger can see but not click advertises that a moderation area exists, and
- * showing it meant an `isStaff()` query on every page for every signed-in visitor
- * on a site that is otherwise public and read-mostly. The team link lives in
- * Discord and in the bot's startup output.
+ * The navigation is ROLE-AWARE, and that is a reversal of an earlier decision
+ * worth recording. The team link was removed from the public nav because a nav
+ * entry a stranger can see but not click advertises a moderation area, and
+ * because asking "is this person staff" on every page put a query in front of
+ * every visitor on an otherwise public site.
+ *
+ * The owner then asked for the opposite thing in a specific form: the team must
+ * NOT see links to Bewerbung and Status, and must get its own links instead. A
+ * single navigation cannot do both without knowing who is looking, so this layout
+ * now reads the account.
+ *
+ * The cost is one indexed lookup on `staff` for SIGNED-IN visitors only. An
+ * anonymous visitor — which is every stranger and every search engine — pays
+ * nothing, because `currentAccount()` returns on the cookie alone when there is
+ * no session to decode. What it buys is that a moderator never sees a link to a
+ * form they are not allowed to submit.
  */
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+export default async function SiteLayout({ children }: { children: React.ReactNode }) {
+  const account = await currentAccount();
+
   return (
     <>
       <header className="site-header">
@@ -17,9 +32,22 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           Nifty Life <span>2.0</span>
         </Link>
         <nav>
-          <Link href="/apply">Bewerbung</Link>
-          <Link href="/status">Status</Link>
-          <Link href="/peeper">P&amp;R</Link>
+          {account?.isStaff ? (
+            <>
+              <Link href="/peeper">P&amp;R</Link>
+              <Link href="/admin">Team</Link>
+              <Link href="/account">{account.user.email}</Link>
+            </>
+          ) : (
+            <>
+              <Link href="/apply">Bewerbung</Link>
+              <Link href="/status">Status</Link>
+              <Link href="/peeper">P&amp;R</Link>
+              <Link href={account ? '/account' : '/login'}>
+                {account ? account.user.email : 'Anmelden'}
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 
