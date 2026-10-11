@@ -387,22 +387,48 @@ local camRadius = 2.6
 
 local function startCamera()
   local scene = CreatorScene
+  local headingRad = scene.heading * math.pi / 180.0
+  local dirX = math.cos(headingRad)
+  local dirY = math.sin(headingRad)
 
-  camYaw = scene.heading
-  camPitch = scene.camPitch
-  camRadius = scene.camRadius
+  -- Three-stage flyover to match the GTA Online entry cinematic:
+  -- far/high overview -> mid-range -> close-up. Each stage is a
+  -- separate scripted cam; SetCamActiveWithInterp blends them so the
+  -- cut between cameras is not visible. Total ~2.4s, then the menu
+  -- opens (the third stage's position is the working menu camera).
+  local function at(distance, height, fov, pitch, yawDelta)
+    return CreateCamWithParams(
+      'DEFAULT_SCRIPTED_CAMERA',
+      scene.x + dirX * distance,
+      scene.y + dirY * distance,
+      scene.z + height,
+      pitch, 0.0, (scene.heading or 0.0) - yawDelta,
+      fov, false, 0
+    )
+  end
 
-  local cam = CreateCamWithParams(
-    'DEFAULT_SCRIPTED_CAMERA',
-    scene.x, scene.y + scene.camHeight, scene.z + 1.4,
-    0.0, 0.0, 0.0, 50.0, false, 0
-  )
-
-  creatorCam = cam
-  RenderScriptCams(cam, true, false, 0)
+  local far = at(scene.camRadius, scene.camHeight, scene.camFarFov, -85.0, 90.0)
+  creatorCam = far
+  RenderScriptCams(far, true, false, 0)
 
   -- Firing off so a player cannot shoot themselves while posing.
   DisablePlayerFiring(PlayerId(), true)
+
+  -- Stage 2: mid-range, after the overview settles.
+  SetTimeout(scene.camMove, function()
+    local mid = at(scene.camRadius * 0.4, scene.camNearZ, scene.camNearFov, -25.0, 60.0)
+    PointCamAtCoord(mid, scene.x, scene.y, scene.z + 0.5)
+    SetCamActiveWithInterp(mid, far, scene.camInterp, true, true)
+    creatorCam = mid
+
+    -- Stage 3: close-up, the working menu camera.
+    SetTimeout(scene.camSettle, function()
+      local close = at(2.0, 1.4, 35.0, -5.0, scene.heading - 0.0)
+      PointCamAtEntity(close, PlayerPedId(), 0.0, 0.0, 0.0, true)
+      SetCamActiveWithInterp(close, mid, 600, true, true)
+      creatorCam = close
+    end)
+  end)
 end
 
 local function stopCamera()
