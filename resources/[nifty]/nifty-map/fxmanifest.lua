@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-map'
 author 'Nifty Life 2.0'
@@ -15,4 +16,3 @@ resource_type 'map' { gameTypes = { ['basic-gamemode'] = true } }
 map 'map.lua'
 
 games { 'gta5' }
-lua54 'yes'

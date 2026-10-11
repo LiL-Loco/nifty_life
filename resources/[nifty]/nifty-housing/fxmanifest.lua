@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-housing'
 author 'Nifty Life 2.0'
@@ -22,4 +23,3 @@ dependencies {
   'nifty-economy',
   'nifty-ui',
 }
-lua54 'yes'

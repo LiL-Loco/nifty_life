@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-economy'
 author 'Nifty Life 2.0'
@@ -21,4 +22,3 @@ server_script 'server/stuetze.lua'
 dependencies {
   'nifty-core',
 }
-lua54 'yes'

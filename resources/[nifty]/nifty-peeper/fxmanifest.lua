@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-peeper'
 author 'Nifty Life 2.0'
@@ -23,4 +24,3 @@ server_script 'server/sv_peeper.lua'
 dependencies {
   'nifty-core',
 }
-lua54 'yes'

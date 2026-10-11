@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-spawn'
 author 'Nifty Life 2.0'
@@ -18,4 +19,3 @@ shared_scripts {
 client_script 'client/cl_spawn.lua'
 
 dependencies { 'nifty-core', 'nifty-ui' }
-lua54 'yes'

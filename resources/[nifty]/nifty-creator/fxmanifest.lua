@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-creator'
 author 'Nifty Life 2.0'
@@ -70,4 +71,3 @@ dependencies {
   'nifty-core',
   'nifty-ui',
 }
-lua54 'yes'

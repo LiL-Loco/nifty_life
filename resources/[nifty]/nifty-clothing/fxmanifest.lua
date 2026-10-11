@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-clothing'
 author 'Nifty Life 2.0'
@@ -28,4 +29,3 @@ dependencies {
   'nifty-world',
   'nifty-chat',
 }
-lua54 'yes'

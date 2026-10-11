@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 name 'nifty-ui'
 author 'Nifty Life 2.0'
@@ -51,4 +52,3 @@ client_script 'client/cl_menu.lua'
 dependencies {
   '/onesync',
 }
-lua54 'yes'
