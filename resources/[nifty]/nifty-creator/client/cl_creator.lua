@@ -251,14 +251,25 @@ end
 --- Changing the model invalidates the old ped handle, so every later
 --- `PlayerPedId()` in this file must be re-fetched rather than taken from a cache.
 ---
---- `joaat(name)` returns nil when the name is not registered in the running game
---- build. Passing nil to SetPlayerModel is a hard client crash, so we refuse
---- the call and log instead. The creator UI stays usable; only the model
---- preview is wrong, which is the lesser of two failures.
+--- Two guard layers before SetPlayerModel. Either failing one means the
+--- model is not safe to apply, and SetPlayerModel with an invalid hash
+--- is a hard client crash:
+---   1. \`joaat(name)\` returns 0 for a name that is not registered in the
+---      running game build. Catches typos and obsolete model names.
+---   2. \`IsModelInCdimage(hash)\` confirms the model is actually in this
+---      client's content data. Catches the case where the name is
+---      registered but the streaming asset is not present (wrong DLC
+---      enabled, or a build that drops the freemode).
+--- If either fails, the creator UI stays usable; only the model preview
+--- is wrong, which is the lesser of two failures.
 local function respawnModel()
   local hash = joaat(currentModel)
   if not hash or hash == 0 then
-    print(('[%s] respawnModel: model "%s" not registered in this build, skipping SetPlayerModel'):format(RESOURCE, tostring(currentModel)))
+    print(('[%s] respawnModel: model "%s" not registered, skipping SetPlayerModel'):format(RESOURCE, tostring(currentModel)))
+    return PlayerPedId()
+  end
+  if not IsModelInCdimage(hash) then
+    print(('[%s] respawnModel: model "%s" (0x%x) not in cdimage, skipping SetPlayerModel'):format(RESOURCE, currentModel, hash)))
     return PlayerPedId()
   end
   SetPlayerModel(PlayerId(), hash)
