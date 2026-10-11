@@ -251,17 +251,23 @@ end
 --- Changing the model invalidates the old ped handle, so every later
 --- `PlayerPedId()` in this file must be re-fetched rather than taken from a cache.
 ---
---- Two guard layers before SetPlayerModel. Either failing one means the
---- model is not safe to apply, and SetPlayerModel with an invalid hash
---- is a hard client crash:
----   1. \`joaat(name)\` returns 0 for a name that is not registered in the
----      running game build. Catches typos and obsolete model names.
----   2. \`IsModelInCdimage(hash)\` confirms the model is actually in this
----      client's content data. Catches the case where the name is
----      registered but the streaming asset is not present (wrong DLC
----      enabled, or a build that drops the freemode).
---- If either fails, the creator UI stays usable; only the model preview
---- is wrong, which is the lesser of two failures.
+--- Three layers before SetPlayerModel. The third is the one that was
+--- missing: even after \`joaat\` resolves the name and \`IsModelInCdimage\`
+--- confirms the asset is registered, the model is NOT in the streaming
+--- system until \`RequestModel\` runs AND finishes loading. Calling
+--- SetPlayerModel before \`HasModelLoaded\` returns true is a hard client
+--- crash on most FXServer builds - the model is not yet in memory.
+---
+--- 1. \`joaat(name)\` returns 0 for an unregistered name. Typo / obsolete.
+--- 2. \`IsModelInCdimage(hash)\` confirms the asset is in the content
+---    data, just not yet loaded into memory.
+--- 3. \`RequestModel(hash)\` + a short blocking wait on
+---    \`HasModelLoaded(hash)\` actually pulls the model into memory.
+--- A 5s timeout on the wait bails out if the streaming system refuses
+--- to load (network stall, sandbox), so the creator never hangs.
+---
+--- The creator UI stays usable in every failure mode - the camera, the
+--- menu, the slot discovery - just without the model preview.
 local function respawnModel()
   local hash = joaat(currentModel)
   if not hash or hash == 0 then
@@ -272,6 +278,17 @@ local function respawnModel()
     print(('[%s] respawnModel: model "%s" (0x%x) not in cdimage, skipping SetPlayerModel'):format(RESOURCE, currentModel, hash))
     return PlayerPedId()
   end
+
+  RequestModel(hash)
+  local deadline = GetGameTimer() + 5000
+  while not HasModelLoaded(hash) do
+    Wait(0)
+    if GetGameTimer() > deadline then
+      print(('[%s] respawnModel: model "%s" (0x%x) failed to load in 5s, skipping SetPlayerModel'):format(RESOURCE, currentModel, hash))
+      return PlayerPedId()
+    end
+  end
+
   SetPlayerModel(PlayerId(), hash)
   SetModelAsNoLongerNeeded(hash)
   return PlayerPedId()
