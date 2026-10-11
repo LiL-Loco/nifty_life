@@ -142,7 +142,7 @@ CreateThread(function()
     Wait(0)
 
     local player = PlayerPedId()
-    local px, py = GetEntityCoords(player)
+    local px, py, _ = GetEntityCoords(player)
 
     nearestId, nearestDistance = nil, 2.5
 
@@ -175,7 +175,7 @@ end)
 --- be the only thing that answers.
 RegisterCommand('niftyenter', function()
   local player = PlayerPedId()
-  local px, py = GetEntityCoords(player)
+  local px, py, _ = GetEntityCoords(player)
 
   local bestId, bestDistance = nil, 2.5
 
