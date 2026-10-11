@@ -275,11 +275,18 @@ end)
 -- ----- Visibility / pool control -----
 
 -- Common path: validate, register onClose, add to pool, show.
-local function presentHandle(menu)
+-- We use LastBuiltMenu (the table the builders added rows to) rather
+-- than the `menu` arg the caller passed, because FiveM's exports
+-- proxy on this build deep-copies the return value of 'menu', so
+-- the caller's local `menu` is a different table from the one
+-- NativeUI's UIMenu constructor created - the deep copy's .Items
+-- field is a fresh empty table, not a reference to the original.
+-- Items added by Menu.separator / Menu.button / etc. went into
+-- LastBuiltMenu, so we open LastBuiltMenu to get the populated menu.
+local function presentHandle(_arg)
+  local menu = LastBuiltMenu
   if type(menu) ~= 'table' or not menu.Visible then return false end
   if menu._onClose then
-    -- NativeUI menus fire an OnMenuClose event when Visible(false) is
-    -- called. We use that to surface the user's onClose with a reason.
     menu.OnMenuClose = function(_)
       if type(menu._onClose) == 'function' then
         pcall(menu._onClose, 'closed')
@@ -292,18 +299,16 @@ local function presentHandle(menu)
 end
 
 exports('openMenu', function(...)
-  local _owner, menu = ...
-  if not presentHandle(menu) then return false end
-  return true
+  return presentHandle(...)
 end)
 
 exports('pushMenu', function(...)
-  local _owner, menu = ...
   -- pushMenu: caller has a new menu to show, replacing the current
   -- one. We close everything currently visible first to mirror the
-  -- previous framework's "navigate to new menu" behaviour.
+  -- previous framework's "navigate to new menu" behaviour. Use
+  -- LastBuiltMenu for the same deep-copy reason as openMenu.
   pool:CloseAllMenus()
-  return presentHandle(menu)
+  return presentHandle(...)
 end)
 
 exports('closeMenu', function(...)
