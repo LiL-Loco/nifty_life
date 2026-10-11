@@ -1,0 +1,79 @@
+/* Nifty Life 2.0 — chat surface.
+ *
+ * Loads the shared base first (reset, colour variables, primitives) and adds only
+ * what is uniquely the chat's. Anything else here would be parsed by every other
+ * surface's page for no benefit. */
+
+@import url('https://cfx-nui-nifty-ui/ui/base.css');
+
+.chat-log {
+  position: fixed;
+  left: 18px;
+  bottom: 130px;
+  width: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.chat-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(12, 12, 14, 0.62);
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.6s ease;
+}
+
+.chat-line__author {
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A system line has no author and must not look like one. If it looked like a
+   player line, a player could pass a refusal off as something somebody said. */
+.chat-line--system {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.chat-line.is-leaving { opacity: 0; }
+
+.chat-input {
+  position: fixed;
+  left: 18px;
+  bottom: 96px;
+  width: 460px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: rgba(12, 12, 14, 0.92);
+}
+
+.chat-input__caret {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chat-input__field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.chat-input__field::placeholder { color: rgba(154, 154, 164, 0.5); }

@@ -103,11 +103,41 @@ end
 
 --- Create the character and its wallet together. A character without a wallet is
 --- an unplayable state, so both rows go in one transaction or neither does.
-function Identity.createCharacter(src, payload)
+--- Create the one character this account is allowed.
+---
+--- `number` is REQUIRED and comes from the caller, which got it from
+--- `exports['nifty-phone']:reserve()`. That inversion is the reason the base has
+--- no idea the phone system exists.
+---
+--- It used to: this function called `Phone.newNumber()` and
+--- `Inventory.grantStartingItems(characterId)` directly, because all three lived in
+--- one resource and a global was free. After the split a global is not free — it is
+--- a resource boundary. Leaving those calls in would make nifty-core depend on
+--- nifty-phone and nifty-inventory, while nifty-inventory already depends on
+--- nifty-core for the database. Two resources that each need the other to have
+--- started is a boot order with no valid first element, and FXServer resolves it by
+--- failing one of them at random.
+---
+--- The orchestrator is nifty-world (sv_main.lua), which is allowed to know about
+--- both systems because its whole job is the connect-to-play sequence.
+---
+--- The number still has to land in the SAME transaction as the character row
+--- (ADR-0021) — a character without a number could never be messaged, and the
+--- number is permanent, so it cannot be added afterwards as a convenience. Passing
+--- it in rather than calling out preserves that: the INSERT below is still inside
+--- this transaction, it just receives its value from outside.
+function Identity.createCharacter(src, payload, number)
   local attempts = (CreationAttempts[src] or 0) + 1
   CreationAttempts[src] = attempts
   if attempts > MAX_CREATE_ATTEMPTS then
     return nil, 'too many attempts'
+  end
+
+  -- Refused here rather than allowed to reach the transaction and fail there.
+  -- "No free number" is a real condition and it deserves its own message; a
+  -- UNIQUE violation twenty lines down reads like a database fault.
+  if type(number) ~= 'string' or number == '' then
+    return nil, 'no free phone number'
   end
 
   local account = Identity.resolveAccount(src)
@@ -149,7 +179,12 @@ function Identity.createCharacter(src, payload)
   -- character. A character with no number could not be messaged, and the number
   -- is permanent, so it cannot be added later as a convenience — it has to exist
   -- from the first second of the character's life.
-  local number = Phone.newNumber()
+  --
+  -- The VALUE was reserved by the caller (nifty-phone). Collision is handled by
+  -- asking the database there rather than retrying inside this transaction: a
+  -- transaction cannot be partially retried from the outside, so the rare collision
+  -- must never reach it. If one does anyway, the UNIQUE constraint is the backstop
+  -- and the whole insert fails cleanly.
   if not number then return nil, 'no free phone number' end
 
   -- ADR-0008 is enforced by UNIQUE, not by this check. If two requests race,
@@ -193,9 +228,13 @@ function Identity.createCharacter(src, payload)
 
   if not ok then return nil, 'could not create character' end
 
-  -- ADR-0018: every character starts with a handset and an ID. The handset is
-  -- inert until activated, which is the moment a player buys a number.
-  Inventory.grantStartingItems(characterId)
+  -- ADR-0018: every character starts with a handset and an ID, but that is the
+-- INVENTORY system's decision, not the base's. It used to be granted right here,
+-- which meant nifty-core wrote into a table and called a function it had no business
+-- knowing. The orchestrator (nifty-world) now calls
+-- `exports['nifty-inventory']:grantStartingItems(characterId)` after this returns,
+-- and it is idempotent — the same character granted twice is the same state, so a
+-- retry cannot duplicate the handset.
 
   print(('[%s] created character %s for account %s'):format(RESOURCE, characterId, account.id))
 

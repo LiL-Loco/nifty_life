@@ -1,0 +1,228 @@
+/* Nifty Life 2.0 — phone surface (ADR-0018, ADR-0021).
+ *
+ * Loads the shared base first (reset, colour variables, button primitives) and adds
+ * only the device chrome. The block below is lifted verbatim from the single-file UI
+ * this page used to share with the creator, the HUD and the chat: an overlay that
+ * changes shape is not something to redesign while splitting a resource. */
+
+@import url('https://cfx-nui-nifty-ui/ui/base.css');
+.phone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4vh 6vw;
+  background: rgba(8, 8, 10, 0.35);
+  animation: fade-in 160ms ease;
+}
+
+.phone__device {
+  width: 360px;
+  height: 640px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-solid);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.phone__statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.phone__number {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__carrier {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Unread badge. Drawn next to the number rather than on the Messages tab, so
+   the count is visible without switching apps — and it is the same number the
+   server sent, never recomputed here. */
+.phone__badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #16161a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.phone__tab {
+  flex: 1;
+  padding: 11px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.phone__tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.phone__app {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+.phone__app.is-active { display: flex; }
+
+.phone__list { display: flex; flex-direction: column; gap: 8px; }
+
+.phone__message {
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.phone__message--unread { border-left: 3px solid var(--accent); }
+
+.phone__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.phone__from { color: var(--text); font-weight: 600; }
+
+.phone__time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.phone__body {
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.phone__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Reason picker for reporting. Native select, restyled to the panel tokens —
+   a custom dropdown would be a second keyboard-navigation surface to get wrong
+   for no gain. */
+.phone__reason {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.phone__field { display: block; margin-bottom: 12px; }
+
+.phone__label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.phone__field input,
+.phone__field textarea {
+  width: 100%;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+}
+
+.phone__field input:focus,
+.phone__field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.phone__hint {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.phone__empty {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* The homebar is also the close target. There is no close button: the phone
+   closes the way a phone closes, and Escape does the same thing. */
+.phone__homebar {
+  height: 26px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+/* ===========================================================================
+   Chat.
+
+   Two independent surfaces, and the split is the whole design:
+
+   .chat-log    passive, always mounted, every line fades out on its own timer.
+                It never takes focus. If it did, a message arriving in the middle
+                of a police chase would eat the mouse.
+
+   .chat-input  exists only while somebody is typing, and the only thing in the
+                entire NUI that takes focus from the game. One owner at a time
+                is enforced in cl_chat.lua, not here — a stylesheet cannot know
+                whether the phone is open.
+
+   The palette reuses the phone's variables on purpose. This is one interface
+   wearing two shapes, and a second set of near-identical greys would be a
+   difference nobody could act on.
+   =========================================================================== */
+

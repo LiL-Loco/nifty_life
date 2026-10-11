@@ -60,11 +60,7 @@ SpawnPoints = {
   default = {
     label  = 'Los Santos International',
     x = -1035.71, y = -2731.87, z = 12.86, heading = 0.0,
-  },
-  losSantos = {
-    label  = 'Legion Square',
-    x = 195.32, y = -933.77, z = 29.72, heading = 145.0,
-  },
+  }
 }
 
 --- Where the character creator stages the player. Outdoors on purpose: the
