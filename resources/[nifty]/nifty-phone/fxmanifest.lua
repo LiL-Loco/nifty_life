@@ -27,5 +27,4 @@ client_script 'client/cl_phone.lua'
 dependencies {
   'nifty-core',
   'nifty-inventory',
-  'nifty-ui',
 }

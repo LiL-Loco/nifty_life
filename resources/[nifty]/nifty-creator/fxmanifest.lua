@@ -69,5 +69,4 @@ client_scripts {
 
 dependencies {
   'nifty-core',
-  'nifty-ui',
 }

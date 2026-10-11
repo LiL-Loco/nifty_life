@@ -51,5 +51,4 @@ dependencies {
   'nifty-housing',
   'nifty-creator',
   'nifty-clothing',
-  'nifty-ui',
 }

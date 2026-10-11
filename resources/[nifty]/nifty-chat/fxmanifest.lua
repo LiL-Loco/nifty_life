@@ -44,6 +44,5 @@ client_script 'client/cl_chat.lua'
 -- because the chat input is a focus-holding surface like any other.
 dependencies {
   'nifty-core',
-  'nifty-ui',
 }
 
