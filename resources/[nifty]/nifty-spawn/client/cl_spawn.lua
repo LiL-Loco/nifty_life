@@ -36,17 +36,106 @@
 ---   * `addSpawnPoint` takes our shape (`x, y, z, heading, label, model`) rather
 ---     than spawnmanager's, which is the same plus a radius for the picking UI we
 ---     do not have.
+---
+--- WHY THE EXPORTS ARE AT THE VERY TOP OF THIS FILE
+---
+--- basic-gamemode (a Cfx resource with no dependencies) calls
+--- exports['nifty-spawn']:setAutoSpawn(true) in its onClientMapStart handler.
+--- onClientMapStart fires the instant a map resource starts. The map is ensured
+--- AFTER nifty-spawn in server.cfg, so the server's "Started resource nifty-spawn"
+--- is logged before the map starts - but that log line is the server's view of
+--- the resource lifecycle, not the client's. The client must still download the
+--- client script and execute it before the handler finds the export.
+---
+--- If the exports are registered mid-file, there is a window between "the first
+--- line ran" and "the export line ran" during which the handler can fire and
+--- find nothing. Registering the exports at the top of the file - before the
+--- spawn-point setup, before the function bodies, before anything that could
+--- throw - makes the race a non-event. The functions the closures call are
+--- forward-declared and assigned further down; the closures dereference them at
+--- call time, by which point the whole file has executed and the assignments are
+--- done.
 
 local RESOURCE = GetCurrentResourceName()
+
+--- Forward declarations. The actual assignments happen further down. The
+--- closures registered as exports dereference these upvalues at call time, so
+--- the order of "register export" and "assign value" does not matter as long as
+--- the file completes before an event fires - which it always does, because the
+--- body below contains no Wait() calls.
+local spawnPoints = {}
+local nextSpawnId
+local autoSpawn, autoSpawnCallback, isSpawning
+local respawnAtDefault
+local spawnPlayerImpl
+
+--- ----------------------------------------------------------------------------
+--- Exports. Registered FIRST. Every entry below points at a forward-declared
+--- name that is assigned in the body further down; the closure captures the
+--- upvalue and dereferences it on call.
+--- ----------------------------------------------------------------------------
+
+exports('spawnPlayer', function(definition, cb)
+  return spawnPlayerImpl(definition, cb)
+end)
+
+exports('forceRespawn', function()
+  if not IsEntityDead(PlayerPedId()) then return end
+  respawnAtDefault()
+end)
+
+exports('setAutoSpawn', function(state)
+  autoSpawn = state ~= false
+end)
+
+exports('setAutoSpawnCallback', function(cb)
+  autoSpawnCallback = cb
+  autoSpawn = true
+end)
+
+exports('addSpawnPoint', function(point)
+  if type(point) ~= 'table' or not point.x then return nil end
+
+  local entry = {
+    id = nextSpawnId,
+    label = point.label or ('Spawn ' .. nextSpawnId),
+    x = point.x, y = point.y, z = point.z,
+    heading = point.heading or 0.0,
+    model = point.model,
+  }
+  nextSpawnId = nextSpawnId + 1
+  spawnPoints[#spawnPoints + 1] = entry
+
+  return entry.id
+end)
+
+exports('removeSpawnPoint', function(id)
+  for i, point in ipairs(spawnPoints) do
+    if point.id == id then
+      table.remove(spawnPoints, i)
+      return true
+    end
+  end
+  return false
+end)
+
+exports('getSpawnPoints', function() return spawnPoints end)
+
+--- ----------------------------------------------------------------------------
+--- Body. Initialise state, build the spawn-point table, define the functions
+--- the exports call. All synchronous; no event can interleave.
+--- ----------------------------------------------------------------------------
+
+autoSpawn = false
+autoSpawnCallback = nil
+isSpawning = false
+nextSpawnId = 1
 
 --- The known spawn points, seeded from AppearanceConfig - which is our "map".
 ---
 --- Read at load rather than passed in, because AppearanceConfig is a shared file
 --- and a spawn point that only exists if someone remembered to forward it is a
 --- spawn point that will be missing the one time it matters.
-local spawnPoints = {}
-local nextSpawnId = 1
-
 for key, point in pairs(SpawnPoints or {}) do
   if type(point) == 'table' and point.x then
     spawnPoints[#spawnPoints + 1] = {
@@ -65,16 +154,12 @@ end
 --- wrong, but it makes "the same spawn as last time" impossible to describe.
 table.sort(spawnPoints, function(a, b) return tostring(a.label) < tostring(b.label) end)
 
-local autoSpawn = false
-local autoSpawnCallback = nil
-local isSpawning = false
-
 --- Respawn a dead player at the current spawn point.
 ---
 --- The original does this on death, and so do we - but only once the player is
 --- actually in the world. Before that they are frozen at the creation point, and
 --- a frozen player cannot die, so this is mostly about not surprising anyone.
-local function respawnAtDefault()
+respawnAtDefault = function()
   local definition = spawnPoints[1]
   if not definition then
     print(('[%s] no spawn point configured - cannot respawn'):format(RESOURCE))
@@ -96,7 +181,7 @@ end
 ---
 --- Setting the model after the resurrect leaves the camera inside the old ped for
 --- a frame, which reads as a glitch on every single spawn.
-exports('spawnPlayer', function(definition, cb)
+spawnPlayerImpl = function(definition, cb)
   if isSpawning then return end
 
   if type(definition) ~= 'table' or not definition.x then
@@ -144,50 +229,7 @@ exports('spawnPlayer', function(definition, cb)
     if type(cb) == 'function' then cb(definition) end
     TriggerEvent('playerSpawned', definition)
   end)
-end)
-
---- Respawn whoever is dead, if autospawn is on.
-exports('forceRespawn', function()
-  if not IsEntityDead(PlayerPedId()) then return end
-  respawnAtDefault()
-end)
-
-exports('setAutoSpawn', function(state)
-  autoSpawn = state ~= false
-end)
-
-exports('setAutoSpawnCallback', function(cb)
-  autoSpawnCallback = cb
-  autoSpawn = true
-end)
-
-exports('addSpawnPoint', function(point)
-  if type(point) ~= 'table' or not point.x then return nil end
-
-  local entry = {
-    id = nextSpawnId,
-    label = point.label or ('Spawn ' .. nextSpawnId),
-    x = point.x, y = point.y, z = point.z,
-    heading = point.heading or 0.0,
-    model = point.model,
-  }
-  nextSpawnId = nextSpawnId + 1
-  spawnPoints[#spawnPoints + 1] = entry
-
-  return entry.id
-end)
-
-exports('removeSpawnPoint', function(id)
-  for i, point in ipairs(spawnPoints) do
-    if point.id == id then
-      table.remove(spawnPoints, i)
-      return true
-    end
-  end
-  return false
-end)
-
-exports('getSpawnPoints', function() return spawnPoints end)
+end
 
 --- The death monitor.
 ---
