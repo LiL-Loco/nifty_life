@@ -689,46 +689,12 @@ local function stopCamera()
   DisablePlayerFiring(PlayerId(), false)
 end
 
---- Orbit with A/D and W/S, zoom with Q/E.
----
---- KEYS, NOT THE MOUSE. The menu framework owns the keyboard while a menu is open
---- and uses the ARROWS, but the old camera read the mouse - the same axis a slider
---- row drags along. The two fought and the camera won every time the player was
---- adjusting a texture. WASD/Q/E are free while a menu is up and are what a player
---- already expects to turn a character with.
-CreateThread(function()
-  while true do
-    if creatorOpen and creatorCam then
-      Wait(0)
-
-      -- 32/33 = A/D, 22/23 = W/S, 14/15 = Q/E.
-      local yaw = 0.0
-      if IsDisabledControlPressed(0, 32) then yaw = yaw - 1.6 end
-      if IsDisabledControlPressed(0, 33) then yaw = yaw + 1.6 end
-      camYaw = camYaw + yaw
-
-      local pitch = 0.0
-      if IsDisabledControlPressed(0, 22) then pitch = pitch - 0.6 end
-      if IsDisabledControlPressed(0, 23) then pitch = pitch + 0.6 end
-      camPitch = math.max(-35.0, math.min(25.0, camPitch + pitch))
-
-      local zoom = 0.0
-      if IsDisabledControlPressed(0, 14) then zoom = zoom + 0.05 end
-      if IsDisabledControlPressed(0, 15) then zoom = zoom - 0.05 end
-      camRadius = math.max(1.4, math.min(5.0, camRadius + zoom))
-
-      local scene = CreatorScene
-      local x = scene.x + math.sin(math.rad(camYaw)) * camRadius
-      local y = scene.y + math.cos(math.rad(camYaw)) * camRadius
-      local z = scene.z + 1.4 + math.sin(math.rad(camPitch)) * camRadius
-
-      SetCamCoord(creatorCam, x, y, z)
-      PointCamAtCoord(creatorCam, scene.x, scene.y, scene.z + 0.95, 0.9)
-    else
-      Wait(250)
-    end
-  end
-end)
+--- Camera control is in the menu render thread (the other Citizen.CreateThread
+--- near the bottom of the file). Q / E turn the camera around the
+--- player; up / down arrow changes the FOV. The previous orbit-style
+--- thread (A/D yaw, W/S pitch, Q/E distance) was removed when the user
+--- asked for the simpler Q/E + arrow scheme - two threads reading the
+--- same keys would fight each other on every frame.
 
 --- German labels for the thirteen head overlays, in the game's own order.
 ---
@@ -1347,9 +1313,19 @@ local function buildEyeColourMenu()
     'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
   )
 
-  local eyeItem = NativeUI.CreateListItem('Augenfarbe', Labels.EYE_COLOURS,
-    (face.eyeColour or 0) + 1,
-    'Waehle die Augenfarbe. Die Liste ist die engine-eigene Reihenfolge.')
+  -- Show only the realistic subset: green, emerald, light/ocean blue,
+  -- light/dark brown, hazel, dark/light grey. The remaining 23 indices
+  -- are eye-shadow tints and monster eyes (Lizard, Alien, Zombie, ...)
+  -- and do not belong in a normal character creator. The full 32 are
+  -- still reachable through admin commands; this menu just does not
+  -- offer them.
+  local realisticCount = REALISTIC_EYE_COLOUR_MAX + 1
+  local realisticEyes = {}
+  for i = 1, realisticCount do realisticEyes[i] = Labels.EYE_COLOURS[i] end
+
+  local eyeItem = NativeUI.CreateListItem('Augenfarbe', realisticEyes,
+    math.min((face.eyeColour or 0) + 1, realisticCount),
+    ('Waehle die Augenfarbe. %d realistische Farben (Grün, Smaragd, Blau, Braun, Hazel, Grau).'):format(realisticCount))
 
   eyeItem.OnListChanged = function(_parent, _item, index)
     face.eyeColour = index - 1
@@ -2120,9 +2096,92 @@ end)
 -- this resource. nifty-ui runs a parallel thread for its own pool (used
 -- by wardrobe, store, spawn) - two pools, two threads, no interference
 -- because they draw to separate UIMenu instances.
+-- The creator's working camera. startCamera() captures it; we read
+-- it through the module-level creatorCam global so the thread sees
+-- the right cam without a separate tracking variable.
+-- Turn and zoom state for the working camera. Yaw is the heading the
+-- player is looking at (degrees, GTA's right-handed convention). Zoom
+-- is the FOV; smaller = closer, larger = further. Both clamped.
+local camYaw = 0.0
+local camFov = 50.0
+local CAM_YAW_RATE   = 90.0  -- degrees per second when Q / E is held
+local CAM_FOV_MIN   = 15.0
+local CAM_FOV_MAX   = 75.0
+local CAM_FOV_STEP  = 12.0  -- FOV delta per arrow press
+
+-- Mouse lock + camera turn + zoom, all in the same render tick that
+-- already drives the menu. Q / E turn the camera around the player; up
+-- / down zoom in and out. The cursor is constrained to the visible
+-- menu's drawn rectangle so it cannot wander off into the world and
+-- accidentally interact with something the menu does not control.
 Citizen.CreateThread(function()
   while true do
     _pool:ProcessMenus()
+
+    if creatorCam then
+      local dt = GetFrameTime()
+
+      -- Q / E yaw turn. Q is INPUT_CONTEXT_SECONDARY (control 47), E
+      -- is INPUT_CONTEXT (38). NativeUI's ControlDisablingEnabled
+      -- blocks the engine's normal Q / E / arrow handling, so we read
+      -- IsDisabledControlPressed ourselves.
+      local turn = 0.0
+      if IsDisabledControlPressed(0, 47) then turn = turn - 1 end  -- Q
+      if IsDisabledControlPressed(0, 38) then turn = turn + 1 end  -- E
+      if turn ~= 0.0 then
+        camYaw = camYaw + turn * CAM_YAW_RATE * dt
+        local cx, cy, cz = GetCamCoord(creatorCam)
+        local dist = 1.0
+        local rad = math.rad(camYaw)
+        SetCamCoord(creatorCam,
+          cx + math.sin(rad) * dist,
+          cy + math.cos(rad) * dist,
+          cz)
+        PointCamAtCoord(creatorCam, cx, cy, cz)
+      end
+
+      -- Up / down FOV zoom. One-shot per key press, not held; the player
+      -- taps to step in or out. Hold-to-zoom would overshoot on slower
+      -- frames. Arrow up is INPUT_FRONTEND_UP (27), down is
+      -- INPUT_FRONTEND_DOWN (28).
+      if IsDisabledControlJustPressed(0, 27) then
+        camFov = math.max(CAM_FOV_MIN, camFov - CAM_FOV_STEP)
+        SetCamFov(creatorCam, camFov)
+      end
+      if IsDisabledControlJustPressed(0, 28) then
+        camFov = math.min(CAM_FOV_MAX, camFov + CAM_FOV_STEP)
+        SetCamFov(creatorCam, camFov)
+      end
+    end
+
+    -- Mouse lock. The visible menu (if any) defines a draw rectangle
+    -- from (menu.Position.X, menu.Position.Y) of width menu.Width and
+    -- height menu.Height. We snap the cursor back inside whenever it
+    -- crosses the border. The lock only fires while a menu is open;
+    -- otherwise the cursor is free.
+    if Menu.isOpen() then
+      local cursorX, cursorY = GetCursorPos()
+      for _, m in ipairs(_pool.Menus) do
+        if m.Visible then
+          local rectX = m.Position.X
+          local rectY = m.Position.Y
+          local rectW = m.Width
+          local rectH = m.Height
+          local margin = 2
+          if cursorX < rectX + margin then
+            SetCursorPos(rectX + margin, cursorY)
+          elseif cursorX > rectX + rectW - margin then
+            SetCursorPos(rectX + rectW - margin, cursorY)
+          end
+          if cursorY < rectY + margin then
+            SetCursorPos(GetCursorPos(), rectY + margin)
+          elseif cursorY > rectY + rectH - margin then
+            SetCursorPos(GetCursorPos(), rectY + rectH - margin)
+          end
+        end
+      end
+    end
+
     Citizen.Wait(0)
   end
 end)
