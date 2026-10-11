@@ -21,6 +21,11 @@ local waitingForWorld = false
 --- (and, later, the creator, which calls applyAppearance too).
 local currentAppearance = nil
 
+--- The index spawnmanager hands back when we register the character's home
+--- as a spawn point. Stored so playerDisconnected can remove it; otherwise
+--- entries pile up across reconnects and the map's point list drifts.
+local characterSpawnIndex = nil
+
 --- The head-overlay natives, resolved ONCE at load.
 ---
 --- Cfx registers several of these under an underscored name in the Lua runtime
@@ -262,31 +267,39 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
 
   local appearance = data.character.appearance
 
-  -- Spawn THROUGH the spawn module, not with a bare SetEntityCoords.
-  --
-  -- Two reasons. The obvious one is that a player who died on a previous life is
-  -- still dead here, and moving a corpse does not resurrect it - so this is where
-  -- `NetworkResurrectLocalPlayer` has to happen. The subtler one is the model:
-  -- the spawn sets it, so the resurrect lands in the right body, and the
-  -- appearance then only has to dress that body. Calling the model-setting
-  -- `applyAppearance` here as well would reset the ped a second time and throw
-  -- away everything the spawn just did.
-  exports['nifty-spawn']:spawnPlayer({
-    x = data.spawn.x,
-    y = data.spawn.y,
-    z = data.spawn.z,
-    heading = data.spawn.heading or 0.0,
-    model = appearance and appearance.model,
-  }, function()
-    -- Dressing happens once the spawn's screen fade is in, so the player does not
-    -- watch their own clothes assemble while the screen is still black.
-    applyAppearanceParts(PlayerPedId(), appearance)
-  end)
+  -- The game has already placed the player at the map's default spawn; we
+  -- swap the model, dress the ped, and move them to their character's home.
+  -- A short fade hides the model switch - without it the camera sits inside
+  -- the old ped for a frame.
+  DoScreenFadeOut(500)
+  while not IsScreenFadedOut() do Wait(0) end
 
-  -- Autospawn is armed AFTER the spawn, never before. During the creator the
-  -- player is standing at the creation point and must stay there; arming it
-  -- earlier would let the death monitor move them out from under the menu.
-  exports['nifty-spawn']:setAutoSpawn(true)
+  if appearance and appearance.model then
+    local model = joaat(appearance.model)
+    SetPlayerModel(PlayerId(), model)
+    SetModelAsNoLongerNeeded(model)
+  end
+
+  applyAppearanceParts(PlayerPedId(), appearance)
+
+  local ped = PlayerPedId()
+  SetEntityCoords(ped, data.spawn.x, data.spawn.y, data.spawn.z, false, false, false, false)
+  SetEntityHeading(ped, data.spawn.heading or 0.0)
+
+  -- Register the character's home with Cfx spawnmanager so death respawns
+  -- land here too, not at whatever default the map supplies. The index is
+  -- removed on playerDisconnected; without that, reconnects leak entries.
+  characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
+    data.spawn.x, data.spawn.y, data.spawn.z,
+    data.spawn.heading or 0.0,
+    appearance and appearance.model
+  )
+
+  DoScreenFadeIn(500)
+  while not IsScreenFadedIn() do Wait(0) end
+
+  -- spawnmanager handles respawn on death from here on.
+  exports.spawnmanager:setAutoSpawn(true)
 
   print(('[nifty-world] entered world as %s %s'):format(
     data.character.firstName, data.character.lastName or ''))
@@ -334,6 +347,11 @@ AddEventHandler('playerDisconnected', function()
     TriggerServerEvent('nifty:server:saveCharacter', {
       appearance = getCurrentAppearance(),
     })
+  end
+
+  if characterSpawnIndex then
+    pcall(function() exports.spawnmanager:removeSpawnPoint(characterSpawnIndex) end)
+    characterSpawnIndex = nil
   end
 end)
 
