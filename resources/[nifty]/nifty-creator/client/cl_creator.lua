@@ -1367,21 +1367,11 @@ end
 local function openRoot()
   if Menu:openMenu(RESOURCE, buildRootMenu()) then return end
 
-  -- Menu:openMenu returned false. The original single-line message
-  -- ('focus is held elsewhere') conflated three different causes, which
-  -- makes diagnosis from the log impossible. Print the actual state so
-  -- the next boot log tells us which one is wrong.
-  local holder = exports['nifty-core']:holder() or 'nil'
-  local current = Menu:isOpen() and 'a menu is open' or 'no menu open'
-  local probe = buildRootMenu()
-  local menu_kind = (not probe or #probe.items == 0) and 'empty menu' or 'menu has ' .. #probe.items .. ' items'
-  -- And the underlying state, so the next log tells us which side of
-  -- the if/else is at fault.
-  local component_ids = {}
-  for id in pairs(slots.components or {}) do component_ids[#component_ids + 1] = id end
-  table.sort(component_ids)
-  print(('[%s] could not open the creator menu - holder=%s, %s, %s, component IDs in slots={%s}, COMPONENT_ORDER={%s}'):format(
-    RESOURCE, holder, current, menu_kind, table.concat(component_ids, ','), table.concat(COMPONENT_ORDER, ',')))
+  -- Menu:openMenu returned false. A surface holds the keyboard, another
+  -- menu is open, or the new menu is empty - any of those is fatal
+  -- because the player is standing frozen in the creator. Tell the
+  -- server to drop them rather than leave a ped nobody can reach.
+  print(('[%s] could not open the creator menu - focus is held elsewhere'):format(RESOURCE))
   TriggerServerEvent('nifty:server:cancelCreator')
 end
 
