@@ -2113,6 +2113,7 @@ local camFov = 50.0
 local CAM_FOV_MIN   = 15.0
 local CAM_FOV_MAX   = 75.0
 local CAM_FOV_STEP  = 12.0  -- FOV delta per arrow press
+local CAM_EDGE_DEG_PER_SEC = 45.0  -- slow auto-rotate when cursor is at screen edge
 
 -- Mouse lock + camera turn + zoom, all in the same render tick that
 -- already drives the menu. Q / E turn the camera around the player; up
@@ -2158,6 +2159,37 @@ Citizen.CreateThread(function()
             cy + math.cos(rad) * 1.0,
             cz)
           PointCamAtCoord(creatorCam, cx, cy, cz)
+        end
+      end
+
+      -- Mouse edge: when the cursor is at the left or right screen edge,
+      -- rotate the camera slowly so the player can frame the shot hands-free.
+      -- GetControlNormal returns 0..1 (normalized). Speed increases the
+      -- closer the cursor gets to the extreme edge.
+      do
+        local EDGE_ZONE = 0.015  -- 1.5% from each edge triggers rotation
+        local ok2, cx2, cy2, cz2 = pcall(GetCamCoord, creatorCam)
+        if ok2 and type(cx2) == 'number' then
+          local normX = GetControlNormal(0, 239)  -- INPUT_CURSOR_X
+          local edgeSpeed = 0.0
+          if normX < EDGE_ZONE then
+            local t = 1.0 - (normX / EDGE_ZONE)  -- 0 at edge, 1 at inner boundary
+            edgeSpeed = -CAM_EDGE_DEG_PER_SEC * t
+          elseif normX > (1.0 - EDGE_ZONE) then
+            local t = (normX - (1.0 - EDGE_ZONE)) / EDGE_ZONE  -- 0 at inner boundary, 1 at edge
+            edgeSpeed = CAM_EDGE_DEG_PER_SEC * t
+          end
+          if edgeSpeed ~= 0.0 then
+            local targetYaw = camYaw + edgeSpeed * 0.016  -- 60 fps frame
+            -- Lerp toward target so the camera glides rather than jumps.
+            camYaw = camYaw + (targetYaw - camYaw) * 0.08
+            local rad = math.rad(camYaw)
+            SetCamCoord(creatorCam,
+              cx2 + math.sin(rad) * 0.001,
+              cy2 + math.cos(rad) * 0.001,
+              cz2)
+            PointCamAtCoord(creatorCam, cx2, cy2, cz2)
+          end
         end
       end
 
