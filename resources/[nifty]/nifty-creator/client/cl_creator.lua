@@ -101,19 +101,19 @@ GameData.savedSlot = function(kind, id)
   return slotOf(kind, id)
 end
 
--- Forward declarations. The root menu's rows reference these by closure, and a
--- `local function` is only visible FROM ITS OWN LINE ONWARD - declaring them after
--- `buildRootMenu` would capture a global nil instead, and every row would fail the
--- moment it was pressed. Read top to bottom: a definition must precede its use.
--- slotOf is also forward-declared above (just before GameData.savedSlot)
--- so the savedSlot closure's upvalue is bound to a local.
+-- Forward declarations. The functions defined further down are
+-- referenced by `refresh`, the submit / cancel / reset handlers, and
+-- the exports. A `local function` is only visible FROM ITS OWN LINE
+-- ONWARD - declaring them after their first use would capture a global
+-- nil instead. slotOf is also forward-declared above (just before
+-- GameData.savedSlot) so the savedSlot closure's upvalue is bound to
+-- a local.
 local buildSlotMenu
 local randomise
 local randomiseAll
 local reset
 local submit
 local cancel
-local buildRootMenu
 local closeCreator
 local refresh
 local zoomCamera
@@ -940,117 +940,6 @@ end--- Removed: colourCount(). buildOverlayMenu and buildHairColourMenu
 --- colourCount() definition removed in favour of the static palette
 --- sizes baked into HAIR_PALETTE / MAKEUP_PALETTE at the top of the file.
 
---- One overlay: style, opacity, and its two colours.
-buildRootMenu = function()
-  local menu = Menu.menu({
-    title    = 'Charakter erstellen',
-    subtitle = 'Aussehen - Name und Stammdaten stehen bereits fest.',
-    dock     = 'right',
-    section  = { name = 'Uebersicht', current = 1, total = 6 },
-    onClose  = function(reason)
-      if reason ~= 'submitted' and reason ~= 'cancelled' then
-        print(('[%s] creator menu dismissed (%s) - cancelling'):format(RESOURCE, tostring(reason)))
-        TriggerServerEvent('nifty:server:cancelCreator')
-      end
-    end,
-  })
-
-  -- Only a gender with no model attached gets a picker. `nonbinary` is one, and
-  -- inventing a body for it here would be the server deciding something the player
-  -- is entitled to say about themselves.
-  if modelIsUndecided then
-    Menu.separator(menu, 'Modell')
-    for _, entry in ipairs({ { 'mp_m_freemode_01', 'Männlich' },
-                             { 'mp_f_freemode_01', 'Weiblich' } }) do
-      Menu.button(menu, entry[2], {
-        description = 'Freemode-Modell wählen.',
-        onSelect = function()
-          currentModel = entry[1]
-          modelIsUndecided = false
-          characterGender = (entry[1] == 'mp_f_freemode_01') and 'female' or 'male'
-          GameData.setGender(characterGender)
-          respawnModel()
-          discoverSlots()
-          resolveHairOverlay()
-          applyDecorations()          Menu.pushMenu(RESOURCE, buildRootMenu())
-        end,
-      })
-    end
-  end
-
-  Menu.separator(menu, 'Kategorien')
-
-  Menu.submenu(menu, 'Heritage', {
-    description = 'Eltern und Augenfarbe.',
-    build = buildHeritageCategoryMenu,
-  })
-  Menu.submenu(menu, 'Gesichtszüge', {
-    description = 'Nasen, Wangen, Kinn, Brauen, ...',
-    build = buildFaceFeaturesCategoryMenu,
-  })
-  Menu.submenu(menu, 'Haare', {
-    description = 'Frisur und Haarfarbe.',
-    build = buildHairCategoryMenu,
-  })
-  Menu.submenu(menu, 'Makeup', {
-    description = 'Bart, Augenbrauen, Makeup, Lippenstift, ...',
-    build = buildMakeupCategoryMenu,
-  })
-  Menu.submenu(menu, 'Tattoos', {
-    description = 'Nach Koerperzone gruppiert.',
-    build = buildTattooCategoryMenu,
-  })
-  Menu.submenu(menu, 'Outfit', {
-    description = 'Kleidung, Accessoires, Koerper-Overlays.',
-    build = buildOutfitCategoryMenu,
-  })
-
-  Menu.separator(menu, 'Aktionen')
-
-  Menu.button(menu, 'Zufallsaufzug', {
-    description = 'Zufaellige Kleidung. A/D dreht die Kamera.',
-    onSelect = function() randomise() end,
-  })
-
-  Menu.button(menu, 'Zufallschar', {
-    description = 'Outfit, Gesicht, Haare, Eltern - alles auf einmal.',
-    onSelect = function() randomiseAll() end,
-  })
-
-  Menu.button(menu, 'Zurücksetzen', {
-    description = 'Alle Auswähle verwerfen und das Modell neu laden.',
-    onSelect = function() reset() end,
-  })
-
-  -- Zoom lives HERE rather than on a key. The arrow keys are the menu: nifty-ui
-  -- binds 172-175 for navigation, and GTA reports the same physical press through
-  -- the legacy ids as well, so the old zoom on 27/28 fired WHILE the player was
-  -- navigating - it ate the right and down arrows. Every other key this file
-  -- owns (47/38 for turning) is spoken for, and no control id outside the
-  -- library's set can be named without guessing, so the menu it is.
-  Menu.button(menu, 'Kamera näher', {
-    description = 'Zoomt die Arbeitskamera heran.',
-    onSelect = function() zoomCamera(1) end,
-  })
-
-  Menu.button(menu, 'Kamera weiter', {
-    description = 'Zoomt die Arbeitskamera weg.',
-    onSelect = function() zoomCamera(-1) end,
-  })
-
-  Menu.button(menu, 'Fertig', {
-    description = 'Aussehen speichern und die Welt betreten.',
-    onSelect = function() submit() end,
-  })
-
-  Menu.button(menu, 'Abbrechen', {
-    description = 'Verlassen. Beim nächsten Verbinden geht es hier weiter.',
-    onSelect = function() cancel() end,
-  })
-
-  print(('[nifty-creator] buildRootMenu: exit, items=%d'):format(#menu.Items))
-  return menu
-end
 
 -- ---------------------------------------------------------------- actions
 
@@ -1089,7 +978,6 @@ randomise = function()
     end
   end
 
-  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
 
 --- Roll every choice the creator exposes: outfit, face features, overlays,
@@ -1179,7 +1067,6 @@ randomiseAll = function()
   resolveHairOverlay()
   applyDecorations()
 
-  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
 
 reset = function()
@@ -1203,7 +1090,6 @@ reset = function()
   resolveHairOverlay()
   applyDecorations()
 
-  if Menu.isOpen() then Menu.pushMenu(RESOURCE, buildRootMenu()) end
 end
 
 submit = function()
