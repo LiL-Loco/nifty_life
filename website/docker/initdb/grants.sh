@@ -60,6 +60,6 @@ sed \
   -e "s|'@'127.0.0.1'|$(esc "'@'${GAME_DB_HOST}'")|g" \
   "$TEMPLATE" \
   | mariadb --protocol=tcp -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" \
-        -u root -p"${MARIADB_ROOT_PASSWORD}" "${MARIADB_DATABASE:-nifty_life}"
+        -u "${MIGRATE_DB_USER:-root}" -p"${MARIADB_ROOT_PASSWORD}" "${MARIADB_DATABASE:-nifty_life}"
 
 echo "grants.sh: accounts created (web=${WEB_DB_HOST}, game=${GAME_DB_HOST}, admin=${WEB_DB_HOST})."

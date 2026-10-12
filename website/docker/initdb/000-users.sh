@@ -63,8 +63,9 @@ GAME_DEPLOY="$(esc "$GAME_DB_HOST")"
 # is no socket at all and the database is reachable only over the network.
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
+MIGRATE_DB_USER="${MIGRATE_DB_USER:-root}"
 
-mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u root -p"${MARIADB_ROOT_PASSWORD}" <<SQL
+mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u "$MIGRATE_DB_USER" -p"${MARIADB_ROOT_PASSWORD}" <<SQL
 CREATE USER IF NOT EXISTS 'nifty'       @'${LOCAL_HOST}' IDENTIFIED BY '${GAME_PW}';
 CREATE USER IF NOT EXISTS 'nifty'       @'${GAME_DEPLOY}' IDENTIFIED BY '${GAME_PW}';
 GRANT ALL PRIVILEGES ON nifty_life.* TO 'nifty'@'${GAME_DEPLOY}';

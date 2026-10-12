@@ -1,148 +1,89 @@
 # =============================================================================
-# The website and its database, as one deployable unit.
+# The website, with its database somewhere else.
 #
-# This is what the owner chose over "keep MariaDB bare-metal and let the
-# container reach it". MariaDB is therefore a service here, not a system
-# service on the host. Two consequences are deliberate and recorded in
-# docs/adr/0024-database-in-the-deploy.md:
+# The database is a Coolify-managed MariaDB resource, not a service in this file.
+# That is the owner's decision (2026-10-12) and it reverses the earlier "MariaDB
+# as a service in the deploy" arrangement from the same day.
 #
-#   1. The web accounts in grants.sql are bound to the compose subnet, not to
-#      'localhost', because 'localhost' matches no container on any network.
-#   2. Binary logging is switched back on below so point-in-time recovery from
-#      ADR-0006 is still POSSIBLE. The dump schedule, the offsite copies and
-#      the restore drill are NOT provided here — see the ADR.
+# What that means in practice:
 #
-# THE DATABASE PORT IS NOT PUBLISHED TO THE WORLD.
+#   * The `migrate` service stays. It applies pending migrations and re-applies
+#     the grants on every deploy, and it points at the external host. Dropping
+#     it would put us back to applying grants.sql by hand, which is how the
+#     corrected portal_users grant sat in the repository for hours without ever
+#     reaching a database.
 #
-# It is bound to 127.0.0.1 because the game server on the host still needs it.
-# That binding is what makes GAME_DB_HOST='%' acceptable below: nothing but the
-# host itself can open a TCP connection to it. Publishing this on 0.0.0.0 would
-# put the entire player database one password away from the internet.
+#   * The application connects as `nifty_website`, NOT as the database's admin
+#     account. The admin connection is used by `migrate` alone. This is the whole
+#     point of ADR-0007: the web pool cannot approve an application, cannot read
+#     a player's wallet and cannot touch the pairing codes. Logging the app in as
+#     an admin account would remove that boundary without changing one line of
+#     application code.
+#
+#   * Both containers JOIN Coolify's shared network. The database hostname is a
+#     Docker-internal name that only resolves there — it is not a public address.
 # =============================================================================
 
 name: nifty-life-website
 
 services:
-  mariadb:
-    image: mariadb:11.4
-    restart: unless-stopped
-
-    environment:
-      MARIADB_DATABASE: nifty_life
-      # These four names are the ones the website's own .env already uses, so an
-      # existing configuration can be copied over unchanged. Only DB_ROOT_PASSWORD
-      # and GAME_DB_PASSWORD are new, and neither is read by the application:
-      # they exist for the database container during the init.
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
-
-      # Consumed by docker/initdb/000-users.sh and 900-grants.sh, which create
-      # the three accounts from database/grants.sql. The entrypoint passes NO of
-      # these to a .sql file, which is exactly why those scripts exist.
-      GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?GAME_DB_PASSWORD must be set}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
-      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
-
-      # Host patterns for the GRANT statements. 'localhost' is wrong here: the
-      # app connects from a container address. WEB_DB_HOST stays on the compose
-      # subnet so only containers on this network match; GAME_DB_HOST is '%'
-      # because the game server's apparent source address depends on how the
-      # published port is NATted, which is not something we control.
-      WEB_DB_HOST: ${WEB_DB_HOST:-172.30.%}
-      GAME_DB_HOST: ${GAME_DB_HOST:-%}
-
-    command:
-      - --log-bin=/var/lib/mysql/mysql-bin
-      - --binlog-format=ROW
-      - --binlog-expire-logs-seconds=604800
-      - --server-id=1
-
-    volumes:
-      - db_data:/var/lib/mysql
-      # NO initdb.d mount. Account creation used to live there as 000-users.sh,
-      # and it was the first thing that broke: a bind mount whose source is
-      # absent from the checkout is not an error, Docker creates it as an empty
-      # directory. The `migrate` service creates the accounts instead, over the
-      # network, before it applies anything.
-
-    ports:
-      # Loopback only — for the FiveM server on this host. Never 0.0.0.0.
-      - "127.0.0.1:3307:3306"
-
-    networks:
-      nifty:
-        ipv4_address: 172.30.0.20
-
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      # Generous: on a first boot this container is loading 30 migrations, and
-      # a failure here must not be reported as "the database is down".
-      retries: 30
-      start_period: 120s
-
   # Runs once per `docker compose up`, applies whatever is pending, and exits.
-  # `service_completed_successfully` below is what makes this a gate rather than
-  # a race: the application does not start until the schema is current.
-  #
-  # This exists because the MariaDB entrypoint only runs its init scripts on an
-  # EMPTY data directory. With the volume already populated, a corrected
-  # grants.sql deployed nothing at all — the fix sat in the repository and never
-  # reached the database. See run-migrations.sh for the ordering rules.
+  # `service_completed_successfully` below makes this a gate, not a race: the
+  # application never starts against a schema that is behind.
   migrate:
-    # Built, not `image: mariadb:11.4` with bind mounts. See
-    # docker/Dockerfile.migrate for why: a bind mount whose source is missing
-    # in the checkout is not an error, Docker creates it as an empty directory,
-    # and the container then dies with 127 and says nothing.
     build:
       context: .
       dockerfile: docker/Dockerfile.migrate
     restart: "no"
 
-    depends_on:
-      mariadb:
-        condition: service_healthy
-
     environment:
-      DB_HOST: mariadb
+      DB_HOST: ${DB_HOST:?DB_HOST must be set - the external database address}
+      DB_PORT: ${DB_PORT:-3306}
+      MARIADB_DATABASE: ${DB_NAME:-nifty_life}
+
+      # The admin connection, used for CREATE DATABASE, CREATE USER and GRANT.
+      # Defaults to root because that is what the scripts have always used.
+      # If the external database's admin account has a different name, set
+      # MIGRATE_DB_USER — that is the only variable here that is not also
+      # read by the application.
+      MIGRATE_DB_USER: ${MIGRATE_DB_USER:-root}
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
+
+      # Passwords the three accounts are created with.
       GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?GAME_DB_PASSWORD must be set}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
-      WEB_DB_HOST: ${WEB_DB_HOST:-172.30.%}
+
+      # Host patterns for the GRANT statements.
+      #
+      # '%' because the source address is no longer ours to choose: the app is on
+      # Coolify's shared network, so the address MariaDB sees depends on that
+      # network's subnet. That is a weaker boundary than the fixed compose subnet
+      # was — it is the price of an external database, and it is only acceptable
+      # while that database is not reachable from outside Coolify.
+      WEB_DB_HOST: ${WEB_DB_HOST:-%}
       GAME_DB_HOST: ${GAME_DB_HOST:-%}
 
-    # No volumes: the scripts are baked into the image by docker/Dockerfile.migrate.
-
-    # A preflight, not just a command.
-    #
-    # The first run of this service exited 127 with no output at all, which
-    # says only "command not found" and cannot distinguish a missing volume
-    # mount from a missing shell from a missing client. So the wrapper prints
-    # what it can actually see before handing over. If this ever fails again,
-    # the log says which of the three it was.
-    #
-    # /bin/sh, not /bin/bash: sh exists in every image there is, so the
-    # diagnostics run even if bash is the thing that turned out to be missing.
+    # A preflight, not just a command: the first run of this service exited 127
+    # with no output at all, which distinguishes nothing. /bin/sh rather than
+    # /bin/bash so the diagnostics run even if bash is what turned out to be
+    # missing.
     entrypoint:
       - /bin/sh
       - -c
       - |
         echo "migrate: preflight"
-        echo "  image      : $(cat /etc/os-release 2>/dev/null | grep ^PRETTY | cut -d= -f2-)"
-        echo "  /docker-scripts mounted: $([ -d /docker-scripts ] && echo yes || echo NO)"
-        ls -la /docker-scripts 2>/dev/null || echo "  cannot list /docker-scripts"
-        echo "  /docker-scripts/initdb  : $([ -d /docker-scripts/initdb ] && echo yes || echo NO)"
-        ls -la /docker-scripts/initdb 2>/dev/null || echo "  cannot list /docker-scripts/initdb"
-        echo "  migrations dir         : $([ -d /docker-scripts/initdb/migrations ] && echo yes || echo NO)"
-        echo "  bash    : $(command -v bash || echo MISSING)"
-        echo "  mariadb : $(command -v mariadb || echo MISSING)"
+        echo "  image        : $(cat /etc/os-release 2>/dev/null | grep ^PRETTY | cut -d= -f2-)"
+        echo "  /docker-scripts: $([ -d /docker-scripts ] && echo yes || echo NO)"
+        echo "  migrations dir : $([ -d /docker-scripts/initdb/migrations ] && echo yes || echo NO)"
+        echo "  bash          : $(command -v bash || echo MISSING)"
+        echo "  mariadb client: $(command -v mariadb || echo MISSING)"
+        echo "  database      : ${MIGRATE_DB_USER:-root}@${DB_HOST}:${DB_PORT:-3306}/${MARIADB_DATABASE:-nifty_life}"
         echo "migrate: running the runner"
         exec bash /docker-scripts/initdb/run-migrations.sh
 
     networks:
-      nifty:
-        ipv4_address: 172.30.0.15
+      - coolify
 
   app:
     build:
@@ -151,8 +92,6 @@ services:
     restart: unless-stopped
 
     depends_on:
-      mariadb:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
 
@@ -163,43 +102,27 @@ services:
         required: false
 
     environment:
-      # The service name, not 127.0.0.1. Inside this container 127.0.0.1 is the
-      # container itself, which is the bug that made the first deploy unable to
-      # reach a database at all.
-      DB_HOST: mariadb
-      DB_PORT: "3306"
-      DB_NAME: nifty_life
+      # The restricted pool. DB_HOST is the external database's address; it must
+      # not be 127.0.0.1 inside this container, where loopback is the container.
+      DB_HOST: ${DB_HOST:?DB_HOST must be set - the external database address}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-nifty_life}
       DB_USER: nifty_website
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
       DB_ADMIN_USER: nifty_admin
       DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
 
     ports:
-      # Host 3101 -> container 3000.
-      #
-      # 3000 and 3001 were both skipped deliberately: the Nixpacks deployment of
-      # this same site still holds 3000 on the host, and 3001 sits close enough
-      # that another service could take it later. 3101 was the owner's choice.
-      #
-      # THE PROXY MUST MATCH. Coolify's configured port for this resource has to
-      # be 3101, otherwise the proxy talks to nothing and every request 502s.
-      #
-      # APP_PORT overrides the host side only; the container always listens on
-      # 3000. If you change it, change the Coolify port to the same value.
+      # Host 3101 -> container 3000. The proxy has to be pointed at 3101 too, or
+      # it talks to nothing and every request 502s. APP_PORT overrides the host
+      # side only; the container always listens on 3000.
       - "${APP_PORT:-3101}:3000"
 
     networks:
-      nifty:
-        ipv4_address: 172.30.0.10
+      - coolify
 
 networks:
-  nifty:
-    ipam:
-      config:
-        # Fixed, because WEB_DB_HOST above grants the web accounts to this
-        # subnet. A random Docker-assigned network would silently break every
-        # grant the moment the subnet moved.
-        - subnet: 172.30.0.0/24
-
-volumes:
-  db_data:
+  # Coolify's shared network. The database hostname only resolves inside it.
+  coolify:
+    external: true
+    name: ${COOLIFY_NETWORK:-coolify}

@@ -44,6 +44,9 @@ MIGRATIONS_DIR="${MIGRATIONS_DIR:-$HERE/migrations}"
 DB_NAME="${MARIADB_DATABASE:-nifty_life}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
+# root, as it has always been. Overridable because an EXTERNAL MariaDB may
+# name its admin account differently — set MIGRATE_DB_USER if that is the case.
+MIGRATE_DB_USER="${MIGRATE_DB_USER:-root}"
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
@@ -55,16 +58,20 @@ for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD DB_PASSWORD DB_ADMIN_PASSWORD 
   fi
 done
 
-mariadb_exec() { mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u root -p"${MARIADB_ROOT_PASSWORD}" "$DB_NAME" "$@"; }
+# Two connection shapes. `db_root` selects no database at all, which is what
+# CREATE DATABASE needs — you cannot open a connection against a database that
+# does not exist yet, and an external MariaDB starts out with none of ours.
+db_root() { mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u "$MIGRATE_DB_USER" -p"${MARIADB_ROOT_PASSWORD}" "$@"; }
+db_exec() { mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u "$MIGRATE_DB_USER" -p"${MARIADB_ROOT_PASSWORD}" "$DB_NAME" "$@"; }
 
-q_read() { mariadb_exec -N -B -e "$1"; }
+q_read() { db_root -N -B -e "$1"; }
 q_write() {
   if [ "$DRY_RUN" -eq 1 ]; then echo "   [dry-run] would run: $1"; return 0; fi
-  mariadb_exec -e "$1"
+  db_exec -e "$1"
 }
 q_file() {
   if [ "$DRY_RUN" -eq 1 ]; then echo "   [dry-run] would execute $(basename "$1")"; return 0; fi
-  mariadb_exec < "$1"
+  db_exec < "$1"
 }
 
 recorded() { printf '%s\n' "$APPLIED" | grep -qx "$1"; }
@@ -84,6 +91,14 @@ else
 fi
 
 # ---- what has already been applied ------------------------------------------
+# The database itself. An external MariaDB has no `nifty_life` on it yet, and a
+# connection cannot select a database that is not there.
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "   [dry-run] would create database ${DB_NAME} if missing"
+else
+  db_root -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+fi
+
 HAS_TABLE="$(q_read "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='schema_migrations';")"
 
 if [ "$HAS_TABLE" = "0" ]; then
