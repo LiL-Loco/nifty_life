@@ -372,6 +372,13 @@ AddEventHandler('nifty:client:openCreator', function(data)
   sendOpen()
 end)
 
+-- closeCreator fires this after the data engine has torn down the
+-- camera and state; the NUI driver is responsible for the NUI side
+-- (close the panel, release focus).
+AddEventHandler('nifty:client:closeCreator', function()
+  sendClose()
+end)
+
 -- `nifty:client:creatorError` keeps the creator open so the player can
 -- retry. The error message is forwarded to the NUI as a toast.
 AddEventHandler('nifty:client:creatorError', function(message)

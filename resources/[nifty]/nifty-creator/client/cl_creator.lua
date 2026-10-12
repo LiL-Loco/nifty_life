@@ -6,16 +6,12 @@
   already exists by the time this opens. `appearance IS NULL` is what said the
   creator was needed.
 
-  THE INTERFACE IS THE MENU FRAMEWORK. This resource has no `ui_page` and draws
-  nothing of its own; it borrows the single menu surface from `nifty-ui` through
-  exports. Two reasons, and both are load-bearing:
-
-    * One CEF browser, one focus owner. A second `ui_page` here would put two
-      browsers behind one global `SetNuiFocus` and the player would steer a menu
-      they cannot see.
-    * The menu docks to the RIGHT of the screen, which leaves the middle free. A
-      native GTA menu cannot do that, and a character creator that covers its own
-      subject is not a character creator.
+  THE INTERFACE IS THE NUI PAGE. This resource owns `ui/index.html` (rendered
+  through cl_nui.lua) and docks to the RIGHT of the screen so the player's
+  face stays visible. The NUI driver acquires focus through the broker
+  in nifty-core so the chat, the phone and the creator never collide.
+  The 2026-10-12 NUI migration replaced the previous NativeUI surface
+  (nifty-ui resource, since deleted).
 
   WHAT THIS FILE DECIDES: nothing. Every collection it offers comes from
   AppearanceConfig, which lives in nifty-core and is loaded by both sides - so the
@@ -28,20 +24,13 @@ local RESOURCE = GetCurrentResourceName()
 
 --- Local menu surface.
 ---
---- The menu draws directly to the screen with GTA natives (DrawSprite,
---- DrawText, DrawRect) and never touches NUI focus, so the focus broker
---- is irrelevant for it. We use the same NativeUI-Lua-Reloaded library
---- nifty-ui vendors, but loaded locally via @nifty-ui/... paths in the
---- manifest. Within this resource the export-proxy quirks (drop-first-arg,
---- deep-copy-return) do not apply, so the builders can use the menu
---- argument as-is and the menu can keep its metatable.
----
---- API shape matches the call sites below:
----   Menu.menu({title=, subtitle=, dock=, onClose=})  -> UIMenu
----   Menu.separator(menu, label)
----   Menu.button(menu, label, spec)
----   Menu.submenu(menu, label, {build=, description=, disabled=})
----   Menu.slider(menu, label, {min=, max=, step=, value=, onChange=, onSelect=, description=, disabled=})
+--- 2026-10-12: The creator is rendered by the NUI driver in
+--- cl_nui.lua. The NativeUI surface (DrawSprite / DrawText / DrawRect
+--- menu wrapper) is gone. This file is now the data engine: it owns
+--- the appearance state, applies changes to the ped, validates against
+--- the server's allowlist, and exposes the public surface
+--- (openCreator / closeCreator / isCreatorOpen / appearanceNow).
+--- Every UI call funnels through exports consumed by cl_nui.lua.
 ---   Menu.select(menu, label, {items=, index=, onChange=, onSelect=, description=, disabled=})
 ---   Menu.openMenu(_RESOURCE_, menu)   - add to pool, show
 ---   Menu.pushMenu(_RESOURCE_, menu)   - close current, show new
@@ -902,7 +891,11 @@ closeCreator = function(reason)
   if not creatorOpen then return end
   creatorOpen = false
   stopCamera()
-  Menu.closeMenu(RESOURCE, reason or 'closed')
+  -- 2026-10-12: NUI migration. The old Menu.closeMenu() global is gone
+  -- (nifty-ui was deleted). Closing the NUI is now the responsibility of
+  -- cl_nui.lua's closePanel callback, which this resource fires via
+  -- nifty:client:closeCreator whenever a caller asks to close the creator.
+  TriggerEvent('nifty:client:closeCreator', reason or 'closed')
 end
 
 exports('openCreator', function(data)
@@ -1289,10 +1282,10 @@ end)
 -- MenuPool:ProcessMenus() runs all three in the documented order. The
 -- lbg-char reference uses the same single-line pattern.
 --
--- This thread is the only place the menu library's render loop runs in
--- this resource. nifty-ui runs a parallel thread for its own pool (used
--- by wardrobe, store, spawn) - two pools, two threads, no interference
--- because they draw to separate UIMenu instances.
+-- The 2026-10-12 NUI migration removed both the render thread and the
+-- menu library entirely (the nifty-ui resource was deleted in commit
+-- bc760e2). The NUI driver in cl_nui.lua owns the render loop now;
+-- this file is the data engine.
 -- The creator's working camera. startCamera() captures it; we read
 -- it through the module-level creatorCam global so the thread sees
 -- the right cam without a separate tracking variable.

@@ -10,12 +10,12 @@ version '0.2.0'
 -- This is the BASE resource, not a system. It owns the database, the settings
 -- cache, identity and the session guard, and it owns NO gameplay system.
 --
--- `ui_page` was removed in 2025-09. The HUD lives in nifty-world, the
--- creator in nifty-creator, the phone in nifty-phone and the chat in
--- nifty-chat - each with its own page, which is why nifty-ui exists
--- to arbitrate focus between them. The 2026-10-12 NUI migration
--- brought the spawn picker back into nifty-core (it was native-menu
--- before) and the picker now uses the ui/spawn.html page.
+-- The HUD lives in nifty-world, the creator in nifty-creator, the phone in
+-- nifty-phone, the chat in nifty-chat, the wardrobe+store in nifty-clothing
+-- and the inventory in nifty-inventory - each with its own `ui_page`. This
+-- resource keeps its own `ui_page 'ui/spawn.html'` for the spawn-location
+-- picker, which the 2026-10-12 NUI migration brought back into nifty-core
+-- (it was native-menu before).
 --
 -- What the base still must not do: reach into a system. `sv_facade.lua` is the
 -- one place a system may reach in, and it hands out data access, not behaviour.

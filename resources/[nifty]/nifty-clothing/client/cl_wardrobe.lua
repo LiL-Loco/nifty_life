@@ -29,10 +29,6 @@ local RESOURCE = GetCurrentResourceName()
 -- were all removed in the NUI migration.
 -- ---------------------------------------------------------------------------
 
--- which loads after this file in the manifest, so the order is safe.
-_G.NiftyMenu = Menu
-_G.NiftyMenuPool = _pool
-
 -- Slot labels - same table as in cl_store.lua. Keeping a copy here so the
 -- wardrobe can be built without depending on the store loading first.
 local COMPONENT_LABELS = {
