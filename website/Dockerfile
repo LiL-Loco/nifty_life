@@ -46,6 +46,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ARG NODE_BUILD_MEMORY_MB=2048
 ENV NODE_OPTIONS=--max-old-space-size=${NODE_BUILD_MEMORY_MB}
 
+# Escape hatch for a host that cannot hold `tsc` on top of the compile. See
+# next.config.ts. Default 0 = the type check runs, as it always has.
+ARG SKIP_TYPECHECK=0
+ENV SKIP_TYPECHECK=${SKIP_TYPECHECK}
+
 RUN npm run build
 
 # ---- runner -----------------------------------------------------------------
