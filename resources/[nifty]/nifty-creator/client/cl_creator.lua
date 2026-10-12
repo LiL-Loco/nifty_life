@@ -51,6 +51,27 @@ local RESOURCE = GetCurrentResourceName()
 --- The first arg of openMenu / pushMenu / closeMenu is a resource name in
 --- the cross-resource shim; here it is ignored, but accepting the shape
 --- keeps the call sites identical to the previous shim-based version.
+
+-- NUI bone-projection: a subset of GTA's facial bones that the NUI
+-- positions as draggable dots over the camera viewport. The mapping
+-- boneName -> feature id lives in the NUI (it pairs drag direction
+-- with the axis of the relevant grid panel).
+local FACE_BONE_NAMES = {
+  'skel_l_cheek', 'skel_r_cheek', 'skel_l_eyeball', 'skel_r_eyeball',
+  'skel_l_lip_lower_corner', 'skel_r_lip_lower_corner',
+  'skel_l_eyebrow_01', 'skel_l_eyebrow_02', 'skel_l_eyebrow_03',
+  'skel_r_eyebrow_01', 'skel_r_eyebrow_02', 'skel_r_eyebrow_03',
+  'skel_l_nose_01', 'skel_l_nose_02', 'skel_r_nose_01', 'skel_r_nose_02',
+  'skel_l_jawline_root', 'skel_r_jawline_root',
+  'skel_l_chin_01', 'skel_l_chin_02', 'skel_l_chin_03',
+  'skel_r_chin_01', 'skel_r_chin_02', 'skel_r_chin_03',
+}
+
+-- 96x96 transparent PNG placeholder. The NUI uses this when the
+-- live-render is not available; replaced with a real head-blend
+-- screenshot in V2.
+local SILHOUETTE_PLACEHOLDER_BASE64 = ''
+
 local _pool = NativeUI.CreatePool()
 _pool:MouseControlsEnabled(true)
 _pool:ControlDisablingEnabled(true)
@@ -2318,6 +2339,232 @@ exports('closeCreator', function(reason)
 end)
 
 exports('isCreatorOpen', function() return creatorOpen end)
+
+-- =================================================================
+-- NUI BRIDGE EXPORTS
+-- =================================================================
+-- These exports are consumed by client/cl_nui.lua. They are thin
+-- adapters that call into the existing private helpers (setFeature,
+-- setSlot, etc.) and return the new state for the NUI to consume.
+-- They are added without removing the legacy NativeUI surface;
+-- removal happens in a later PR.
+-- =================================================================
+
+-- State snapshot. The NUI keeps its own copy of this for fast
+-- render. Returns the bare tables the NUI needs; engine internals
+-- (slots, hairOverlayState, etc.) are included.
+exports('getState', function()
+  return {
+    currentModel     = currentModel,
+    characterGender  = characterGender,
+    scene            = CreatorScene,
+    selection        = selection,
+    face             = face,
+    slots            = slots,
+    labels           = Labels,
+    palettes         = {
+      HAIR_PALETTE     = HAIR_PALETTE,
+      MAKEUP_PALETTE   = MAKEUP_PALETTE,
+      OVERLAY_PALETTES = OVERLAY_PALETTES,
+    },
+    hairOverlayState = hairOverlayState,
+    modelIsUndecided = modelIsUndecided,
+    skinCam          = skinCam and 'face' or 'body',
+  }
+end)
+
+exports('setFeature', function(id, value)
+  if type(id) ~= 'number' then return end
+  -- Sparse: a face with all zeros round-trips identically to a face
+  -- with no entries. Mirror the existing setFeature logic from
+  -- buildFaceMenu.
+  if value == nil or math.abs(value) < 0.001 then
+    face.features[tostring(id)] = nil
+  else
+    face.features[tostring(id)] = math.max(-1.0, math.min(1.0, value))
+  end
+  refresh()
+end)
+
+exports('setSlot', function(kind, id, slot)
+  if type(kind) ~= 'string' or type(id) ~= 'number' or type(slot) ~= 'table' then return end
+  selection[kind][tostring(id)] = {
+    collection = slot.collection,
+    drawable   = tonumber(slot.drawable) or 0,
+    texture    = tonumber(slot.texture) or 0,
+  }
+  refresh()
+end)
+
+exports('setOverlay', function(id, overlay)
+  if type(id) ~= 'number' or type(overlay) ~= 'table' then return end
+  face.overlays[tostring(id)] = {
+    style        = tonumber(overlay.style) or 0,
+    opacity      = math.max(0, math.min(1, tonumber(overlay.opacity) or 0)),
+    colourType   = tonumber(overlay.colourType) or 1,
+    colour       = tonumber(overlay.colour) or 0,
+    secondColour = tonumber(overlay.secondColour) or 0,
+  }
+  refresh()
+end)
+
+exports('setHairColour', function(channel, index)
+  if type(channel) ~= 'string' or type(index) ~= 'number' then return end
+  if channel ~= 'primary' and channel ~= 'highlight' then return end
+  face.hairColour[channel] = index
+  -- Native call mirrors the old per-channel OnListChanged path.
+  SetPedHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight or 0)
+  refresh()
+end)
+
+exports('setHairOverlayOpacity', function(opacity)
+  if type(opacity) ~= 'number' then return end
+  if not face.hairOverlay then
+    face.hairOverlay = { collection = 0, preset = 0, opacity = 1.0 }
+  end
+  face.hairOverlay.opacity = math.max(0, math.min(1, opacity))
+  resolveHairOverlay()
+  refresh()
+end)
+
+exports('setEyeColour', function(index)
+  if type(index) ~= 'number' then return end
+  face.eyeColour = index
+  if type(SetPedEyeColor) == 'function' then
+    SetPedEyeColor(PlayerPedId(), index)
+  end
+  refresh()
+end)
+
+exports('setHeadBlend', function(patch)
+  if type(patch) ~= 'table' then return end
+  for k, v in pairs(patch) do
+    face.headBlend[k] = v
+  end
+  refresh()
+end)
+
+exports('camYaw', function(delta)
+  if type(delta) ~= 'number' or not creatorCam then return end
+  local ok, cx, cy, cz = pcall(GetCamCoord, creatorCam)
+  if not ok or type(cx) ~= 'number' then return end
+  local ped = PlayerPedId()
+  local head = GetEntityCoords(ped)
+  local dx, dy = cx - head.x, cy - head.y
+  local rad = math.atan2(dy, dx) + math.rad(delta)
+  local dist = math.sqrt(dx * dx + dy * dy)
+  if dist < 0.01 then dist = 0.6 end
+  SetCamCoord(creatorCam, head.x + math.cos(rad) * dist, head.y + math.sin(rad) * dist, cz)
+  PointCamAtEntity(creatorCam, ped, 0.0, 0.65, 0.0, true)
+end)
+
+exports('zoomCamera', function(direction)
+  zoomCamera(direction)
+end)
+
+exports('pickModel', function(model)
+  if type(model) ~= 'string' then return end
+  currentModel = model
+  characterGender = (model == 'mp_f_freemode_01') and 'female' or 'male'
+  modelIsUndecided = false
+  respawnModel()
+  discoverSlots()
+  resolveHairOverlay()
+  applyDecorations()
+  refresh()
+end)
+
+exports('pickTattoo', function(zoneId, collection, preset)
+  if type(zoneId) ~= 'number' or type(collection) ~= 'string' or type(preset) ~= 'number' then return end
+  local kept = {}
+  for _, other in ipairs(face.tattoos) do
+    if other.zoneId ~= zoneId then kept[#kept + 1] = other end
+  end
+  if #kept < AppearanceConfig.MAX_TATTOOS then
+    kept[#kept + 1] = { collection = collection, preset = preset, zoneId = zoneId }
+    face.tattoos = kept
+    applyDecorations()
+  end
+  refresh()
+end)
+
+exports('removeTattoo', function(zoneId)
+  if type(zoneId) ~= 'number' then return end
+  local kept = {}
+  for _, other in ipairs(face.tattoos) do
+    if other.zoneId ~= zoneId then kept[#kept + 1] = other end
+  end
+  face.tattoos = kept
+  applyDecorations()
+  refresh()
+end)
+
+-- The NUI requests per-overlay palette swap. Overlay 4 (Makeup) has
+-- two palettes; the menu rebuilds itself when the player picks
+-- the other. Mirror the path in buildOverlayMenu lines 1268-1283.
+exports('swapOverlayPalette', function(id, paletteIndex)
+  if type(id) ~= 'number' or type(paletteIndex) ~= 'number' then return end
+  local palettes = OVERLAY_PALETTES[id]
+  if not palettes or #palettes < 2 then return end
+  local entry = palettes[math.max(1, math.min(#palettes, paletteIndex))]
+  local cur = face.overlays[tostring(id)] or { style = 0, opacity = 1.0, colour = 0, secondColour = 0 }
+  cur.colourType = entry[1]
+  cur.colour = 0
+  cur.secondColour = 0
+  face.overlays[tostring(id)] = cur
+  refresh()
+end)
+
+-- Lazy fetches. The NUI requests these on first expand of a submenu.
+exports('getTattooZones', function()
+  if not GameData or type(GameData.tattooZones) ~= 'function' then return {} end
+  return GameData.tattooZones()
+end)
+
+exports('getTattoosByZone', function(zoneId)
+  if not GameData or type(GameData.tattoosByZone) ~= 'function' then return {} end
+  if type(zoneId) ~= 'number' then return {} end
+  return GameData.tattoosByZone(zoneId)
+end)
+
+-- Bone-projection stub: returns an empty list until the project is
+-- complete. Each entry would be { name = 'left_cheek', x = 0.42, y = 0.71 }
+-- in 0..1 normalised screen coords. The NUI positions gold dots
+-- over the camera viewport using these coords.
+exports('projectFaceBones', function()
+  if not creatorCam then return {} end
+  local ped = PlayerPedId()
+  if not ped or ped == 0 then return {} end
+  local out = {}
+  for _, boneName in ipairs(FACE_BONE_NAMES) do
+    local boneIdx = GetEntityBoneIndexByName(ped, boneName)
+    if boneIdx and boneIdx ~= -1 then
+      local wx, wy, wz = GetWorldPositionOfEntityBone(ped, boneIdx)
+      if wx and wy then
+        local sx, sy = GetScreenCoordFromWorldCoord(wx, wy, wz)
+        if sx and sy then out[#out + 1] = { name = boneName, x = sx, y = sy } end
+      end
+    end
+  end
+  return out
+end)
+
+-- Parent-portrait stub. V1: SVG silhouette encoded as base64 data
+-- URI, so the NUI can render it without an image file. V2 swaps
+-- this for a TakeScreenshot of a hidden ped.
+exports('captureParentPortrait', function(slot)
+  if slot ~= 'mother' and slot ~= 'father' then return '' end
+  -- 96x96 transparent placeholder PNG. Real implementation spawns a
+  -- hidden clone, sets head blend to the chosen preset, screenshots,
+  -- and returns base64. The placeholder keeps the NUI happy.
+  return SILHOUETTE_PLACEHOLDER_BASE64
+end)
+
+-- Skin-cam switcher; re-uses the existing private function.
+exports('showSkinCam', function(kind)
+  if kind ~= 'face' and kind ~= 'body' then return end
+  showSkinCam(kind)
+end)
 
 -- ---------------------------------------------------------------- results
 
