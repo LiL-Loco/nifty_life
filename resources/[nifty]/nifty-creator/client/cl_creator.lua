@@ -57,6 +57,18 @@ _pool:ControlDisablingEnabled(true)
 
 local Menu = {}
 
+-- FORWARD DECLARATION, and it has to be one.
+--
+-- `Menu.menu` below calls showSkinCam(), but that function is defined some 600
+-- lines further down with the camera code. A `local function` is only visible
+-- FROM its declaration onwards, so at the point of the call the name resolved to
+-- a GLOBAL `showSkinCam` — which is nil — and every face/hair/makeup menu died
+-- with "attempt to call a nil value (global 'showSkinCam')".
+--
+-- The definition down there therefore assigns to THIS local instead of
+-- introducing a new one. Do not turn it back into `local function`.
+local showSkinCam
+
 function Menu.menu(spec)
   spec = spec or {}
   -- dock: 'right' pushes the panel to the right side of the screen so the
@@ -205,8 +217,11 @@ function Menu.colourPicker(menu, label, spec)
     local initial = tonumber(spec.value) or 1
     if initial < 1 then initial = 1 end
     if initial > #spec.palette then initial = #spec.palette end
-    panel:CurrentSelection(initial, true)
+    -- AddPanel FIRST: it is AddPanel that calls SetParentItem, and the panel
+    -- positions itself against that parent on every update. Setting the initial
+    -- selection before the panel has a parent indexed a nil ParentItem.
     item:AddPanel(panel)
+    panel:CurrentSelection(initial, true)
     -- ActivatedPanel is the per-item callback the colour panel calls
     -- on every change. The library passes (menu, item, panel, colour).
     item.ActivatedPanel = function(_, _, _, colour)
@@ -693,7 +708,9 @@ local function atSkin(distance, height, fov)
   )
 end
 
-local function showSkinCam(kind)
+-- Assigns to the forward declaration at the top of the file, NOT a new local:
+-- Menu.menu() calls this before we reach this line. See the note there.
+function showSkinCam(kind)
   -- kind: 'face' = tight head closeup, 'body' = working close-up
   local spec = (kind == 'face')
     and { dist = 0.6, h = 0.65, fov = 18.0 }
@@ -846,8 +863,8 @@ local function makeHairChannel(label, currentIndex)
   for i = 1, max do placeholders[i] = (i .. '.') end
   local item = NativeUI.CreateListItem(label, placeholders, value, '')
   local panel = NativeUI.CreateColourPanel(label, HAIR_PALETTE)
-  panel:CurrentSelection(value, true)
   item:AddPanel(panel)
+  panel:CurrentSelection(value, true)
   return item
 end
 
@@ -1202,8 +1219,8 @@ local function buildOverlayMenu(id)
     if colourIndex < 1 then colourIndex = 1 end
     if colourIndex > #activePalette then colourIndex = #activePalette end
     local colourItem = NativeUI.CreateColourPanel(activeEntry[2], activePalette)
-    colourItem:CurrentSelection(colourIndex, true)
     styleItem:AddPanel(colourItem)
+    colourItem:CurrentSelection(colourIndex, true)
   end
 
   -- The lbg-char style: a single OnListChanged on the item reads the
@@ -1631,7 +1648,11 @@ buildTattooMenu = function(zoneId)
 end
 
 --- The submenu for one slot: which collection, which drawable, which texture.
-buildSlotMenu = function(kind, id)
+--- `spec` is optional and only used where a caller wants this menu to carry a
+--- different title or the face closeup — the Haare category, which opens this
+--- menu directly instead of through one extra level.
+buildSlotMenu = function(kind, id, spec)
+  spec = spec or {}
   local options = slots[kind][id]
   if not options or #options == 0 then return nil end
 
@@ -1659,12 +1680,14 @@ buildSlotMenu = function(kind, id)
     return GameData.itemName(isProp, id, option.name, drawableId, textureId, option.drawables)
   end
 
+  local heading = spec.title or label
   local menu = Menu.menu({
-    title = label,
+    title = heading,
     -- Section bar updates to the slot name. 11 is the number of
     -- populated component slots the engine has; 12 is the placeholder.
-    section = { name = label, current = 1, total = 11 },
+    section = { name = heading, current = 1, total = 11 },
     dock = 'right',
+    skinCam = spec.skinCam,
   })
 
   -- Modell: one list item per drawable. Entry labels are the item
@@ -1777,22 +1800,20 @@ local function buildFaceFeaturesCategoryMenu()
 end
 
 local function buildHairCategoryMenu()
-  local menu = Menu.menu({
+  -- Entering "Haare" shows the options. There used to be a menu here carrying a
+  -- single "Frisur" row that led to exactly this menu one level further down,
+  -- so clicking Haare and then Frisur was one click more for the same content.
+  -- The slot menu is returned directly; it keeps the face closeup and is
+  -- retitled "Haare" so the header still says where you are.
+  local menu = buildSlotMenu('components', 2, { title = 'Haare', skinCam = 'face' })
+  if menu then return menu end
+
+  -- No hair loaded at all. An empty menu beats a row that opens nothing.
+  return Menu.menu({
     title = 'Haare',
-    subtitle = 'Q/E drehen die Kamera, Maus am Rand rotiert langsam.',
+    subtitle = 'Keine Frisuren geladen.',
     dock = 'right',
-    skinCam = 'face',
   })
-  local hairSlot = slots.components[2]
-  if hairSlot then
-    Menu.submenu(menu, 'Frisur', {
-      description = ('Slot 2 - %d Kollektionen'):format(#hairSlot),
-      build = function() return buildSlotMenu('components', 2) end,
-    })
-  end
-  -- Haarfarbe is now inside the Frisur slot menu (buildSlotMenu for slot 2),
-  -- directly below the Modell row. No separate submenu needed.
-  return menu
 end
 
 local function buildMakeupCategoryMenu()

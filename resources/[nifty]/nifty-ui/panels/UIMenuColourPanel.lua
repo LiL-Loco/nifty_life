@@ -150,7 +150,13 @@ function UIMenuColourPanel:UpdateSelection(PreventUpdate)
     if not PreventUpdate then
         self:UpdateParent(CurrentSelection)
     end
-    self.SelectedRectangle:Position(15 + (44.5 * ((CurrentSelection - self.Data.Pagination.Min) - 1)) + self.ParentItem:Offset().X, self.SelectedRectangle.Y)
+    -- ParentItem is only set by UIMenuItem/UIMenuListItem:AddPanel. A panel
+    -- asked for its initial selection before it was added to an item has no
+    -- parent to position itself against, and this used to hard-error on
+    -- nil even though the rest of the update is perfectly valid.
+    if self.ParentItem then
+        self.SelectedRectangle:Position(15 + (44.5 * ((CurrentSelection - self.Data.Pagination.Min) - 1)) + self.ParentItem:Offset().X, self.SelectedRectangle.Y)
+    end
     for Index = 1, 9 do
         self.Bar[Index]:Colour(table.unpack(self.Data.Items[self.Data.Pagination.Min + Index]))
     end
