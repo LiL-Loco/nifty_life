@@ -44,10 +44,6 @@ MIGRATIONS_DIR="${MIGRATIONS_DIR:-$HERE/migrations}"
 DB_NAME="${MARIADB_DATABASE:-nifty_life}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
-# root is right in the deploy: this service creates accounts and grants
-# privileges, which nothing else is allowed to do. The variable exists so the
-# script can be pointed at a database as somebody else during a dry run.
-DB_USER="${DB_USER:-root}"
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
@@ -59,7 +55,7 @@ for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD DB_PASSWORD DB_ADMIN_PASSWORD 
   fi
 done
 
-mariadb_exec() { mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MARIADB_ROOT_PASSWORD}" "$DB_NAME" "$@"; }
+mariadb_exec() { mariadb --protocol=tcp -h "$DB_HOST" -P "$DB_PORT" -u root -p"${MARIADB_ROOT_PASSWORD}" "$DB_NAME" "$@"; }
 
 q_read() { mariadb_exec -N -B -e "$1"; }
 q_write() {
