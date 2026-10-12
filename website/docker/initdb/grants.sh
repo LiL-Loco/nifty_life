@@ -26,7 +26,9 @@
 # =============================================================================
 set -euo pipefail
 
-TEMPLATE="/docker-entrypoint-initdb.d/grants.sql.template"
+# Next to this script, not in the initdb.d root: the template is not something
+# the entrypoint should ever see, let alone run.
+TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/grants.sql.template"
 
 # MARIADB_ROOT_PASSWORD is the name the container actually receives.
 for var in MARIADB_ROOT_PASSWORD GAME_DB_PASSWORD DB_PASSWORD DB_ADMIN_PASSWORD \

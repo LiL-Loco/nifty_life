@@ -58,11 +58,11 @@ services:
 
     volumes:
       - db_data:/var/lib/mysql
-      # Read-only. The entrypoint runs everything in here once, on an empty
-      # data directory. On an existing volume it is skipped — which is correct:
-      # re-running the migrations against live data is not something this
-      # container is allowed to do behind your back.
-      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+      # ONLY the account creation. Deliberately a single file, not the whole
+      # directory: the entrypoint executes everything it finds here, and
+      # grants.sh would run before a single table exists. run-migrations.sh is
+      # the migrate service's job, not the entrypoint's.
+      - ./docker/initdb/000-users.sh:/docker-entrypoint-initdb.d/000-users.sh:ro
 
     ports:
       # Loopback only — for the FiveM server on this host. Never 0.0.0.0.
@@ -81,6 +81,43 @@ services:
       retries: 30
       start_period: 120s
 
+  # Runs once per `docker compose up`, applies whatever is pending, and exits.
+  # `service_completed_successfully` below is what makes this a gate rather than
+  # a race: the application does not start until the schema is current.
+  #
+  # This exists because the MariaDB entrypoint only runs its init scripts on an
+  # EMPTY data directory. With the volume already populated, a corrected
+  # grants.sql deployed nothing at all — the fix sat in the repository and never
+  # reached the database. See run-migrations.sh for the ordering rules.
+  migrate:
+    image: mariadb:11.4
+    restart: "no"
+
+    depends_on:
+      mariadb:
+        condition: service_healthy
+
+    environment:
+      DB_HOST: mariadb
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?DB_ROOT_PASSWORD must be set}
+      GAME_DB_PASSWORD: ${GAME_DB_PASSWORD:?GAME_DB_PASSWORD must be set}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:?DB_ADMIN_PASSWORD must be set}
+      WEB_DB_HOST: ${WEB_DB_HOST:-172.30.%}
+      GAME_DB_HOST: ${GAME_DB_HOST:-%}
+
+    volumes:
+      # The whole docker/ directory: the runner, the grants, the migration
+      # chain and the grants template all live under it and resolve relative to
+      # the script's own location.
+      - ./docker:/docker-scripts:ro
+
+    entrypoint: ["bash", "/docker-scripts/initdb/run-migrations.sh"]
+
+    networks:
+      nifty:
+        ipv4_address: 172.30.0.15
+
   app:
     build:
       context: .
@@ -90,6 +127,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
     # Local development convenience only. On the deploy host this file does not
     # exist and the values come from the platform's own secret store.
