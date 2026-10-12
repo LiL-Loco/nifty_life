@@ -108,7 +108,6 @@ end
 -- nil instead. slotOf is also forward-declared above (just before
 -- GameData.savedSlot) so the savedSlot closure's upvalue is bound to
 -- a local.
-local buildSlotMenu
 local randomise
 local randomiseAll
 local reset
