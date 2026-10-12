@@ -65,7 +65,14 @@
               MOTHER: [], FATHER: [], THIRDPERSON: [], OVERLAY_LABELS: {},
               ZONE_LABELS: {}, PROP_LABELS: {}, COMPONENT_LABELS: {} },
     palettes: { HAIR_PALETTE: [], MAKEUP_PALETTE: [], OVERLAY_PALETTES: {} },
+    faceGroups: { FACE_1D: [], FACE_2D: [] },
+    componentLabels: {},
+    propLabels: {},
+    overlayLabels: {},
+    zoneLabels: {},
+    maxTexture: 80,
     hairOverlayState: 'unchecked',
+    tattoos: { zones: null, byZone: {} },
     panels: [],
     panelIdCounter: 0,
     parentsMode: null,    // 'face' when face category is open
@@ -483,16 +490,386 @@
     root.appendChild(button('Augenfarbe', '9 realistische Farben.', () => pushPanel('eyeColour', {})));
     return root;
   };
-  const renderParents = () => el('div', '', 'Eltern (folgt)');
-  const renderEyeColour = () => el('div', '', 'Augenfarbe (folgt)');
-  const renderFaceFeatures = () => el('div', '', 'Gesichtszuege (folgt)');
-  const renderHair = () => el('div', '', 'Haare (folgt)');
-  const renderMakeup = () => el('div', '', 'Makeup (folgt)');
-  const renderOverlay = () => el('div', '', 'Overlay (folgt)');
-  const renderOutfit = () => el('div', '', 'Outfit (folgt)');
-  const renderSlot = () => el('div', '', 'Slot (folgt)');
-  const renderTattoos = () => el('div', '', 'Tattoos (folgt)');
-  const renderTattooZone = () => el('div', '', 'Tattoo-Zone (folgt)');
+
+  // ============================================================ heritage
+  const renderParents = () => {
+    const root = el('div', '');
+    const h = state.face.headBlend;
+    const motherItems = state.labels.MOTHER || [];
+    const fatherItems = state.labels.FATHER || [];
+    const thirdItems  = state.labels.THIRDPERSON || [];
+
+    // Heritage portrait placeholders (live-render in V2).
+    const portraitRow = el('div', 'cr-heritage');
+    const motherP = el('div', 'cr-heritage__portrait cr-heritage__portrait--placeholder');
+    motherP.appendChild(el('div', 'cr-heritage__label', 'Mutter'));
+    motherP.appendChild(el('img', '', ''));
+    motherP.appendChild(el('div', 'cr-heritage__index', motherItems[h.mother] || ('Mutter ' + h.mother)));
+    const fatherP = el('div', 'cr-heritage__portrait cr-heritage__portrait--placeholder');
+    fatherP.appendChild(el('div', 'cr-heritage__label', 'Vater'));
+    fatherP.appendChild(el('img', '', ''));
+    fatherP.appendChild(el('div', 'cr-heritage__index', fatherItems[h.father] || ('Vater ' + h.father)));
+    portraitRow.appendChild(motherP);
+    portraitRow.appendChild(fatherP);
+    root.appendChild(portraitRow);
+
+    // 0..1 value list for resemblance and skin tone.
+    const ZtO = [];
+    for (let i = 0; i < 101; i++) ZtO.push((i / 100).toFixed(2));
+
+    root.appendChild(separator('Personen'));
+    root.appendChild(list('Mutter', motherItems, h.mother || 0, (i) => {
+      fetchNui('setHeadBlend', { mother: i });
+    }));
+    root.appendChild(list('Vater', fatherItems, h.father || 0, (i) => {
+      fetchNui('setHeadBlend', { father: i });
+    }));
+    if (thirdItems.length > 0) {
+      root.appendChild(list('Dritte Person', thirdItems, h.third || 0, (i) => {
+        fetchNui('setHeadBlend', { third: i });
+      }));
+    }
+
+    root.appendChild(separator('Aehnlichkeit'));
+    const resSlider = slider('Aehnlichkeit', ZtO,
+      Math.floor((h.resemblance != null ? h.resemblance : 0.5) * 100),
+      (i) => {
+        const v = parseFloat(ZtO[i]) || 0;
+        fetchNui('setHeadBlend', { resemblance: v });
+      },
+      (v) => parseFloat(v).toFixed(2));
+    root.appendChild(resSlider);
+
+    // Weight sliders: 21 entries (0..100% in 5% steps).
+    const weightSteps = [];
+    for (let p = 0; p <= 100; p += 5) weightSteps.push(p + ' %');
+    const halfSteps = [];
+    for (let p = 0; p <= 1000; p += 1) halfSteps.push((p / 10).toFixed(1) + ' %');
+    root.appendChild(separator('Anteile'));
+    root.appendChild(slider('Mutter-Anteil', halfSteps,
+      Math.floor((h.motherWeight != null ? h.motherWeight : 0.5) * 1000),
+      (i) => fetchNui('setHeadBlend', { motherWeight: (i / 1000) }),
+      (v) => v + ' %'));
+    root.appendChild(slider('Vater-Anteil', halfSteps,
+      Math.floor((h.fatherWeight != null ? h.fatherWeight : 0.5) * 1000),
+      (i) => fetchNui('setHeadBlend', { fatherWeight: (i / 1000) }),
+      (v) => v + ' %'));
+    root.appendChild(slider('Anteil dritte Person', halfSteps,
+      Math.floor((h.thirdWeight != null ? h.thirdWeight : 0.0) * 1000),
+      (i) => fetchNui('setHeadBlend', { thirdWeight: (i / 1000) }),
+      (v) => v + ' %'));
+
+    root.appendChild(separator('Hautton'));
+    root.appendChild(slider('Hautton', ZtO,
+      Math.floor((h.skinTone != null ? h.skinTone : 0.5) * 100),
+      (i) => {
+        const v = parseFloat(ZtO[i]) || 0;
+        fetchNui('setHeadBlend', { skinTone: v });
+      },
+      (v) => parseFloat(v).toFixed(2)));
+    return root;
+  };
+
+  const renderEyeColour = () => {
+    const root = el('div', '');
+    root.appendChild(separator('Augenfarbe'));
+    const eyes = (state.labels.EYE_COLOURS || []).slice(0, 9);
+    const cur = Math.min(state.face.eyeColour || 0, eyes.length - 1);
+    root.appendChild(list('Augenfarbe', eyes, cur, (i) => {
+      fetchNui('setEyeColour', { index: i });
+    }));
+    return root;
+  };
+
+  // ============================================================ face features
+  // Each FACE_1D_GROUPS row is a 1D-H grid panel; each FACE_2D_GROUPS
+  // row is a 2D grid panel. The 0..1 normalised position is converted
+  // to engine -1..1 on the way out via toFeature().
+  const isBinary = (v) => v == null || v <= -0.99 || v >= 0.99;
+
+  const renderFaceFeatures = () => {
+    const root = el('div', '');
+    const groups1D = (state.faceGroups && state.faceGroups.FACE_1D) || [];
+    const groups2D = (state.faceGroups && state.faceGroups.FACE_2D) || [];
+
+    root.appendChild(separator('2D Merkmale'));
+    for (const g of groups2D) {
+      const xv = state.face.features[String(g.xId)] || 0;
+      const yv = state.face.features[String(g.yId)] || 0;
+      if (isBinary(xv) || isBinary(yv)) {
+        if (!isBinary(xv)) {
+          root.appendChild(grid1DH(g.title, g.left, g.right, fromFeature(xv),
+            (p) => fetchNui('setFeature', { id: g.xId, value: toFeature(p) })));
+        }
+        if (!isBinary(yv)) {
+          root.appendChild(grid1DH(g.title, g.top, g.bottom, fromFeature(yv),
+            (p) => fetchNui('setFeature', { id: g.yId, value: toFeature(p) })));
+        }
+      } else {
+        root.appendChild(grid2D(g.title, g.top, g.right, g.bottom, g.left,
+          fromFeature(xv), fromFeature(yv),
+          (px, py) => {
+            fetchNui('setFeature', { id: g.xId, value: toFeature(px) });
+            fetchNui('setFeature', { id: g.yId, value: toFeature(py) });
+          }));
+      }
+    }
+
+    root.appendChild(separator('1D Merkmale'));
+    for (const g of groups1D) {
+      const v = state.face.features[String(g.id)] || 0;
+      root.appendChild(grid1DH(g.title, g.left, g.right, fromFeature(v),
+        (p) => fetchNui('setFeature', { id: g.id, value: toFeature(p) })));
+    }
+    return root;
+  };
+
+  // ============================================================ hair
+  const renderHair = () => {
+    const root = el('div', '');
+    const slot = (state.slots.components || {})[2] || [];
+    if (slot.length === 0) {
+      root.appendChild(el('div', 'cr-separator', 'Keine Frisuren geladen.'));
+      return root;
+    }
+    const option = slot[0];
+    const modelLabels = [];
+    for (let d = 0; d < option.drawables; d++) {
+      modelLabels.push('Frisur ' + (d + 1));
+    }
+    const cur = state.selection.components && state.selection.components['2'] || {};
+    const drawable = Math.min(tonumber(cur.drawable) || 0, option.drawables - 1);
+
+    root.appendChild(separator('Modell'));
+    root.appendChild(list('Frisur', modelLabels, drawable, (i) => {
+      fetchNui('setSlot', { kind: 'components', id: 2,
+        slot: { collection: option.name, drawable: i, texture: 0 } });
+    }));
+
+    root.appendChild(separator('Hauptfarbe'));
+    const pal = state.palettes.HAIR_PALETTE || [];
+    root.appendChild(colourPicker('Hauptfarbe', pal, state.face.hairColour.primary || 0,
+      (i) => fetchNui('setHairColour', { channel: 'primary', index: i })));
+
+    root.appendChild(separator('Straehnen'));
+    root.appendChild(colourPicker('Straehnen', pal, state.face.hairColour.highlight || 0,
+      (i) => fetchNui('setHairColour', { channel: 'highlight', index: i })));
+
+    const op = (state.face.hairOverlay && state.face.hairOverlay.opacity) || 1.0;
+    const opLabels = [];
+    for (let p = 0; p <= 100; p++) opLabels.push(p + ' %');
+    root.appendChild(separator('Hair Fade'));
+    root.appendChild(slider('Deckkraft', opLabels, Math.floor(op * 100), (i) => {
+      fetchNui('setHairOverlayOpacity', { opacity: i / 100 });
+    }, (v) => v + ' %'));
+    return root;
+  };
+
+  // ============================================================ makeup
+  const renderMakeup = () => {
+    const root = el('div', '');
+    root.appendChild(separator('Overlays'));
+    for (let id = 0; id <= 9; id++) {
+      const label = (state.overlayLabels && state.overlayLabels[id]) || ('Overlay ' + id);
+      root.appendChild(button(label, 'Stil, Deckkraft und Farbe.', () => {
+        pushPanel('overlay', { id });
+      }));
+    }
+    return root;
+  };
+
+  const renderOverlay = (panel) => {
+    const id = panel.payload && panel.payload.id;
+    if (typeof id !== 'number') return el('div', '', 'Overlay fehlt.');
+    const root = el('div', '');
+    const label = (state.overlayLabels && state.overlayLabels[id]) || ('Overlay ' + id);
+
+    // Build style list. Index 0 is "Keins" (off). Real styles from labels.
+    const styles = ['Keins'];
+    const realStyles = (state.labels.OVERLAY_STYLES && state.labels.OVERLAY_STYLES[String(id)]) || [];
+    for (let i = 1; i < realStyles.length; i++) styles.push(realStyles[i] || ('Stil ' + i));
+
+    const cur = state.face.overlays[String(id)] || { style: 0, opacity: 0, colourType: 1, colour: 0, secondColour: 0 };
+    // The list index is (style + 1) if opacity > 0; else 1 (Keins).
+    const startIdx = (cur.opacity > 0.01) ? Math.min(styles.length - 1, (cur.style || 0) + 1) : 0;
+
+    root.appendChild(separator('Stil'));
+    root.appendChild(list(label, styles, startIdx, (i) => {
+      const newState = (i === 0)
+        ? { style: 0, opacity: 0, colourType: 1, colour: 0, secondColour: 0 }
+        : { style: i - 1, opacity: Math.max(cur.opacity || 0, 0.5), colourType: cur.colourType, colour: cur.colour, secondColour: cur.secondColour };
+      fetchNui('setOverlay', { id, overlay: newState });
+    }));
+
+    // Opacity slider (0..100%).
+    const opLabels = [];
+    for (let p = 0; p <= 100; p++) opLabels.push(p + ' %');
+    root.appendChild(separator('Deckkraft'));
+    root.appendChild(slider('Deckkraft', opLabels,
+      Math.floor((cur.opacity || 0) * 100),
+      (i) => {
+        const newState = { ...cur, opacity: i / 100 };
+        fetchNui('setOverlay', { id, overlay: newState });
+      }, (v) => v + ' %'));
+
+    // Colour panel.
+    const palettes = (state.palettes.OVERLAY_PALETTES || {})[id] || [];
+    if (palettes.length > 0) {
+      // If multiple palettes, offer a swap.
+      if (palettes.length > 1) {
+        const labels = palettes.map((p) => p[1] || 'Palette');
+        const curPaletteIdx = palettes.findIndex((p) => p[0] === (cur.colourType || 1));
+        const startPalIdx = curPaletteIdx >= 0 ? curPaletteIdx : 0;
+        root.appendChild(separator('Farbpalette'));
+        root.appendChild(list('Farbpalette', labels, startPalIdx, (i) => {
+          fetchNui('swapOverlayPalette', { id, paletteIndex: i + 1 });
+        }));
+      }
+      // Use the active palette based on colourType.
+      const activePalette = palettes.find((p) => p[0] === (cur.colourType || 1)) || palettes[0];
+      if (activePalette && activePalette[2] && activePalette[2].length > 0) {
+        root.appendChild(separator('Farbe'));
+        root.appendChild(colourPicker(activePalette[1] || 'Farbe', activePalette[2],
+          Math.min(cur.colour || 0, activePalette[2].length - 1),
+          (i) => {
+            const newState = { ...cur, colour: i, secondColour: i };
+            fetchNui('setOverlay', { id, overlay: newState });
+          }));
+      }
+    }
+    return root;
+  };
+
+  // ============================================================ outfit
+  const renderOutfit = () => {
+    const root = el('div', '');
+    const compIds = Object.keys(state.slots.components || {})
+      .map((s) => parseInt(s, 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+    const propIds = Object.keys(state.slots.props || {})
+      .map((s) => parseInt(s, 10)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+
+    root.appendChild(separator('Kleidung'));
+    for (const id of compIds) {
+      if (id === 2) continue; // hair lives in the Haare category
+      const label = (state.componentLabels && state.componentLabels[id]) || ('Slot ' + id);
+      const opt = (state.slots.components[String(id)] || [])[0];
+      const count = opt ? opt.drawables : 0;
+      root.appendChild(button(label, `Slot ${id} - ${count} Kollektionen`, () => {
+        pushPanel('slot', { kind: 'components', id });
+      }));
+    }
+    if (propIds.length > 0) {
+      root.appendChild(separator('Accessoires'));
+      for (const id of propIds) {
+        const label = (state.propLabels && state.propLabels[id]) || ('Prop ' + id);
+        const opt = (state.slots.props[String(id)] || [])[0];
+        const count = opt ? opt.drawables : 0;
+        root.appendChild(button(label, `Prop ${id} - ${count} Kollektionen`, () => {
+          pushPanel('slot', { kind: 'props', id });
+        }));
+      }
+    }
+    // Body overlays.
+    const maxOverlay = (state.overlayLabels && Object.keys(state.overlayLabels).length) || 12;
+    root.appendChild(separator('Koerperfarbe'));
+    for (let id = 10; id <= maxOverlay; id++) {
+      const label = (state.overlayLabels && state.overlayLabels[id]) || ('Overlay ' + id);
+      root.appendChild(button(label, 'Stil und Deckkraft.', () => {
+        pushPanel('overlay', { id });
+      }));
+    }
+    return root;
+  };
+
+  // ============================================================ slot
+  const renderSlot = (panel) => {
+    const { kind, id } = panel.payload || {};
+    if (!kind || typeof id !== 'number') return el('div', '', 'Slot fehlt.');
+    const root = el('div', '');
+    const slot = (state.slots[kind] || {})[String(id)] || [];
+    if (slot.length === 0) {
+      root.appendChild(el('div', 'cr-separator', 'Keine Stuecke verfuegbar.'));
+      return root;
+    }
+    const option = slot[0];
+    const label = (kind === 'props'
+      ? (state.propLabels && state.propLabels[id]) || ('Prop ' + id)
+      : (state.componentLabels && state.componentLabels[id]) || ('Slot ' + id));
+
+    const cur = (state.selection[kind] || {})[String(id)] || {};
+    const drawable = Math.min(tonumber(cur.drawable) || 0, option.drawables - 1);
+    const texture = Math.min(tonumber(cur.texture) || 0, Math.max(1, option.textures) - 1);
+
+    // Modell list.
+    const modelLabels = [];
+    for (let d = 0; d < option.drawables; d++) {
+      modelLabels.push('Modell ' + (d + 1));
+    }
+    root.appendChild(separator('Modell'));
+    root.appendChild(list('Modell', modelLabels, drawable, (i) => {
+      fetchNui('setSlot', { kind, id, slot: { collection: option.name, drawable: i, texture } });
+    }));
+
+    // Ausfuehrung list.
+    const texLabels = [];
+    for (let t = 0; t < option.textures; t++) {
+      texLabels.push('Ausfuehrung ' + (t + 1));
+    }
+    root.appendChild(separator('Ausfuehrung'));
+    root.appendChild(list('Ausfuehrung', texLabels, texture, (i) => {
+      fetchNui('setSlot', { kind, id, slot: { collection: option.name, drawable, texture: i } });
+    }));
+    return root;
+  };
+
+  // ============================================================ tattoos
+  const renderTattoos = () => {
+    const root = el('div', '');
+    root.appendChild(separator('Lade Zonen...'));
+    // Lazy fetch on first render.
+    fetchNui('getTattooZones').then(() => {
+      // The reply comes in via 'tattooZones' action; the message handler
+      // updates state.tattoos.zones. We re-render after a short delay.
+    });
+    // Optimistic: also render zones from cache if available.
+    if (state.tattoos && state.tattoos.zones) {
+      root.innerHTML = '';
+      for (const zoneId of state.tattoos.zones) {
+        const label = (state.zoneLabels && state.zoneLabels[zoneId]) || ('Zone ' + zoneId);
+        root.appendChild(button(label, null, () => {
+          pushPanel('tattooZone', { zoneId });
+        }));
+      }
+    }
+    return root;
+  };
+
+  const renderTattooZone = (panel) => {
+    const zoneId = panel.payload && panel.payload.zoneId;
+    if (typeof zoneId !== 'number') return el('div', '', 'Zone fehlt.');
+    const root = el('div', '');
+    const label = (state.zoneLabels && state.zoneLabels[zoneId]) || ('Zone ' + zoneId);
+
+    // Keins button.
+    root.appendChild(button('Keins', 'Alle Tattoos dieser Zone entfernen.', () => {
+      fetchNui('removeTattoo', { zoneId });
+    }));
+
+    // Lazy fetch.
+    fetchNui('getTattoosByZone', { zoneId });
+    const cached = state.tattoos && state.tattoos.byZone && state.tattoos.byZone[zoneId];
+    if (cached && cached.length > 0) {
+      root.appendChild(separator(label));
+      for (const t of cached) {
+        root.appendChild(button(t.name || t.collection, t.collection, () => {
+          fetchNui('pickTattoo', { zoneId, collection: t.collection, preset: t.preset });
+        }));
+      }
+    } else {
+      root.appendChild(separator('Lade Tattoos...'));
+    }
+    return root;
+  };
 
   // ---------------------------------------------------------------- keyboard
   document.addEventListener('keydown', (e) => {
@@ -551,6 +928,18 @@
       case 'error':
         toast(data && data.message, true);
         break;
+      case 'tattooZones':
+        if (data && data.zones) {
+          state.tattoos.zones = data.zones;
+          renderActive();
+        }
+        break;
+      case 'tattoosByZone':
+        if (data && typeof data.zoneId === 'number') {
+          state.tattoos.byZone[data.zoneId] = data.tattoos || [];
+          renderActive();
+        }
+        break;
       default:
         // No-op; other actions like 'tattooZones' / 'tattoosByZone' /
         // 'parentPortraits' / 'faceBones' are handled below as needed.
@@ -568,6 +957,12 @@
     if (data.slots) state.slots = data.slots;
     if (data.labels) state.labels = data.labels;
     if (data.palettes) state.palettes = data.palettes;
+    if (data.faceGroups) state.faceGroups = data.faceGroups;
+    if (data.componentLabels) state.componentLabels = data.componentLabels;
+    if (data.propLabels) state.propLabels = data.propLabels;
+    if (data.overlayLabels) state.overlayLabels = data.overlayLabels;
+    if (data.zoneLabels) state.zoneLabels = data.zoneLabels;
+    if (data.maxTexture) state.maxTexture = data.maxTexture;
     if (data.hairOverlayState) state.hairOverlayState = data.hairOverlayState;
     if (typeof data.modelIsUndecided === 'boolean') state.modelIsUndecided = data.modelIsUndecided;
     if (data.skinCam) state.skinCam = data.skinCam;
