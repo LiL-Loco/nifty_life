@@ -971,11 +971,47 @@ exports('isCreatorOpen', function() return creatorOpen end)
 -- NUI BRIDGE EXPORTS
 -- =================================================================
 -- These exports are consumed by client/cl_nui.lua. They are thin
--- adapters that call into the existing private helpers (setFeature,
--- setSlot, etc.) and return the new state for the NUI to consume.
--- They are added without removing the legacy NativeUI surface;
--- removal happens in a later PR.
+-- adapters that mutate `face` / `selection` and call refresh() to
+-- push the new state to the NUI.
 -- =================================================================
+
+-- The current pick for a (kind, id) slot, or nil. The private setSlot
+-- that used to live at the top of the file was deleted during the
+-- NUI migration; this read-side helper stays.
+local function slotOfNow(kind, id)
+  return (selection[kind] or {})[tostring(id)]
+end
+
+-- Slot 11 (top) drags the torso (slot 3) along with it. Inline copy
+-- of the old applyBestTorso; kept here so the NUI bridge setSlot
+-- can call it when the player picks a new top.
+local function applyBestTorsoNow()
+  local top = slotOfNow('components', 11)
+  if not top then return end
+  local count = 1
+  for _, option in ipairs(slots.components[11] or {}) do
+    if option.name == top.collection then count = option.drawables break end
+  end
+  local globalDrawable, globalTexture = GameData.bestTorso(
+    top.collection, top.drawable, top.texture, count)
+  if not globalDrawable then return end
+  local options = slots.components[3]
+  if not options then return end
+  for _, option in ipairs(options) do
+    local drawable = GameData.localForGlobal('components', 3, globalDrawable, option.name, option.drawables)
+    if drawable then
+      local texture = tonumber(globalTexture) or 0
+      if texture >= option.textures then texture = option.textures - 1 end
+      if texture < 0 then texture = 0 end
+      selection.components['3'] = {
+        collection = option.name,
+        drawable   = drawable,
+        texture    = texture,
+      }
+      return
+    end
+  end
+end
 
 -- State snapshot. The NUI keeps its own copy of this for fast
 -- render. Returns the bare tables the NUI needs; engine internals
@@ -1033,6 +1069,10 @@ exports('setSlot', function(kind, id, slot)
     drawable   = tonumber(slot.drawable) or 0,
     texture    = tonumber(slot.texture) or 0,
   }
+  -- A top (slot 11) drags its torso (slot 3) along with it.
+  if kind == 'components' and id == 11 then
+    applyBestTorsoNow()
+  end
   refresh()
 end)
 
