@@ -1199,8 +1199,11 @@ local function buildOverlayMenu(id)
   -- {"0%", "1%", ..., "100%"} so the player sees the percentage.
   local opacityList = {}
   for i = 0, 1000 do opacityList[i + 1] = (i * 0.1 .. '%') end
+  local opacityValue = (current.opacity or 1.0) * 1000
+  if opacityValue < 0 then opacityValue = 0 end
+  if opacityValue > 1000 then opacityValue = 1000 end
   local opacityItem = NativeUI.CreateSliderItem('Deckkraft', opacityList,
-    math.floor(math.clamp((current.opacity or 1.0) * 1000, 0, 1000)) + 1,
+    math.floor(opacityValue) + 1,
     'Deckkraft in Prozent (0% = aus).', true)
   styleItem:AddPanel(opacityItem)
 
