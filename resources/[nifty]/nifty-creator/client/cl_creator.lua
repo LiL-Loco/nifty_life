@@ -74,6 +74,19 @@ function Menu.menu(spec)
   if type(spec.onClose) == 'function' then
     m.OnMenuClose = function(_) pcall(spec.onClose) end
   end
+  -- Skin cam: switch to a tight head closeup when this menu opens, and
+  -- back to the body closeup when it closes. lbg-char pattern.
+  if spec.skinCam == 'face' then
+    Citizen.CreateThread(function()
+      Wait(0)
+      showSkinCam('face')
+    end)
+    local prevClose = m.OnMenuClose
+    m.OnMenuClose = function(...)
+      pcall(function() showSkinCam('body') end)
+      if prevClose then pcall(prevClose, ...) end
+    end
+  end
   -- Mouse at the screen edge rotates the gameplay camera by default in
   -- NativeUI; we want the camera to stay where the Q/E turn and the
   -- face/body switch put it. Disabling this also lets the mouse
@@ -655,6 +668,65 @@ local camYaw = 0.0
 local camPitch = 0.0
 local camRadius = 2.6
 
+-- Skin cam: tight face closeup with a small lerp in/out.
+-- Mirrors lbg-char's CreateSkinCam. Activated when the player enters
+-- a category menu (face features, hair, etc.) and dismissed on return
+-- to the root.
+local skinCam = nil
+
+-- Skin-cam coordinates. The player is parked at CreatorScene, so the
+-- skin cam is placed a short distance in front of the head, looking back.
+-- The head bone is at +0.65 Z relative to the ped origin; aim there.
+local function atSkin(distance, height, fov)
+  local scene = CreatorScene
+  local headingRad = scene.heading * math.pi / 180.0
+  local dirX = math.cos(headingRad)
+  local dirY = math.sin(headingRad)
+  local camX = scene.x + dirX * distance
+  local camY = scene.y + dirY * distance
+  local camZ = scene.z + height
+  return CreateCamWithParams(
+    'DEFAULT_SCRIPTED_CAMERA',
+    camX, camY, camZ,
+    0.0, 0.0, (scene.heading or 0.0) + 180.0,
+    fov, false, 0
+  )
+end
+
+local function showSkinCam(kind)
+  -- kind: 'face' = tight head closeup, 'body' = working close-up
+  local spec = (kind == 'face')
+    and { dist = 0.6, h = 0.65, fov = 18.0 }
+    or  { dist = 2.0, h = 1.4,  fov = 35.0 }
+  if skinCam then
+    -- Lerp to the new skin-cam position.
+    local next = atSkin(spec.dist, spec.h, spec.fov)
+    PointCamAtEntity(next, PlayerPedId(), 0.0, 0.65, 0.0, true)
+    SetCamActiveWithInterp(next, skinCam, 250, true, true)
+    DestroyCam(skinCam, false)
+    skinCam = next
+  else
+    skinCam = atSkin(spec.dist, spec.h, spec.fov)
+    PointCamAtEntity(skinCam, PlayerPedId(), 0.0, 0.65, 0.0, true)
+    if creatorCam then
+      SetCamActiveWithInterp(skinCam, creatorCam, 250, true, true)
+    else
+      SetCamActive(skinCam, true)
+      RenderScriptCams(true, false, 2000, true, true)
+    end
+    -- The render thread drives creatorCam; once skinCam is active we
+    -- treat the body close-up as paused and the player uses Q/E / edges
+    -- to frame the face.
+    creatorCam = skinCam
+  end
+end
+
+local function hideSkinCam()
+  if not skinCam then return end
+  DestroyCam(skinCam, false)
+  skinCam = nil
+end
+
 local function startCamera()
   local scene = CreatorScene
   local headingRad = scene.heading * math.pi / 180.0
@@ -712,6 +784,7 @@ local function startCamera()
 end
 
 local function stopCamera()
+  hideSkinCam()
   if creatorCam then
     RenderScriptCams(creatorCam, false, false, 0)
     DestroyCam(creatorCam, true)
@@ -1402,6 +1475,13 @@ local function buildFaceMenu()
     'Gesichtsform', 'Ziehen, um das Gesicht zu formen.', 1300, 0,
     'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
   )
+  -- Skin cam: switch to a tight face closeup on open, back to body on close.
+  Citizen.CreateThread(function() Wait(0); showSkinCam('face') end)
+  local prevFaceClose = menu.OnMenuClose
+  menu.OnMenuClose = function(...)
+    pcall(function() showSkinCam('body') end)
+    if prevFaceClose then pcall(prevFaceClose, ...) end
+  end
 
   local function setFeature(id, value)
     -- Sparse: an untouched feature is not stored. A ped whose stored
@@ -1689,7 +1769,7 @@ end
 --- so an openRoot (Escape from a category) lands back at the root.
 
 local function buildHeritageCategoryMenu()
-  local menu = Menu.menu({ title = 'Heritage', dock = 'right' })
+  local menu = Menu.menu({ title = 'Heritage', dock = 'right', skinCam = 'face' })
   Menu.submenu(menu, 'Eltern', {
     description = 'Vater, Mutter und die Mischungen daraus.',
     build = buildParentsMenu,
@@ -1706,7 +1786,7 @@ local function buildFaceFeaturesCategoryMenu()
 end
 
 local function buildHairCategoryMenu()
-  local menu = Menu.menu({ title = 'Haare', dock = 'right' })
+  local menu = Menu.menu({ title = 'Haare', dock = 'right', skinCam = 'face' })
   local hairSlot = slots.components[2]
   if hairSlot then
     Menu.submenu(menu, 'Frisur', {
@@ -1720,7 +1800,7 @@ local function buildHairCategoryMenu()
 end
 
 local function buildMakeupCategoryMenu()
-  local menu = Menu.menu({ title = 'Makeup', dock = 'right' })
+  local menu = Menu.menu({ title = 'Makeup', dock = 'right', skinCam = 'face' })
   for id = AppearanceConfig.MIN_OVERLAY_ID, 9 do
     Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
       description = 'Stil, Deckkraft und Farbe.',
