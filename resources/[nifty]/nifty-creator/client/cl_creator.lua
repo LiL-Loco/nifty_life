@@ -348,6 +348,11 @@ local cancel
 local buildRootMenu
 local closeCreator
 local refresh
+local zoomCamera
+local camFov
+local CAM_FOV_MIN
+local CAM_FOV_MAX
+local CAM_FOV_STEP
 local resolveHairOverlay
 local applyDecorations
 local buildTattooMenu
@@ -744,6 +749,18 @@ local function hideSkinCam()
   skinCam = nil
 end
 
+-- Zoom in / out, in FOV steps. Reached from the root menu rather than a key —
+-- see the note there on why the arrow keys were unusable. Assigned rather than
+-- `local function` because buildRootMenu, far above, calls it through the
+-- forward declaration.
+zoomCamera = function(direction)
+  if not creatorCam then return end
+  camFov = camFov - (CAM_FOV_STEP * direction)
+  if camFov < CAM_FOV_MIN then camFov = CAM_FOV_MIN end
+  if camFov > CAM_FOV_MAX then camFov = CAM_FOV_MAX end
+  SetCamFov(creatorCam, camFov)
+end
+
 local function startCamera()
   local scene = CreatorScene
   local headingRad = scene.heading * math.pi / 180.0
@@ -755,49 +772,31 @@ local function startCamera()
   -- separate scripted cam; SetCamActiveWithInterp blends them so the
   -- cut between cameras is not visible. Total ~2.4s, then the menu
   -- opens (the third stage's position is the working menu camera).
-  local function at(distance, height, fov, pitch, yawDelta)
-    return CreateCamWithParams(
-      'DEFAULT_SCRIPTED_CAMERA',
-      scene.x + dirX * distance,
-      scene.y + dirY * distance,
-      scene.z + height,
-      pitch, 0.0, (scene.heading or 0.0) - yawDelta,
-      fov, false, 0
-    )
-  end
+  -- The three-stage flyover (far overview -> mid -> close-up, with the menu
+  -- opening only after the last interpolation) was removed on 2026-10-12 at
+  -- the owner's request. The working camera is placed directly and the menu
+  -- opens on it.
+  --
+  -- The screen is still held black by nifty-core's pre-welcome hook, so the
+  -- fade-in stays here, and firing is still disabled so a player cannot shoot
+  -- themselves while posing.
 
-  local far = at(scene.camRadius, scene.camHeight, scene.camFarFov, -85.0, 90.0)
-  creatorCam = far
-  RenderScriptCams(far, true, false, 0)
-
-  -- The screen was held black by nifty-core's pre-welcome hook, which
-  -- parked the player at the creator scene before this fires. Fade in
-  -- NOW (over the cinematic) so the player sees the flyover start rather
-  -- than having the menu pop on a fully-revealed stage.
   DoScreenFadeIn(500)
-
-  -- Firing off so a player cannot shoot themselves while posing.
   DisablePlayerFiring(PlayerId(), true)
 
-  -- Stage 2: mid-range, after the overview settles.
-  SetTimeout(scene.camMove, function()
-    local mid = at(scene.camRadius * 0.4, scene.camNearZ, scene.camNearFov, -25.0, 60.0)
-    PointCamAtCoord(mid, scene.x, scene.y, scene.z + 0.5)
-    SetCamActiveWithInterp(mid, far, scene.camInterp, true, true)
-    creatorCam = mid
+  creatorCam = CreateCamWithParams(
+    'DEFAULT_SCRIPTED_CAMERA',
+    scene.x + dirX * 2.0,
+    scene.y + dirY * 2.0,
+    scene.z + 1.4,
+    -5.0, 0.0, (scene.heading or 0.0),
+    35.0, false, 0
+  )
+  PointCamAtEntity(creatorCam, PlayerPedId(), 0.0, 0.0, 0.0, true)
+  SetCamActive(creatorCam, true)
+  RenderScriptCams(creatorCam, true, false, 0)
 
-    -- Stage 3: close-up, the working menu camera. After the close-up
-    -- finishes its interpolation, open the menu so the player sees
-    -- the character from the close-up angle as soon as the menu is
-    -- drawn, not from a blank screen.
-    SetTimeout(scene.camSettle, function()
-      local close = at(2.0, 1.4, 35.0, -5.0, scene.heading - 0.0)
-      PointCamAtEntity(close, PlayerPedId(), 0.0, 0.0, 0.0, true)
-      SetCamActiveWithInterp(close, mid, 600, true, true)
-      creatorCam = close
-      openRoot()
-    end)
-  end)
+  openRoot()
 end
 
 local function stopCamera()
@@ -1244,6 +1243,45 @@ local function buildOverlayMenu(id)
     colourPanel = NativeUI.CreateColourPanel(activeEntry[2], activePalette)
     styleItem:AddPanel(colourPanel)
     colourPanel:CurrentSelection(colourIndex, true)
+
+    -- Overlay 4 accepts BOTH colour types: the hair palette and the makeup one.
+    -- Only the one matching `current.colourType` was ever built into a panel,
+    -- and colourType defaults to 1, so the makeup row showed HAIR colours and
+    -- MAKEUP_PALETTE was unreachable from the menu. Found by the owner on
+    -- 2026-10-12. Where an overlay has more than one palette, the player picks
+    -- which family the row edits.
+    --
+    -- refresh() only pushes the appearance at the ped; it does not rebuild the
+    -- open menu, so the palette swap has to rebuild it the way the tattoo zone
+    -- handler does.
+    if #palettes > 1 then
+      local paletteNames = {}
+      for _, entry in ipairs(palettes) do paletteNames[#paletteNames + 1] = entry[2] end
+
+      local startRow = 1
+      for n, entry in ipairs(palettes) do
+        if entry[1] == (current.colourType or 1) then startRow = n end
+      end
+
+      Menu.select(menu, 'Farbpalette', {
+        items = paletteNames,
+        index = startRow,
+        description = 'Legt fest, welche Farbfamilie die Swatches unten zeigen.',
+        onChange = function(newIndex)
+          local entry = palettes[newIndex]
+          if not entry then return end
+          local live = face.overlays[tostring(id)] or {}
+          face.overlays[tostring(id)] = {
+            style = live.style or 0,
+            opacity = live.opacity or 0.0,
+            colourType = entry[1],
+            colour = 0,
+            secondColour = live.secondColour or 0,
+          }
+          Menu.pushMenu(RESOURCE, buildOverlayMenu(id))
+        end,
+      })
+    end
   end
 
   -- The lbg-char style: a single OnListChanged on the item reads the
@@ -2008,6 +2046,22 @@ buildRootMenu = function()
     onSelect = function() reset() end,
   })
 
+  -- Zoom lives HERE rather than on a key. The arrow keys are the menu: nifty-ui
+  -- binds 172-175 for navigation, and GTA reports the same physical press through
+  -- the legacy ids as well, so the old zoom on 27/28 fired WHILE the player was
+  -- navigating - it ate the right and down arrows. Every other key this file
+  -- owns (47/38 for turning) is spoken for, and no control id outside the
+  -- library's set can be named without guessing, so the menu it is.
+  Menu.button(menu, 'Kamera näher', {
+    description = 'Zoomt die Arbeitskamera heran.',
+    onSelect = function() zoomCamera(1) end,
+  })
+
+  Menu.button(menu, 'Kamera weiter', {
+    description = 'Zoomt die Arbeitskamera weg.',
+    onSelect = function() zoomCamera(-1) end,
+  })
+
   Menu.button(menu, 'Fertig', {
     description = 'Aussehen speichern und die Welt betreten.',
     onSelect = function() submit() end,
@@ -2294,10 +2348,14 @@ end)
 -- or E press adds or subtracts exactly one degree. Zoom is the FOV;
 -- smaller = closer, larger = further. Both clamped.
 local camYaw = 0.0
-local camFov = 50.0
-local CAM_FOV_MIN   = 15.0
-local CAM_FOV_MAX   = 75.0
-local CAM_FOV_STEP  = 12.0  -- FOV delta per arrow press
+-- Assigned, not declared: zoomCamera is defined ABOVE here and reads all four,
+-- so they are the forward declarations made near the top of the file. Declaring
+-- them `local` again at this line would shadow them and zoomCamera would reach
+-- for globals — the same trap as showSkinCam.
+camFov = 50.0
+CAM_FOV_MIN   = 15.0
+CAM_FOV_MAX   = 75.0
+CAM_FOV_STEP  = 12.0  -- FOV delta per menu press
 -- CAM_EDGE_DEG_PER_SEC went with the mouse-edge auto-rotation. See the note at
 -- the place it used to run.
 
@@ -2368,18 +2426,15 @@ Citizen.CreateThread(function()
       -- zoom below is untouched. Both are one key press per step, which is
       -- what a controller is good at.
 
-      -- Up / down FOV zoom. One-shot per key press, not held; the player
-      -- taps to step in or out. Hold-to-zoom would overshoot on slower
-      -- frames. Arrow up is INPUT_FRONTEND_UP (27), down is
-      -- INPUT_FRONTEND_DOWN (28).
-      if IsDisabledControlJustPressed(0, 27) then
-        camFov = math.max(CAM_FOV_MIN, camFov - CAM_FOV_STEP)
-        SetCamFov(creatorCam, camFov)
-      end
-      if IsDisabledControlJustPressed(0, 28) then
-        camFov = math.min(CAM_FOV_MAX, camFov + CAM_FOV_STEP)
-        SetCamFov(creatorCam, camFov)
-      end
+      -- The arrow-key FOV zoom that used to live here was removed on 2026-10-12.
+      -- It sat on controls 27/28, which are the LEGACY ids for the right and
+      -- down arrows; GTA reports one physical arrow press through both the
+      -- legacy and the modern id, so it fired WHILE the player was using the
+      -- arrows to move through the menu. Zoom is on the root menu now, as
+      -- "Kamera näher" / "Kamera weiter".
+      --
+      -- Q / E above still turn the camera, one degree per press, and the
+      -- up/down FOV clamp constants below still belong to zoomCamera.
     end
 
     -- Mouse lock. The visible menu (if any) defines a draw rectangle
