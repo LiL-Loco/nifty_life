@@ -120,12 +120,14 @@ function Menu.input(menu, label, spec)
 end
 
 function Menu.openMenu(_RESOURCE, menu)
+  if not _pool then return false end
   _pool:Add(menu)
   menu:Visible(true)
   return true
 end
 
 function Menu.pushMenu(_RESOURCE, menu)
+  if not _pool then return false end
   for _, other in ipairs(_pool.Menus) do
     if other.Visible then other.Visible(false) end
   end
@@ -135,12 +137,14 @@ function Menu.pushMenu(_RESOURCE, menu)
 end
 
 function Menu.closeMenu(_RESOURCE, _reason)
+  if not _pool then return end
   for _, other in ipairs(_pool.Menus) do
     if other.Visible then other.Visible(false) end
   end
 end
 
 function Menu.isOpen()
+  if not _pool then return false end
   for _, other in ipairs(_pool.Menus) do
     if other.Visible then return true end
   end
