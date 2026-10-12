@@ -293,6 +293,7 @@ local function discoverSlots()
       RESOURCE, maxDrawables, AppearanceConfig.MAX_DRAWABLE,
       maxTextures, AppearanceConfig.MAX_TEXTURE))
   end
+end
 
 --- Re-spawn the ped on its model, which resets it to that model's defaults. Used on
 --- open and on Zurücksetzen.

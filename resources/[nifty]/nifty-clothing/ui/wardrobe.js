@@ -79,24 +79,29 @@
   // ---------------------------------------------------------------- screens
   const renderRoot = () => {
     const root = el('div', '');
-    root.appendChild(separator('Kleidung'));
-    for (const s of state.slots) {
-      const label = state.componentLabels[s] || ('Slot ' + s);
-      root.appendChild(button(label, 'Slot ' + s, () => {
-        state.activeSlot = { kind: 'components', id: s };
-        state.screen = 'slot';
-        fetchNui('getOwnedForSlot', { kind: 'components', id: s });
-        renderPanel();
-      }));
+    const slots = state.slots || {};
+    const compIds = (slots.components || []).slice().sort((a, b) => a - b);
+    const propIds = (slots.props || []).slice().sort((a, b) => a - b);
+    if (compIds.length > 0) {
+      root.appendChild(separator('Kleidung'));
+      for (const s of compIds) {
+        const label = state.componentLabels[s] || ('Slot ' + s);
+        root.appendChild(button(label, 'Slot ' + s, () => {
+          state.activeSlot = { kind: 'component', id: s };
+          state.screen = 'slot';
+          fetchNui('getOwnedForSlot', { kind: 'component', id: s });
+          renderPanel();
+        }));
+      }
     }
-    if (state.slots.props && state.slots.props.length > 0) {
+    if (propIds.length > 0) {
       root.appendChild(separator('Accessoires'));
-      for (const s of state.slots.props) {
+      for (const s of propIds) {
         const label = state.propLabels[s] || ('Prop ' + s);
         root.appendChild(button(label, 'Prop ' + s, () => {
-          state.activeSlot = { kind: 'props', id: s };
+          state.activeSlot = { kind: 'prop', id: s };
           state.screen = 'slot';
-          fetchNui('getOwnedForSlot', { kind: 'props', id: s });
+          fetchNui('getOwnedForSlot', { kind: 'prop', id: s });
           renderPanel();
         }));
       }
@@ -119,7 +124,7 @@
     const root = el('div', '');
     if (!state.activeSlot) { state.screen = 'root'; return renderRoot(); }
     const { kind, id } = state.activeSlot;
-    const label = (kind === 'props'
+    const label = (kind === 'prop'
       ? state.propLabels[id]
       : state.componentLabels[id]) || (kind + ' ' + id);
     root.appendChild(button('< Zurueck', null, () => {

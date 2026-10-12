@@ -52,7 +52,7 @@ local function onOwnedPieces(reply)
     RemoveEventHandler(onOwnedPieces)
     SendNUIMessage({
       action = 'refresh',
-      data    = { owned = { [reply.kind] = { [reply.slot] = reply.pieces or {} } } },
+      data    = { owned = { [reply.kind] = { [reply.slot] = reply.items or {} } } },
     })
   end
 end
@@ -111,7 +111,8 @@ end)
 
 RegisterNUICallback('deleteOutfit', function(data, cb)
   if data and data.id then
-    TriggerServerEvent('nifty:server:outfitPack', { outfitId = tonumber(data.id) })
+    TriggerServerEvent('nifty:server:outfitDelete',
+                       { outfitId = tostring(tonumber(data.id) or '') })
   end
   cb({ ok = true })
 end)
@@ -119,7 +120,7 @@ end)
 RegisterNUICallback('renameOutfit', function(data, cb)
   if data and data.id and data.name then
     TriggerServerEvent('nifty:server:outfitRename', {
-      id = tonumber(data.id), name = data.name,
+      id = tostring(tonumber(data.id) or ''), name = data.name,
     })
   end
   cb({ ok = true })
@@ -127,7 +128,8 @@ end)
 
 RegisterNUICallback('applyOutfit', function(data, cb)
   if data and data.id then
-    TriggerServerEvent('nifty:server:outfitApply', { id = tonumber(data.id) })
+    TriggerServerEvent('nifty:server:outfitApply',
+                       { outfitId = tostring(tonumber(data.id) or '') })
   end
   cb({ ok = true })
 end)
@@ -175,9 +177,18 @@ RegisterNetEvent('nifty:client:clothingPurchase', function(data)
 end)
 
 -- ---------------------------------------------------------------- open / close
--- Wardrobe
+-- Wardrobe: the slot list lives on the server, so the open handshake
+-- goes through `nifty:server:wardrobeOpen` first. The reply carries
+-- the slots the character actually owns and the character display
+-- name; we then send the NUI 'open' message with that data so the
+-- root panel can render the slot buttons without an extra round trip.
+local function onWardrobeOpenReply(reply)
+  RemoveEventHandler(onWardrobeOpenReply)
+  sendOpen('wardrobe', reply or {})
+end
 AddEventHandler('nifty:client:openWardrobe', function()
-  sendOpen('wardrobe')
+  RegisterNetEvent('nifty:client:wardrobeOpenReply', onWardrobeOpenReply)
+  TriggerServerEvent('nifty:server:wardrobeOpen')
 end)
 
 -- Store: triggered by cl_targets.lua when the player presses K inside

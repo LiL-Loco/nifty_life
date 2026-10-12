@@ -550,6 +550,51 @@ RegisterNetEvent('nifty:server:wardrobeListForSlot', function(payload)
 end)
 
 -- ----------------------------------------------------------------------------
+-- Wardrobe open
+--
+-- The NUI wardrobe needs the list of slots the character actually owns
+-- pieces in, plus the character's display name. The NUI driver's
+-- `nifty:client:openWardrobe` triggers this; we read once from
+-- `Owned.list(characterId)` (no filter) and collapse to unique slot ids,
+-- then reply on `nifty:client:wardrobeOpenReply`. The client driver waits
+-- for the reply before pushing the NUI 'open' message so the slot list
+-- is ready when the panel renders.
+-- ----------------------------------------------------------------------------
+RegisterNetEvent('nifty:server:wardrobeOpen', function()
+  local src = source
+  local cid = Identity.getActiveCharacter(src)
+  if not cid then return end
+
+  local all = Owned.list(cid) or {}
+  local compSlots, propSlots = {}, {}
+  local seen = { component = {}, prop = {} }
+  for _, row in ipairs(all) do
+    local kind, sid = row.kind, row.slot_id
+    if (kind == 'component' or kind == 'prop') and sid and not seen[kind][sid] then
+      seen[kind][sid] = true
+      if kind == 'component' then compSlots[#compSlots + 1] = sid
+      else                       propSlots[#propSlots + 1] = sid end
+    end
+  end
+  table.sort(compSlots)
+  table.sort(propSlots)
+
+  local character = nil
+  local account = Identity.resolveAccount(src)
+  if account then
+    local row = Identity.getCharacter(account.id)
+    if row then
+      character = { firstName = row.first_name, lastName = row.last_name }
+    end
+  end
+
+  TriggerClientEvent('nifty:client:wardrobeOpenReply', src, {
+    slots     = { components = compSlots, props = propSlots },
+    character = character,
+  })
+end)
+
+-- ----------------------------------------------------------------------------
 -- Outfits
 -- ----------------------------------------------------------------------------
 
@@ -629,9 +674,9 @@ RegisterNetEvent('nifty:server:outfitRename', function(payload)
     TriggerClientEvent('nifty:client:outfitRename', src, { ok = false, reason = 'no character' })
     return
   end
-  local id = tonumber(payload.id)
+  local id = type(payload.id) == 'string' and payload.id or tostring(payload.id or '')
   local name = type(payload.name) == 'string' and payload.name or nil
-  if not id or not name or name == '' then
+  if id == '' or not name or name == '' then
     TriggerClientEvent('nifty:client:outfitRename', src, { ok = false, reason = 'bad_payload' })
     return
   end
@@ -1086,21 +1131,6 @@ RegisterNetEvent('nifty:server:outfitApply', function(payload)
     ok = true, outfitId = payload.outfitId,
     appearance = appearance,
   })
-end)
-
-RegisterNetEvent('nifty:server:outfitRename', function(payload)
-  local src = source
-  if type(payload) ~= 'table' or type(payload.outfitId) ~= 'string' then return end
-  if not allowBurst(src) then return end
-
-  local cid = characterOf(src)
-  if not cid then
-    TriggerClientEvent('nifty:client:outfitRename', src, { ok = false })
-    return
-  end
-
-  local ok, reason = Owned.renameOutfit(cid, payload.outfitId, payload.name or '')
-  TriggerClientEvent('nifty:client:outfitRename', src, { ok = ok, reason = reason })
 end)
 
 RegisterNetEvent('nifty:server:outfitDelete', function(payload)
