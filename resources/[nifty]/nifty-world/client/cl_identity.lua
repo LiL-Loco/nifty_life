@@ -358,21 +358,19 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
   end
 end)
 
-RegisterNetEvent('nifty:client:openCreator', function(data)
+RegisterNetEvent('nifty:client:openCreator', function()
   -- The character row already exists; this is the second half of making it
-  -- playable. Held frozen and invisible so nobody walks around the city as an
-  -- unowned ped, but VISIBLE - the creator has to show the player their own face
-  -- next to the menu it is about to open.
+  -- playable. Held frozen and visible so nobody walks around the city as an
+  -- unowned ped, and the creator has to show the player their own face next
+  -- to the menu it is about to open.
   --
-  -- The gender is the server's, not the client's: it comes out of the row the
-  -- website wrote, and it is what decides the ped model. Nothing here asks.
+  -- The data engine init and the NUI open are owned by nifty-creator's
+  -- cl_nui.lua handler for the same event; calling the export here too
+  -- double-initialised the data and would race the focus broker. Just
+  -- prepare the ped and let the creator's own handler do the rest.
   local ped = PlayerPedId()
   FreezeEntityPosition(ped, true)
   SetEntityVisible(ped, true)
-
-  exports['nifty-creator']:openCreator({
-    gender = data and data.gender or 'male',
-  })
 end)
 
 RegisterNetEvent('nifty:client:creatorError', function(message)
