@@ -910,21 +910,30 @@ local FACE_2D_GROUPS = {
 }
 
 --- Face-feature indices that get a 1D horizontal grid panel.
+---
+--- SEVERAL OF THESE RUN AGAINST THEIR LABEL, and that is not a typo.
+---
+--- A face feature index is a slider the ENGINE names, not one this project
+--- understands: nifty-core/server/validate.lua says outright that the meaning
+--- is "decided by the client's game files - the server cannot ask". So the
+--- orientation of any individual axis cannot be derived here and can only be
+--- read off the game. The owner did that on 2026-10-12 and found these three
+--- backwards, which is why they read "wrong" against intuition:
+---
+---   id 10  Wangenspalt   a cheek WIDTH axis, which is not a width on the face
+---   id 11  Augenöffnung  opening the eye is what the far end reduces
+---   id 12  Lippendicke   the thick end is where the lip gets thinner
+---
+--- Do not "correct" these back because they look inverted. The 2D groups were
+--- checked in the same pass and were left as written.
 local FACE_1D_GROUPS = {
   { id = 0,  title = 'Nasenbreite',      left = 'Schmal', right = 'Breit' },
   { id = 3,  title = 'Nasenbeinhöhe',   left = 'Tief',   right = 'Hoch'  },
   { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
   { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
-  -- id 10 is the cheek's WIDTH axis in the engine, which is not the same as a
-  -- width on the face: one end hollows the cheek out, the other fills it, and
-  -- the fill direction is the opposite of what the labels here assumed. The
-  -- owner saw it in game on 2026-10-12 and these two were the wrong way round.
-  -- Swapping them is the whole fix — if it now reads backwards, swap them back;
-  -- there is no engine knowledge in this file that would have caught it either
-  -- way.
   { id = 10, title = 'Wangenspalt',      left = 'Breit',  right = 'Schmal' },
-  { id = 11, title = 'Augenöffnung',    left = 'Eng',    right = 'Weit'  },
-  { id = 12, title = 'Lippendicke',      left = 'Dünn',  right = 'Dick'  },
+  { id = 11, title = 'Augenöffnung',    left = 'Weit',   right = 'Eng'   },
+  { id = 12, title = 'Lippendicke',      left = 'Dick',   right = 'Dünn'   },
   { id = 16, title = 'Kinn-Tiefe',       left = 'Flach',  right = 'Hervor' },
   { id = 18, title = 'Kinn-Loch',        left = 'Klein',  right = 'Gross' },
   { id = 19, title = 'Hals-Dicke',       left = 'Dünn',  right = 'Dick'  },
