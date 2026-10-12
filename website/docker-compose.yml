@@ -112,7 +112,31 @@ services:
       # the script's own location.
       - ./docker:/docker-scripts:ro
 
-    entrypoint: ["bash", "/docker-scripts/initdb/run-migrations.sh"]
+    # A preflight, not just a command.
+    #
+    # The first run of this service exited 127 with no output at all, which
+    # says only "command not found" and cannot distinguish a missing volume
+    # mount from a missing shell from a missing client. So the wrapper prints
+    # what it can actually see before handing over. If this ever fails again,
+    # the log says which of the three it was.
+    #
+    # /bin/sh, not /bin/bash: sh exists in every image there is, so the
+    # diagnostics run even if bash is the thing that turned out to be missing.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        echo "migrate: preflight"
+        echo "  image      : $(cat /etc/os-release 2>/dev/null | grep ^PRETTY | cut -d= -f2-)"
+        echo "  /docker-scripts mounted: $([ -d /docker-scripts ] && echo yes || echo NO)"
+        ls -la /docker-scripts 2>/dev/null || echo "  cannot list /docker-scripts"
+        echo "  /docker-scripts/initdb  : $([ -d /docker-scripts/initdb ] && echo yes || echo NO)"
+        ls -la /docker-scripts/initdb 2>/dev/null || echo "  cannot list /docker-scripts/initdb"
+        echo "  migrations dir         : $([ -d /docker-scripts/initdb/migrations ] && echo yes || echo NO)"
+        echo "  bash    : $(command -v bash || echo MISSING)"
+        echo "  mariadb : $(command -v mariadb || echo MISSING)"
+        echo "migrate: running the runner"
+        exec bash /docker-scripts/initdb/run-migrations.sh
 
     networks:
       nifty:
