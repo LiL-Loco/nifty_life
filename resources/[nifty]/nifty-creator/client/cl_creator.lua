@@ -1472,7 +1472,7 @@ local function buildFaceMenu()
   -- axis) get a horizontal panel. The cursor position is normalised
   -- 0..1; the onChange handler maps it to the engine's -1..1 range.
   local menu = NativeUI.CreateMenu(
-    'Gesichtsform', 'Ziehen, um das Gesicht zu formen.', 1300, 0,
+    'Gesichtsform', 'Q/E drehen die Kamera, Maus am Rand rotiert langsam.', 1300, 0,
     'commonmenu', 'interaction_bgd', 0, 255, 255, 255, 255
   )
   -- Skin cam: switch to a tight face closeup on open, back to body on close.
@@ -1769,7 +1769,12 @@ end
 --- so an openRoot (Escape from a category) lands back at the root.
 
 local function buildHeritageCategoryMenu()
-  local menu = Menu.menu({ title = 'Heritage', dock = 'right', skinCam = 'face' })
+  local menu = Menu.menu({
+    title = 'Heritage',
+    subtitle = 'Q/E drehen die Kamera, Maus am Rand rotiert langsam.',
+    dock = 'right',
+    skinCam = 'face',
+  })
   Menu.submenu(menu, 'Eltern', {
     description = 'Vater, Mutter und die Mischungen daraus.',
     build = buildParentsMenu,
@@ -1786,7 +1791,12 @@ local function buildFaceFeaturesCategoryMenu()
 end
 
 local function buildHairCategoryMenu()
-  local menu = Menu.menu({ title = 'Haare', dock = 'right', skinCam = 'face' })
+  local menu = Menu.menu({
+    title = 'Haare',
+    subtitle = 'Q/E drehen die Kamera, Maus am Rand rotiert langsam.',
+    dock = 'right',
+    skinCam = 'face',
+  })
   local hairSlot = slots.components[2]
   if hairSlot then
     Menu.submenu(menu, 'Frisur', {
@@ -1800,7 +1810,12 @@ local function buildHairCategoryMenu()
 end
 
 local function buildMakeupCategoryMenu()
-  local menu = Menu.menu({ title = 'Makeup', dock = 'right', skinCam = 'face' })
+  local menu = Menu.menu({
+    title = 'Makeup',
+    subtitle = 'Q/E drehen die Kamera, Maus am Rand rotiert langsam.',
+    dock = 'right',
+    skinCam = 'face',
+  })
   for id = AppearanceConfig.MIN_OVERLAY_ID, 9 do
     Menu.submenu(menu, OVERLAY_LABELS[id] or ('Overlay ' .. id), {
       description = 'Stil, Deckkraft und Farbe.',
@@ -2259,29 +2274,36 @@ Citizen.CreateThread(function()
     end
 
     if creatorCam then
-      -- Q / E yaw turn in 1-degree steps per keypress. Q is
-      -- INPUT_CONTEXT_SECONDARY (control 47), E is INPUT_CONTEXT (38).
-      -- NativeUI's ControlDisablingEnabled blocks the engine's own Q / E
-      -- handling, so we read IsDisabledControlJustPressed ourselves -
-      -- one-shot per press, not the held-state IsPressed. A held Q used
-      -- to spin at 90 deg/s; the user wanted 1-degree steps so a single
-      -- tap = exactly 1 degree of rotation.
-      if IsDisabledControlJustPressed(0, 47) then camYaw = camYaw - 1.0 end  -- Q
-      if IsDisabledControlJustPressed(0, 38) then camYaw = camYaw + 1.0 end  -- E
-      if IsDisabledControlJustPressed(0, 47) or IsDisabledControlJustPressed(0, 38) then
+      -- Q / E yaw turn around the player ped in 1-degree steps per keypress.
+      -- Q is INPUT_CONTEXT_SECONDARY (47), E is INPUT_CONTEXT (38). The cam
+      -- is repositioned in a fixed orbit around the ped (head height) so a
+      -- skin-cam (close to the head) and a body-cam (further back) both
+      -- frame the character correctly after each turn.
+      local yawDelta = 0.0
+      if IsDisabledControlJustPressed(0, 47) then yawDelta = yawDelta - 1.0 end  -- Q
+      if IsDisabledControlJustPressed(0, 38) then yawDelta = yawDelta + 1.0 end  -- E
+      if yawDelta ~= 0.0 then
+        camYaw = camYaw + yawDelta
         local ok, cx, cy, cz = pcall(GetCamCoord, creatorCam)
         if not ok or type(cx) ~= 'number' or type(cy) ~= 'number' or type(cz) ~= 'number' then
-          -- The camera handle is stale (creator was restarted, scene
-          -- camera destroyed, etc.). Drop the handle so the next loop
-          -- tick no-ops and the user opens a fresh camera via start.
           creatorCam = nil
         else
-          local rad = math.rad(camYaw)
+          -- Distance from the head; the cam stays the same distance but
+          -- rotates around the ped.
+          local ped = PlayerPedId()
+          local head = ped and GetEntityCoords(ped) or { x = cx, y = cy, z = cz }
+          local dx, dy = cx - head.x, cy - head.y
+          local rad = math.atan2(dy, dx) + math.rad(yawDelta)
+          local dist = math.sqrt(dx * dx + dy * dy)
+          -- If the cam is right on top of the ped (skin-cam fresh), use
+          -- the current cam distance as the orbit radius; otherwise it
+          -- stays where it was.
+          if dist < 0.01 then dist = 0.6 end
           SetCamCoord(creatorCam,
-            cx + math.sin(rad) * 1.0,
-            cy + math.cos(rad) * 1.0,
+            head.x + math.cos(rad) * dist,
+            head.y + math.sin(rad) * dist,
             cz)
-          PointCamAtCoord(creatorCam, cx, cy, cz)
+          PointCamAtEntity(creatorCam, ped, 0.0, 0.65, 0.0, true)
         end
       end
 
