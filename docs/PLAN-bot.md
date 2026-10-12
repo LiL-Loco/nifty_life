@@ -168,14 +168,26 @@ Three guards that exist because this bot is on a machine with a disk:
 ### Delivering a transcript that does not fit in a message
 
 Discord caps a message at 2000 characters, and an hour-long staff call is comfortably five times that.
-A transcript delivered by chunking into numbered messages is unreadable, so:
+Chunking into numbered messages is unreadable, so delivery is split by audience:
 
-- a **short embed** goes out first — voice channel, who was in it, duration, speaker count, duration of
-  speech, a link to `/transcript`;
-- the **full transcript is attached as a file**, with per-speaker sections and timestamps;
-- only if it genuinely fits does the text go inline as well.
+- **The invoker gets the full text as a direct message**, with the transcript attached as a file and
+  per-speaker sections with timestamps. Short enough, it is also inlined.
+- **The staff channel gets only a notice**: voice channel, who was in it, wall-clock duration, actual
+  speaking time, speaker count, and the `/transcript` command to pull the rest.
 
-The full text is also stored, so `/transcript` can replay it later without a second transcription run.
+The split is deliberate rather than cautious. The transcript is one person's view of a conversation
+that other people were in, and the team has no business reading it casually — but the team does need to
+know a recording happened and what it covered, because "nobody recorded that call" is exactly the gap
+this feature exists to close. Content goes to the person who asked for it; the fact of it goes to the
+channel.
+
+The full text is stored either way, so `/transcript` can replay it later without a second transcription
+run.
+
+**If the invoker has closed their DMs**, the direct message fails with a Discord error and the transcript
+has to go somewhere. In that case the full file is attached to the staff-channel notice instead, and the
+notice says why. Silent failure here would be the worst outcome: a recording that exists, that nobody
+was told about, and that nobody can find.
 
 ### Storage
 
