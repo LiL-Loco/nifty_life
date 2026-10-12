@@ -1030,7 +1030,7 @@ resolveHairOverlay = function()
   local collection = preset and hairOverlayMap and hairOverlayMap[preset] or nil
 
   face.hairOverlay = (preset and collection)
-    and { collection = collection, preset = preset }
+    and { collection = collection, preset = preset, opacity = face.hairOverlay and face.hairOverlay.opacity or 1.0 }
     or  nil
 end
 
@@ -1641,6 +1641,24 @@ buildSlotMenu = function(kind, id)
       refresh()
     end
     menu:AddItem(highlightItem)
+
+    -- Opacity slider for the hair fade. 0% to 100%, integer steps.
+    -- Stored as 0.0-1.0 in face.hairOverlay.opacity.
+    local hairOpacity = face.hairOverlay and face.hairOverlay.opacity or 1.0
+    local opacityList = {}
+    for i = 0, 100 do opacityList[i + 1] = i .. '%' end
+    local opacityItem = NativeUI.CreateSliderItem('Deckkraft',
+      opacityList, math.floor(hairOpacity * 100) + 1,
+      'Deckkraft des Hair Fade (0% = aus).', true)
+    opacityItem.OnSliderChanged = function(_, _, idx)
+      if not face.hairOverlay then
+        face.hairOverlay = { collection = 0, preset = 0, opacity = 1.0 }
+      end
+      face.hairOverlay.opacity = (idx - 1) / 100
+      resolveHairOverlay()  -- re-apply with new opacity
+      refresh()
+    end
+    menu:AddItem(opacityItem)
   else
     local texLabels = {}
     for t = 0, option.textures - 1 do

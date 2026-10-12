@@ -42,6 +42,7 @@ local Natives = {
   setHeadOverlay     = SetPedHeadOverlay,
   numHeadOverlayValues = GetNumHeadOverlayValues,
   setHeadOverlayColor = _SetPedHeadOverlayColor or SetPedHeadOverlayColor,
+  setHeadOverlayOpacity = SetPedHeadOverlayOpacity,
   setHairColor       = _SetPedHairColor or SetPedHairColor,
   numHairColors      = _GetNumHairColors or GetNumHairColors,
   numMakeupColors    = _GetNumMakeupColors or GetNumMakeupColors,
@@ -103,6 +104,12 @@ local function applyDecorations(ped, appearance)
     and appearance.hairOverlay.preset
   then
     n.setFacialDecoration(ped, appearance.hairOverlay.collection, appearance.hairOverlay.preset)
+    -- Opacity for the hair overlay (overlay type 10). The native takes 0.0-1.0.
+    if n.setHeadOverlayOpacity then
+      local opacity = appearance.hairOverlay.opacity
+      if type(opacity) ~= 'number' then opacity = 1.0 end
+      n.setHeadOverlayOpacity(ped, 10, opacity)
+    end
   end
 
   if type(appearance.tattoos) == 'table' then
