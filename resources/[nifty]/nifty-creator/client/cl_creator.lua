@@ -1404,27 +1404,13 @@ local function buildParentsMenu()
     refresh()
   end
 
-  -- One-touch weight presets. The slider's OnSliderChange will fire
-  -- when :Index() moves the cursor, so the weight values sync through
-  -- the regular path - no duplicate state write here.
-  for _, preset in ipairs({
-    { label = 'Nur Mutter',          w = { 1.0, 0.0, 0.0 } },
-    { label = 'Nur Vater',           w = { 0.0, 1.0, 0.0 } },
-    { label = 'Nur dritte Person',   w = { 0.0, 0.0, 1.0 } },
-    { label = 'Eltern gleich',       w = { 0.5, 0.5, 0.0 } },
-    { label = 'Alle drei gleich',    w = { 1 / 3, 1 / 3, 1 / 3 } },
-  }) do
-    local w = preset.w
-    local item = NativeUI.CreateItem(preset.label, 'Anteile setzen.')
-    item.Activated = function(_, _)
-      weightMenuItems.motherWeight:Index(halfStepIndex(w[1]))
-      weightMenuItems.fatherWeight:Index(halfStepIndex(w[2]))
-      weightMenuItems.thirdWeight:Index(halfStepIndex(w[3]))
-      -- The OnSliderChange handler will fire from the Index() calls and
-      -- update face.headBlend.* and refresh. We do not need to do it here.
-    end
-    menu:AddItem(item)
-  end
+  -- The five one-touch weight presets ("Nur Mutter", "Nur Vater", "Nur dritte
+  -- Person", "Eltern gleich", "Alle drei gleich") were removed on 2026-10-12.
+  -- Every one of them was a shortcut for setting the three sliders directly
+  -- above to a fixed triple, so the menu offered five more ways to say what
+  -- the sliders already said — and "Alle drei gleich" next to three separate
+  -- percentage sliders reads as a contradiction rather than as a shortcut.
+  -- The sliders stay; they are the single, explicit way to set the mix.
 
   return menu
 end
