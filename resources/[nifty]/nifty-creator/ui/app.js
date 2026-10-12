@@ -66,6 +66,7 @@
               ZONE_LABELS: {}, PROP_LABELS: {}, COMPONENT_LABELS: {} },
     palettes: { HAIR_PALETTE: [], MAKEUP_PALETTE: [], OVERLAY_PALETTES: {} },
     faceGroups: { FACE_1D: [], FACE_2D: [] },
+    parentNames: { mother: [], father: [] },
     componentLabels: {},
     propLabels: {},
     overlayLabels: {},
@@ -499,15 +500,32 @@
     const fatherItems = state.labels.FATHER || [];
     const thirdItems  = state.labels.THIRDPERSON || [];
 
-    // Heritage portrait placeholders (live-render in V2).
+    // Heritage portraits. Each preset has a corresponding image file
+    // in ui/images/<Name>.webp. The Mother/Father preset lists in
+    // cl_labels.lua carry the names in the same order as the engine
+    // head-blend presets, so the index from headBlend.mother / .father
+    // maps 1:1 onto the image filenames.
+    const motherNames = state.parentNames.mother || [];
+    const fatherNames = state.parentNames.father || [];
+    const motherName = motherNames[h.mother] || '';
+    const fatherName = fatherNames[h.father] || '';
+
     const portraitRow = el('div', 'cr-heritage');
-    const motherP = el('div', 'cr-heritage__portrait cr-heritage__portrait--placeholder');
+    const motherP = el('div', 'cr-heritage__portrait');
     motherP.appendChild(el('div', 'cr-heritage__label', 'Mutter'));
-    motherP.appendChild(el('img', '', ''));
+    const motherImg = el('img', '');
+    motherImg.alt = motherItems[h.mother] || ('Mutter ' + h.mother);
+    motherImg.src = motherName ? `images/${motherName}.webp` : '';
+    motherImg.onerror = () => { motherImg.style.display = 'none'; };
+    motherP.appendChild(motherImg);
     motherP.appendChild(el('div', 'cr-heritage__index', motherItems[h.mother] || ('Mutter ' + h.mother)));
-    const fatherP = el('div', 'cr-heritage__portrait cr-heritage__portrait--placeholder');
+    const fatherP = el('div', 'cr-heritage__portrait');
     fatherP.appendChild(el('div', 'cr-heritage__label', 'Vater'));
-    fatherP.appendChild(el('img', '', ''));
+    const fatherImg = el('img', '');
+    fatherImg.alt = fatherItems[h.father] || ('Vater ' + h.father);
+    fatherImg.src = fatherName ? `images/${fatherName}.webp` : '';
+    fatherImg.onerror = () => { fatherImg.style.display = 'none'; };
+    fatherP.appendChild(fatherImg);
     fatherP.appendChild(el('div', 'cr-heritage__index', fatherItems[h.father] || ('Vater ' + h.father)));
     portraitRow.appendChild(motherP);
     portraitRow.appendChild(fatherP);
@@ -958,6 +976,7 @@
     if (data.labels) state.labels = data.labels;
     if (data.palettes) state.palettes = data.palettes;
     if (data.faceGroups) state.faceGroups = data.faceGroups;
+    if (data.parentNames) state.parentNames = data.parentNames;
     if (data.componentLabels) state.componentLabels = data.componentLabels;
     if (data.propLabels) state.propLabels = data.propLabels;
     if (data.overlayLabels) state.overlayLabels = data.overlayLabels;

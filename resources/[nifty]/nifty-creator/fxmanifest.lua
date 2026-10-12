@@ -56,6 +56,7 @@ files {
   'ui/index.html',
   'ui/style.css',
   'ui/app.js',
+  'ui/images/*.webp',
 }
 
 -- Load order: cl_labels.lua and cl_gamedata.lua first (they populate

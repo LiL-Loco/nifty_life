@@ -1322,6 +1322,10 @@ exports('getState', function()
       FACE_1D = FACE_1D_GROUPS,
       FACE_2D = FACE_2D_GROUPS,
     },
+    parentNames      = {
+      mother = Labels.MOTHER_NAMES,
+      father = Labels.FATHER_NAMES,
+    },
     componentLabels  = COMPONENT_LABELS,
     propLabels       = PROP_LABELS,
     overlayLabels    = OVERLAY_LABELS,

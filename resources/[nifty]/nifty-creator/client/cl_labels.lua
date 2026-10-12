@@ -178,6 +178,12 @@ Labels.FATHER = function(index)
   return n or ('Vater %d'):format(index + 1)
 end
 
+-- Raw name lists, exposed to the NUI bridge so the parent-portrait
+-- <img> tags can be built from the preset index. Lua callers keep
+-- Labels.MOTHER / Labels.FATHER (the formatted ones) for the menu.
+Labels.MOTHER_NAMES = Labels_MOTHER_NAMES
+Labels.FATHER_NAMES = Labels_FATHER_NAMES
+
 -- Real parent names for the third-person pick. GTA's head_blend_data
 -- takes any of the 47 presets (the same presets that populate the
 -- mother and father lists, and 3 extras the engine does not assign to

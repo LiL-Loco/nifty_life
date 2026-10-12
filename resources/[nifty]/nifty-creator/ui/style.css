@@ -507,15 +507,12 @@ body { overflow: hidden; }
   border-radius: 2px;
 }
 .cr-heritage__portrait img {
-  width: 96px;
-  height: 96px;
+  width: 144px;
+  height: 144px;
   object-fit: cover;
   border-radius: 2px;
   background: var(--border);
-}
-.cr-heritage__portrait--placeholder img {
-  background: var(--accent-dim);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--border-strong);
 }
 .cr-heritage__index {
   font-size: 11px;
