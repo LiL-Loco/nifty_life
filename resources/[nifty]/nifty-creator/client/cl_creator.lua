@@ -294,27 +294,6 @@ local function discoverSlots()
       RESOURCE, maxDrawables, AppearanceConfig.MAX_DRAWABLE,
       maxTextures, AppearanceConfig.MAX_TEXTURE))
   end
-end
-
---- Prop ids sorted, so the accessory rows do not move between sessions.
-local function propIdsSorted()
-  local ids = {}
-  for id in pairs(slots.props) do ids[#ids + 1] = id end
-  table.sort(ids)
-  return ids
-end
-
--- ------------------------------------------------------------------ apply
-
-local function applySlot(ped, kind, id, slot)
-  if kind == 'components' then
-    SetPedCollectionPreloadVariationData(ped, id, slot.collection, slot.drawable, slot.texture, 0)
-    SetPedCollectionComponentVariation(ped, id, slot.collection, slot.drawable, slot.texture, 0)
-  else
-    SetPedCollectionPreloadPropData(ped, id, slot.collection, slot.drawable, slot.texture, true)
-    SetPedCollectionPropIndex(ped, id, slot.collection, slot.drawable, slot.texture, false)
-  end
-end
 
 --- Re-spawn the ped on its model, which resets it to that model's defaults. Used on
 --- open and on Zurücksetzen.
@@ -365,84 +344,6 @@ local function respawnModel()
   return PlayerPedId()
 end
 
---- Put the torso that fits under the current top on slot 3.
----
---- Without this a leather jacket is drawn over whatever torso happened to be there
---- and the player watches their own character clip through itself while choosing a
---- face. That is the single ugliest thing in a freemode creator.
----
---- The data speaks GLOBAL indices and this project stores collection-local ones
---- (ADR-0017), so the global torso is looked back up in slot 3's own map and
---- stored as the local coordinates the database uses. One storage format, not two.
----
---- A top with no torso data returns nil, and then slot 3 is left alone. Forcing a
---- default there would quietly take away the player's own choice of shirt.
-local function applyBestTorso()
-  local top = slotOf('components', 11)
-  if not top then return end
-
-  -- The drawable count of the SELECTED collection, not of the first one. The
-  -- global index map is built a whole collection at a time, and building it with
-  -- the wrong count produces a map that only knows index 0 - which then looks
-  -- exactly like "this item has no name".
-  local count = 1
-  for _, option in ipairs(slots.components[11] or {}) do
-    if option.name == top.collection then count = option.drawables break end
-  end
-
-  local globalDrawable, globalTexture = GameData.bestTorso(
-    top.collection, top.drawable, top.texture, count)
-
-  if not globalDrawable then return end
-
-  local options = slots.components[3]
-  if not options then return end
-
-  local started = GetGameTimer()
-
-  for _, option in ipairs(options) do
-    local drawable = GameData.localForGlobal('components', 3, globalDrawable, option.name, option.drawables)
-    if drawable then
-      local texture = tonumber(globalTexture) or 0
-      if texture >= option.textures then texture = option.textures - 1 end
-      if texture < 0 then texture = 0 end
-
-      selection.components['3'] = {
-        collection = option.name,
-        drawable   = drawable,
-        texture    = texture,
-      }
-      print(('[%s] best torso %d -> slot 3 collection "%s" drawable %d (%d ms)'):format(
-        RESOURCE, globalDrawable, option.name, drawable, GetGameTimer() - started))
-      return
-    end
-  end
-
-  print(('[%s] best torso %d found no matching collection-local drawable on slot 3 - slot left alone'):format(
-    RESOURCE, globalDrawable))
-end
-
---- Store a pick and show it on the ped immediately.
-local function setSlot(kind, id, slot)
-  selection[kind][tostring(id)] = slot
-
-  -- A top drags its torso with it. Done BEFORE the refresh, so the torso and the
-  -- top arrive in the same frame instead of the player seeing the clipping for a
-  -- moment and then watching it fix itself.
-  if kind == 'components' and tonumber(id) == 11 then
-    applyBestTorso()
-  end
-
-  refresh()
-
-  -- A hair overlay rides ON TOP of a hairstyle, so changing the hair moves the
-  -- surface it was painted on. Re-resolving it here means the overlay follows the
-  -- hair automatically instead of the player finding that it vanished.
-  if kind == 'components' and tonumber(id) == 2 then
-    resolveHairOverlay()
-    applyDecorations()
-  end
-end
 
 --- The current pick for a slot, or nil.
 slotOf = function(kind, id)
@@ -622,104 +523,6 @@ local HAIR_PALETTE = {
 }
 
 --- Shared colour-channel builder for hair colour panels.
---- Returns a NativeUI list item with a colour panel attached.
-local function makeHairChannel(label, currentIndex)
-  local max = #HAIR_PALETTE
-  local value = math.max(0, math.min(max, currentIndex or 0)) + 1
-  local placeholders = {}
-  for i = 1, max do placeholders[i] = (i .. '.') end
-  local item = NativeUI.CreateListItem(label, placeholders, value, '')
-  local panel = NativeUI.CreateColourPanel(label, HAIR_PALETTE)
-  item:AddPanel(panel)
-  panel:CurrentSelection(value, true)
-  return item
-end
-
---- The makeup colour palette (used by the colour picker on the makeup row).
-local MAKEUP_PALETTE = {
-  { 240, 200, 195, 255 },  { 220, 170, 165, 255 },  { 200, 140, 130, 255 },
-  { 180, 110, 100, 255 },  { 255, 220, 210, 255 },  { 255, 180, 175, 255 },
-  { 250, 150, 145, 255 },  { 240, 120, 115, 255 },  { 230, 100, 95,  255 },
-  { 220, 80,  75,  255 },  { 200, 60,  55,  255 },  { 180, 40,  35,  255 },
-  { 255, 200, 50,  255 },  { 240, 170, 30,  255 },  { 220, 140, 20,  255 },
-  { 190, 110, 15,  255 },  { 150, 80,  10,  255 },  { 100, 200, 100, 255 },
-  { 60,  160, 60,  255 },  { 30,  120, 30,  255 },  { 100, 180, 220, 255 },
-  { 60,  140, 200, 255 },  { 30,  100, 180, 255 },  { 150, 100, 200, 255 },
-  { 120, 60,  170, 255 },  { 80,  20,  140, 255 },  { 240, 240, 240, 255 },
-}
-
---- Per-overlay colour-palette table. GTA's _SetPedHeadOverlayColor takes a
---- colourType per overlay: 1 = hair palette, 2 = makeup palette. Most
---- overlays only support one of the two; only Makeup (id 4) supports both.
---- Overlays with no colour at all (blemishes, ageing, complexion, moles, body
---- blemishes) are absent from this table - the Farbe section is omitted.
-local OVERLAY_PALETTES = {
-  [1]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Bart
-  [2]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Augenbrauen
-  [4]  = {                                       -- Makeup
-    { 1, 'Haarfarbe',     HAIR_PALETTE   },
-    { 2, 'Make-up-Farbe', MAKEUP_PALETTE },
-  },
-  [5]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Rouge
-  [7]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Sonnenbrand
-  [8]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Lippenstift
-  [10] = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Brustbehaarung
-}
-
---- Face-feature groups. Each entry pairs two face-feature indices so a single
---- 2D grid panel controls both at once (X = first feature, Y = second).
-local FACE_2D_GROUPS = {
-  { title = 'Nasenspitze', top = 'Spitz',  bottom = 'Flach',  left = 'Kurz',  right = 'Lang',  xId = 2, yId = 1 },
-  { title = 'Augenbrauen', top = 'Hoch',   bottom = 'Tief',   left = 'Flach', right = 'Tief',  xId = 7, yId = 6 },
-  { title = 'Wangen',      top = 'Hoch',   bottom = 'Tief',   left = 'Schmal', right = 'Breit', xId = 9, yId = 8 },
-  { title = 'Kiefer',      top = 'Tief',   bottom = 'Hervor', left = 'Schmal', right = 'Breit', xId = 13, yId = 14 },
-  { title = 'Kinn',        top = 'Hervor', bottom = 'Flach',  left = 'Schmal', right = 'Breit', xId = 17, yId = 15 },
-}
-
---- Face-feature indices that get a 1D horizontal grid panel.
----
---- SEVERAL OF THESE RUN AGAINST THEIR LABEL, and that is not a typo.
----
---- A face feature index is a slider the ENGINE names, not one this project
---- understands: nifty-core/server/validate.lua says outright that the meaning
---- is "decided by the client's game files - the server cannot ask". So the
---- orientation of any individual axis cannot be derived here and can only be
---- read off the game. The owner did that on 2026-10-12 and found these three
---- backwards, which is why they read "wrong" against intuition:
----
----   id 10  Wangenspalt   a cheek WIDTH axis, which is not a width on the face
----   id 11  Augenöffnung  opening the eye is what the far end reduces
----   id 12  Lippendicke   the thick end is where the lip gets thinner
----
---- Do not "correct" these back because they look inverted. The 2D groups were
---- checked in the same pass and were left as written.
-local FACE_1D_GROUPS = {
-  { id = 0,  title = 'Nasenbreite',      left = 'Schmal', right = 'Breit' },
-  { id = 3,  title = 'Nasenbeinhöhe',   left = 'Tief',   right = 'Hoch'  },
-  { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
-  { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
-  { id = 10, title = 'Wangenspalt',      left = 'Breit',  right = 'Schmal' },
-  { id = 11, title = 'Augenöffnung',    left = 'Weit',   right = 'Eng'   },
-  { id = 12, title = 'Lippendicke',      left = 'Dick',   right = 'Dünn'   },
-  { id = 16, title = 'Kinn-Tiefe',       left = 'Flach',  right = 'Hervor' },
-  { id = 18, title = 'Kinn-Loch',        left = 'Klein',  right = 'Gross' },
-  { id = 19, title = 'Hals-Dicke',       left = 'Dünn',  right = 'Dick'  },
-}
-
---- The 9 realistic eye-colour indices in the GTA palette.
-local REALISTIC_EYE_COLOUR_MAX = 8
-
---- Face sliders, head overlays, hair colour and the hair overlay decoration.
-local face = {
-  features = {},
-  overlays = {},
-  hairColour = { primary = 0, highlight = 0 },
-  hairOverlay = nil,
-  tattoos = {},
-  eyeColour = 0,
-  headBlend = { father = 0, mother = 21, resemblance = 0.0, skinTone = 0.0 },
-}
-
 --- The whole appearance as the creator currently sees it.
 local function appearanceNow()
   return {
@@ -919,21 +722,10 @@ end
 
 -- ------------------------------------------------------------------ menus
 
---- How many styles an overlay has, bounded.
----
---- `GetNumHeadOverlayValues` is the real count. It is clamped to the configured
---- bound anyway, because the engine count is per-ped and the stored value will be
---- validated against the bound on the server - offering a slider the server would
---- refuse is worse than offering a slightly shorter one.
-local function overlayStyleCount(id)
-  local n = natives()
-  if type(n.numHeadOverlayValues) ~= 'function' then return 1 end
+--- Removed: colourCount() / overlayStyleCount(). The NUI uses
+--- AppearanceConfig.MAX_OVERLAY_STYLE directly.
 
-  local ok, count = pcall(n.numHeadOverlayValues, id)
-  if not ok or type(count) ~= 'number' or count <= 0 then return 1 end
-
-  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
-end--- Removed: colourCount(). buildOverlayMenu and buildHairColourMenu
+--- Removed: colourCount(). buildOverlayMenu and buildHairColourMenu
 --- now use #HAIR_PALETTE / #MAKEUP_PALETTE directly, and OVERLAY_PALETTES
 --- for the per-overlay palette list. No engine lookup needed.
 
@@ -972,7 +764,6 @@ randomise = function()
             texture    = math.random(0, chosen.textures - 1),
           }
           selection[kind][tostring(id)] = slot
-          applySlot(ped, kind, id, slot)
         end
       end
     end
