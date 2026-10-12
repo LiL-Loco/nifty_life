@@ -146,6 +146,22 @@ local selection = { components = {}, props = {} }
 ---   slots = { components = { [3] = { { name=, drawables=, textures= }, ... } } }
 local slots = { components = {}, props = {} }
 
+--- The face/identity state the creator mutates. Initialized here so
+--- `face.features = {}` in openCreator() never indexes a nil global on
+--- the first call (was crashing `attempt to index a nil value (global
+--- 'face')` every time a new character tried to enter the creator).
+local face = {
+  features    = {},
+  overlays    = {},
+  hairColour  = { primary = 0, highlight = 0 },
+  hairOverlay = nil,
+  tattoos     = {},
+  eyeColour   = 0,
+  headBlend   = { father = 0, mother = 21, third = 21,
+                  motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0,
+                  skinTone = 0.5 },
+}
+
 --- German labels for the freemode component ids.
 ---
 --- DISPLAY ONLY. The id is the truth; these strings are what the player reads, and a
