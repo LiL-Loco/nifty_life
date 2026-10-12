@@ -121,14 +121,12 @@ export function Footer() {
                 </li>
               ) : null}
               <li>
-                <a
+                <Link
                   href={RULEBOOK_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="text-muted-foreground transition-colors hover:text-foreground"
                 >
                   Regelwerk
-                </a>
+                </Link>
               </li>
               <li>
                 <Link

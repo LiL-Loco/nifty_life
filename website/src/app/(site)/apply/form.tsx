@@ -228,11 +228,8 @@ export default function ApplicationWizard() {
           <Step title="Regelwerk" hint="Lies es einmal komplett, dann bestätige es." wide>
             <Card className="bg-background">
               <p className="text-sm">
-                Das vollständige Regelwerk liegt als Google-Dokument vor:{' '}
-                <a href={RULEBOOK_URL} target="_blank" rel="noreferrer noopener">
-                  Regelwerk öffnen
-                </a>
-                .
+                Das vollständige Regelwerk steht hier im Portal:{' '}
+                <Link href={RULEBOOK_URL}>Regelwerk öffnen</Link>.
               </p>
 
               <p className="text-sm text-muted-foreground">Es besteht aus:</p>

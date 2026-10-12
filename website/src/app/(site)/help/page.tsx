@@ -78,7 +78,7 @@ const ARTICLES: Article[] = [
       'Das Regelwerk hat zwölf Abschnitte und liegt als Google Doc. Was dort steht, gilt genau so.',
       'Es gibt bewusst keine Kopie hier im Portal. Eine zweite Fassung hier würde irgendwann anders lauten als das Original — und dann hätte niemand mehr eine Stelle, an der man nachsehen kann, was tatsächlich gilt. Im Zweifel gilt das Dokument.',
     ],
-    links: [{ label: 'Regelwerk öffnen', href: RULEBOOK_URL, external: true }],
+    links: [{ label: 'Regelwerk öffnen', href: RULEBOOK_URL }],
   },
   {
     id: 'charakter',
@@ -271,14 +271,12 @@ export default function HelpPage() {
             </Link>
           </li>
           <li>
-            <a
+            <Link
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
               href={RULEBOOK_URL}
-              target="_blank"
-              rel="noopener noreferrer"
             >
               Regelwerk lesen
-            </a>
+            </Link>
           </li>
         </ul>
 

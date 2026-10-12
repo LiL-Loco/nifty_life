@@ -19,6 +19,11 @@ export const metadata: Metadata = { title: 'Anmelden — Nifty Life 2.0' };
 const ERRORS: Record<string, string> = {
   'link-needs-account':
     'Zum Verknüpfen eines Discord-Kontos musst du angemeldet sein.',
+  // The callback already redirected here when the exchange itself failed, but
+  // this map had no entry for it, so the reason was dropped and the visitor was
+  // shown a clean login form as if nothing had happened.
+  'link-failed':
+    'Die Anmeldung über Discord wurde nicht abgeschlossen. Bitte versuch es noch einmal.',
   'no-account-for-discord':
     'Für dieses Discord-Konto ist kein Portal-Konto hinterlegt. Registriere dich zuerst und verknüpfe Discord dann in deinem Konto.',
 };

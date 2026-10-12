@@ -43,7 +43,19 @@ export async function GET(request: Request) {
 
   // ---- LOG IN -----------------------------------------------------------
   if (state === '/auth/discord/login') {
-    const account = await findUserByDiscordId(identity.id);
+    let account;
+    try {
+      account = await findUserByDiscordId(identity.id);
+    } catch (error) {
+      // The database is unreachable. Next's 500 tells the visitor nothing and
+      // buries the cause in a place nobody reads, so the round trip is refused
+      // with the message every other failure gets and the real error is written
+      // where it can be found. The retry is genuine advice: the database
+      // usually comes back on its own.
+      console.error('Discord login: account lookup failed', error);
+      return NextResponse.redirect(new URL('/login?error=link-failed', request.url));
+    }
+
     if (!account) {
       return NextResponse.redirect(
         new URL('/login?error=no-account-for-discord', request.url),
@@ -66,7 +78,15 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
   }
 
-  const result = await linkDiscord(session.userId, identity.id, identity.username);
+  let result;
+  try {
+    result = await linkDiscord(session.userId, identity.id, identity.username);
+  } catch (error) {
+    // Same reasoning as the login branch above: an unreachable database is a
+    // failed round trip, not a bug in the page the visitor is looking at.
+    console.error('Discord attach: link failed', error);
+    return NextResponse.redirect(new URL('/account?error=link-failed', request.url));
+  }
 
   // Only same-site paths, and only from the state cookie this server wrote.
   const destination = state.startsWith('/') && !state.startsWith('//') ? state : '/account';
