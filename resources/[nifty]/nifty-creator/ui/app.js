@@ -876,6 +876,22 @@
   };
 
   // ============================================================ outfit
+  // Build a per-slot summary line showing the currently selected item
+  // name, or "Leer" if the slot is empty. The name is looked up from
+  // the cached itemNames table (lazy-fetched on first slot expand).
+  const slotSummary = (kind, id) => {
+    const slot = (state.selection[kind] || {})[String(id)];
+    if (!slot) return 'Leer';
+    const drawable = parseInt(slot.drawable) || 0;
+    const texture = parseInt(slot.texture) || 0;
+    const cacheKey = `${kind}:${id}`;
+    const cache = state.itemNames[cacheKey];
+    if (cache && cache.names && cache.names[drawable] && cache.names[drawable][texture]) {
+      return cache.names[drawable][texture];
+    }
+    return `Modell ${drawable + 1}`;
+  };
+
   const renderOutfit = () => {
     const root = el('div', '');
     const compIds = Object.keys(state.slots.components || {})
@@ -887,9 +903,8 @@
     for (const id of compIds) {
       if (id === 2) continue; // hair lives in the Haare category
       const label = (state.componentLabels && state.componentLabels[id]) || ('Slot ' + id);
-      const opt = (state.slots.components[String(id)] || [])[0];
-      const count = opt ? opt.drawables : 0;
-      root.appendChild(button(label, `Slot ${id} - ${count} Kollektionen`, () => {
+      const summary = slotSummary('components', id);
+      root.appendChild(button(label, summary, () => {
         pushPanel('slot', { kind: 'components', id });
       }));
     }
@@ -897,9 +912,8 @@
       root.appendChild(separator('Accessoires'));
       for (const id of propIds) {
         const label = (state.propLabels && state.propLabels[id]) || ('Prop ' + id);
-        const opt = (state.slots.props[String(id)] || [])[0];
-        const count = opt ? opt.drawables : 0;
-        root.appendChild(button(label, `Prop ${id} - ${count} Kollektionen`, () => {
+        const summary = slotSummary('props', id);
+        root.appendChild(button(label, summary, () => {
           pushPanel('slot', { kind: 'props', id });
         }));
       }
@@ -909,7 +923,7 @@
     root.appendChild(separator('Koerperfarbe'));
     for (let id = 10; id <= maxOverlay; id++) {
       const label = (state.overlayLabels && state.overlayLabels[id]) || ('Overlay ' + id);
-      root.appendChild(button(label, 'Stil und Deckkraft.', () => {
+      root.appendChild(button(label, slotSummary('overlays', id), () => {
         pushPanel('overlay', { id });
       }));
     }
