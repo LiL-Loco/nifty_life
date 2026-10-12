@@ -130,6 +130,26 @@
     }
     updateSubtitle();
     updateSkinCamHint();
+    updateFaceBonesActive();
+  };
+
+  // Tell Lua whether the face-bone projection thread should be
+  // ticking. The thread runs at 30 Hz and pushes bone positions to
+  // the NUI; turning it on only when the player is in the
+  // Gesichtszuege panel saves CPU.
+  let _lastFaceBonesActive = null;
+  const updateFaceBonesActive = () => {
+    const top = state.panels[state.panels.length - 1];
+    const want = !!(top && top.kind === 'faceFeatures');
+    if (want === _lastFaceBonesActive) return;
+    _lastFaceBonesActive = want;
+    fetchNui('setFaceBonesActive', { active: want });
+    if (!want) clearFaceDots();
+  };
+
+  const clearFaceDots = () => {
+    const overlay = document.getElementById('faceOverlay');
+    if (overlay) overlay.innerHTML = '';
   };
 
   const updateSubtitle = () => {
@@ -449,6 +469,102 @@
     window.addEventListener('mouseup', () => { dragging = false; });
     wrap._getValue = () => ({ x: cx, y: cy });
     return wrap;
+  };
+
+  // ============================================================== face-bone dots
+  // Each bone name is mapped to one or two face features (by axis).
+  // Cheek bones map to FACE_1D entry id=0/1 (cheek width). Eyebrow
+  // bones map to FACE_2D group "Augenbrauen" (id 7 and 6). Chin bones
+  // to "Kinn" (id 17 and 15). etc. Drag direction (dx, dy in pixels)
+  // is added to the current feature value (clamped to -1..1) and sent
+  // as a setFeature. A single horizontal drag (dx dominant) maps to
+  // the x-axis feature; vertical drag (dy dominant) maps to the y.
+  const BONE_FEATURE_MAP = {
+    'skel_l_cheek':           { x: 0 },   // FACE_1D Nasenbreite
+    'skel_r_cheek':           { x: 0 },
+    'skel_l_eyeball':         { y: 19 },  // FACE_1D Hals-Dicke (rough)
+    'skel_r_eyeball':         { y: 19 },
+    'skel_l_lip_lower_corner':{ x: 12 },  // FACE_1D Lippendicke
+    'skel_r_lip_lower_corner':{ x: 12 },
+    'skel_l_eyebrow_01':      { x: 7,  y: 6 },  // Brauen
+    'skel_l_eyebrow_02':      { x: 7,  y: 6 },
+    'skel_l_eyebrow_03':      { x: 7,  y: 6 },
+    'skel_r_eyebrow_01':      { x: 7,  y: 6 },
+    'skel_r_eyebrow_02':      { x: 7,  y: 6 },
+    'skel_r_eyebrow_03':      { x: 7,  y: 6 },
+    'skel_l_nose_01':         { y: 1 },   // Nasenboden
+    'skel_l_nose_02':         { y: 1 },
+    'skel_r_nose_01':         { y: 1 },
+    'skel_r_nose_02':         { y: 1 },
+    'skel_l_jawline_root':    { x: 13, y: 14 }, // Kiefer
+    'skel_r_jawline_root':    { x: 13, y: 14 },
+    'skel_l_chin_01':         { x: 17, y: 15 }, // Kinn
+    'skel_l_chin_02':         { x: 17, y: 15 },
+    'skel_l_chin_03':         { x: 17, y: 15 },
+    'skel_r_chin_01':         { x: 17, y: 15 },
+    'skel_r_chin_02':         { x: 17, y: 15 },
+    'skel_r_chin_03':         { x: 17, y: 15 },
+  };
+
+  const renderFaceBones = (bones) => {
+    if (!Array.isArray(bones) || bones.length === 0) return;
+    const overlay = document.getElementById('faceOverlay');
+    if (!overlay) return;
+    overlay.innerHTML = '';
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    for (const b of bones) {
+      const dot = document.createElement('div');
+      dot.className = 'cr-face-dot';
+      dot.style.left = (b.x * w) + 'px';
+      dot.style.top = (b.y * h) + 'px';
+      const mapping = BONE_FEATURE_MAP[b.name];
+      dot.dataset.bone = b.name;
+      if (!mapping) { dot.style.display = 'none'; continue; }
+      let startX = 0, startY = 0;
+      let startValue = null;
+      let pendingId = null, pendingValue = null;
+      dot.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startX = e.clientX;
+        startY = e.clientY;
+        // Snapshot the current value of the dominant feature.
+        const featureId = (Math.abs(e.clientX - startX) > Math.abs(e.clientY - startY))
+          ? (mapping.x != null ? mapping.x : mapping.y)
+          : (mapping.y != null ? mapping.y : mapping.x);
+        const key = String(featureId);
+        startValue = state.face.features[key] != null
+          ? state.face.features[key]
+          : 0.0;
+        dot.classList.add('cr-face-dot--dragging');
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (startValue == null) return;
+        const dx = (e.clientX - startX) / 200;  // 200px = full range
+        const dy = (e.clientY - startY) / 200;
+        // Map dominant axis to the feature the bone names suggest.
+        const isHorizontal = Math.abs(dx) > Math.abs(dy);
+        const fid = isHorizontal
+          ? (mapping.x != null ? mapping.x : mapping.y)
+          : (mapping.y != null ? mapping.y : mapping.x);
+        const delta = isHorizontal ? dx : dy;
+        const newValue = Math.max(-1.0, Math.min(1.0, startValue + delta));
+        pendingId = fid;
+        pendingValue = newValue;
+      });
+      window.addEventListener('mouseup', () => {
+        if (startValue == null) return;
+        if (pendingId != null) {
+          fetchNui('setFeature', { id: pendingId, value: pendingValue });
+        }
+        startValue = null;
+        pendingId = null;
+        pendingValue = null;
+        dot.classList.remove('cr-face-dot--dragging');
+      });
+      overlay.appendChild(dot);
+    }
   };
 
   // ============================================================== panel impls
@@ -957,6 +1073,9 @@
           state.tattoos.byZone[data.zoneId] = data.tattoos || [];
           renderActive();
         }
+        break;
+      case 'faceBones':
+        renderFaceBones(data && data.bones);
         break;
       default:
         // No-op; other actions like 'tattooZones' / 'tattoosByZone' /

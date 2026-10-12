@@ -136,15 +136,47 @@ local function sendClose()
   releaseFocus()
 end
 
+-- ---------------------------------------------------------------- face-bone projection thread
+-- While the player is in the Gesichtszuege panel, a thread ticks the
+-- 24 facial bones through GetWorldPositionOfEntityBone and
+-- GetScreenCoordFromWorldCoord, then sends their screen positions to
+-- the NUI every frame. The NUI positions 24 gold dots over the camera
+-- viewport; the player can drag a dot to nudge the matching face
+-- feature, which the NUI's onMove dispatches back as a setFeature
+-- call.
+--
+-- 24 bones / frame * 8 bytes / bone = a few hundred bytes per push.
+-- FiveM's CEF can sustain that easily at 60 fps.
+local faceBonesActive = false
+local FACE_BONE_PUSH_MS = 1000 / 30  -- cap at 30 Hz to keep CPU in check
+
+Citizen.CreateThread(function()
+  while true do
+    if faceBonesActive and focusHeld then
+      local bones = tryCall('projectFaceBones')
+      if type(bones) == 'table' and #bones > 0 then
+        SendNUIMessage({ action = 'faceBones', data = { bones = bones } })
+      end
+    end
+    Citizen.Wait(FACE_BONE_PUSH_MS)
+  end
+end)
+
 -- ---------------------------------------------------------------- callbacks
 -- `fetchNui(name, body)` from the NUI hits `https://${GetParentResourceName()}/<name>`.
 -- The handler receives the same body as a Lua table.
 
 RegisterNUICallback('closePanel', function(data, cb)
+  faceBonesActive = false
   tryCall('cancel')
   cb({ ok = true })
   -- closeCreator triggers 'nifty:client:enterWorld' or sends cancelCreator;
   -- both end with closeCreator which calls sendClose via a hook below.
+end)
+
+RegisterNUICallback('setFaceBonesActive', function(data, cb)
+  faceBonesActive = (data and data.active == true)
+  cb({ ok = true })
 end)
 
 RegisterNUICallback('setSlot', function(data, cb)
