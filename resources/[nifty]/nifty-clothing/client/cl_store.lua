@@ -25,12 +25,14 @@ local RESOURCE = GetCurrentResourceName()
 -- FiveM's `require` in client_scripts does not search subdirectories, so
 -- the wrapper cannot be a require()d module - it lives in the first
 -- consumer and is published on _G. Load order in fxmanifest
--- (cl_wardrobe.lua before cl_store.lua) is what makes this safe.
+-- 2026-10-12: NativeUI was removed. cl_wardrobe.lua's Menu wrapper
+-- still exists as legacy code but only initializes if the `NativeUI`
+-- global is present. The store therefore degrades to a no-op in the
+-- NUI-only path; full NUI store wiring is a follow-up.
 local Menu = _G.NiftyMenu
 if not Menu then
-  print(('[%s] FATAL: cl_store.lua loaded before cl_wardrobe.lua. ' ..
-         'The shared menu infrastructure is missing - check fxmanifest ' ..
-         'load order.'):format(RESOURCE))
+  print(('[%s] cl_store.lua: legacy NativeUI surface is unavailable. ' ..
+         'Store commands are no-ops until a NUI driver is wired.'):format(RESOURCE))
   return
 end
 

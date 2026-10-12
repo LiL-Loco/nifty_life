@@ -5,7 +5,7 @@ lua54 'yes'
 name 'nifty-clothing'
 author 'Nifty Life 2.0'
 description 'Clothing system: per-character owned pieces, wardrobe (property-only), three-store catalogue, outfit presets.'
-version '0.2.0'
+version '0.3.0'
 
 -- core.lua first: it loads the facade and exposes Identity / Owned / Economy
 -- on the `Nifty` global. Every file in this resource reads from there.
@@ -28,45 +28,30 @@ server_script 'server/sv_clothing.lua'
 server_script 'server/sv_owned.lua'
 server_script 'server/sv_drops.lua'
 
--- @nifty-ui/stream/*.ytd: texture atlases the menu library uses
--- (commonmenu, shop_arrows_upanddown, etc.). Must be in the files
--- block so the GTA streaming system registers them.
+-- 2026-10-12: NativeUI removed. The wardrobe renders through a vanilla-JS
+-- NUI styled like nifty-inventory (dark theme, gold #d6b469 accent).
+-- cl_nui.lua owns focus, push messages, and the RegisterNUICallback
+-- handlers; cl_wardrobe.lua and cl_store.lua keep their data engine
+-- (COMPONENT_LABELS, snapshotCurrent, getCurrentAppearance, etc.)
+-- until the legacy NativeUI surface is removed in a follow-up PR.
 files {
-  '@nifty-ui/stream/*.ytd',
+  'ui/index.html',
+  'ui/style.css',
+  'ui/wardrobe.js',
 }
 
--- The two menu-driven files (cl_wardrobe, cl_store) load the NativeUI
--- library directly via @nifty-ui/... paths, the lbg-char pattern. They
--- have their own local Menu table and MenuPool, independent of every
--- other resource's menu.
+-- Load order: cl_wardrobe.lua + cl_store.lua (data engine) before
+-- cl_nui.lua (driver), because cl_nui.lua references the same state.
 client_script 'client/cl_hood.lua'
 client_script 'client/cl_targets.lua'
 client_script 'client/cl_drops.lua'
-client_script '@nifty-ui/share/Utils.lua'
-client_script '@nifty-ui/elements/UIResRectangle.lua'
-client_script '@nifty-ui/elements/UIResText.lua'
-client_script '@nifty-ui/elements/Sprite.lua'
-client_script '@nifty-ui/elements/Badge.lua'
-client_script '@nifty-ui/elements/Colours.lua'
-client_script '@nifty-ui/elements/ColoursPanel.lua'
-client_script '@nifty-ui/elements/StringMeasurer.lua'
-client_script '@nifty-ui/items/UIMenuItem.lua'
-client_script '@nifty-ui/items/UIMenuCheckboxItem.lua'
-client_script '@nifty-ui/items/UIMenuListItem.lua'
-client_script '@nifty-ui/items/UIMenuSliderItem.lua'
-client_script '@nifty-ui/items/UIMenuSliderHeritageItem.lua'
-client_script '@nifty-ui/items/UIMenuColouredItem.lua'
-client_script '@nifty-ui/items/UIMenuProgressItem.lua'
-client_script '@nifty-ui/base/UIMenu.lua'
-client_script '@nifty-ui/base/MenuPool.lua'
-client_script '@nifty-ui/NativeUI.lua'
--- The Menu wrapper lives at the top of cl_wardrobe.lua (the first
--- consumer) and is published on _G for cl_store.lua. FiveM's `require`
--- in client_scripts does not search subdirectories, so the wrapper
--- cannot be a require()d module; load order in the manifest is what
--- makes the cross-file sharing safe.
 client_script 'client/cl_wardrobe.lua'
 client_script 'client/cl_store.lua'
+client_script 'client/cl_nui.lua'
+
+-- NUI page. The CEF renders ui/index.html. The page is hidden until
+-- the wardrobe NUI driver sends an `open` message.
+ui_page 'ui/index.html'
 
 dependencies {
   'nifty-core',

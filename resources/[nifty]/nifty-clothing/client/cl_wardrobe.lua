@@ -33,9 +33,17 @@ local RESOURCE = GetCurrentResourceName()
 -- had its own pool. Load order (cl_wardrobe.lua before cl_store.lua in
 -- fxmanifest) is what makes this safe.
 -- ---------------------------------------------------------------------------
-local _pool = NativeUI.CreatePool()
-_pool:MouseControlsEnabled(true)
-_pool:ControlDisablingEnabled(true)
+-- 2026-10-12: The NUI driver (cl_nui.lua) now opens the wardrobe through
+-- a vanilla-JS NUI. The legacy NativeUI surface in this file is kept
+-- for callers that explicitly want the old menu (e.g. test boots, or
+-- the store re-using Menu.input). When the `Menu` global is missing
+-- (the normal NUI-only path), the legacy surface is disabled.
+local _pool = nil
+if rawget(_G, 'NativeUI') then
+  _pool = NativeUI.CreatePool()
+  _pool:MouseControlsEnabled(true)
+  _pool:ControlDisablingEnabled(true)
+end
 
 local Menu = {}
 
