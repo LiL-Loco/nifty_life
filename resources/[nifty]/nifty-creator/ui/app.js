@@ -72,6 +72,7 @@
     overlayLabels: {},
     zoneLabels: {},
     maxTexture: 80,
+    itemNames: {},  // cache keyed by `${kind}:${id}` -> { drawables, textures, names }
     hairOverlayState: 'unchecked',
     tattoos: { zones: null, byZone: {} },
     panels: [],
@@ -934,10 +935,25 @@
     const drawable = Math.min(tonumber(cur.drawable) || 0, option.drawables - 1);
     const texture = Math.min(tonumber(cur.texture) || 0, Math.max(1, option.textures) - 1);
 
+    // Lazy-fetch item names. The result lands in state.itemNames via
+    // the 'itemNames' message handler, which then re-renders.
+    const nameKey = `${kind}:${id}`;
+    if (!state.itemNames[nameKey]) {
+      fetchNui('getItemNames', { kind, id });
+    }
+    const nameData = state.itemNames[nameKey];
+    const nameFor = (d, t) => {
+      if (nameData && nameData.names && nameData.names[d] && nameData.names[d][t]) {
+        return nameData.names[d][t];
+      }
+      return null;
+    };
+
     // Modell list.
     const modelLabels = [];
     for (let d = 0; d < option.drawables; d++) {
-      modelLabels.push('Modell ' + (d + 1));
+      const n = nameFor(d, texture);
+      modelLabels.push(n || ('Modell ' + (d + 1)));
     }
     root.appendChild(separator('Modell'));
     root.appendChild(list('Modell', modelLabels, drawable, (i) => {
@@ -947,7 +963,8 @@
     // Ausfuehrung list.
     const texLabels = [];
     for (let t = 0; t < option.textures; t++) {
-      texLabels.push('Ausfuehrung ' + (t + 1));
+      const n = nameFor(drawable, t);
+      texLabels.push(n || ('Ausfuehrung ' + (t + 1)));
     }
     root.appendChild(separator('Ausfuehrung'));
     root.appendChild(list('Ausfuehrung', texLabels, texture, (i) => {
@@ -1076,6 +1093,12 @@
         break;
       case 'faceBones':
         renderFaceBones(data && data.bones);
+        break;
+      case 'itemNames':
+        if (data && data.kind && (data.id !== undefined) && data.names) {
+          state.itemNames[`${data.kind}:${data.id}`] = data.names;
+          renderActive();
+        }
         break;
       default:
         // No-op; other actions like 'tattooZones' / 'tattoosByZone' /

@@ -179,6 +179,18 @@ RegisterNUICallback('setFaceBonesActive', function(data, cb)
   cb({ ok = true })
 end)
 
+RegisterNUICallback('getItemNames', function(data, cb)
+  if not (data and data.kind and data.id) then cb({ ok = true }) return end
+  local result = tryCall('getItemNames', data.kind, tonumber(data.id) or 0)
+  if type(result) == 'table' then
+    SendNUIMessage({
+      action = 'itemNames',
+      data = { kind = data.kind, id = data.id, names = result },
+    })
+  end
+  cb({ ok = true })
+end)
+
 RegisterNUICallback('setSlot', function(data, cb)
   if type(data) == 'table' and data.kind and data.id then
     tryCall('setSlot', data.kind, tonumber(data.id), data.slot or {})

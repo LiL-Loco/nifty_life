@@ -1491,6 +1491,31 @@ exports('getTattoosByZone', function(zoneId)
   return GameData.tattoosByZone(zoneId)
 end)
 
+-- Item-name prefetch for a slot. Returns a table
+-- { drawables = N, textures = M, names = { [drawable] = { [texture] = 'Localized' } } }
+-- for the first collection of the requested slot. The NUI uses this
+-- to label Modell/Ausfuehrung rows with their real German name from
+-- the engine data, instead of "Modell N" / "Ausfuehrung N".
+exports('getItemNames', function(kind, id)
+  if type(id) ~= 'number' then return nil end
+  local isProp = (kind == 'props')
+  if not isProp and kind ~= 'components' then return nil end
+  local slot = (state.slots[kind] or {})[tostring(id)]
+  if not slot or #slot == 0 then return nil end
+  local option = slot[1]
+  local drawables = option.drawables or 0
+  local textures = math.max(1, option.textures or 0)
+  local out = { drawables = drawables, textures = textures, names = {} }
+  for d = 0, drawables - 1 do
+    out.names[d] = {}
+    for t = 0, textures - 1 do
+      local n = GameData.itemName(isProp, id, option.name, d, t, drawables)
+      if n then out.names[d][t] = n end
+    end
+  end
+  return out
+end)
+
 -- Bone-projection stub: returns an empty list until the project is
 -- complete. Each entry would be { name = 'left_cheek', x = 0.42, y = 0.71 }
 -- in 0..1 normalised screen coords. The NUI positions gold dots
