@@ -120,15 +120,62 @@ and it is why faster-whisper's absence of built-in diarization does not matter h
 
 | Command | What it does |
 |---|---|
-| `/record` | Joins the caller's current voice channel and starts capturing. Replies with who is in the call. |
-| `/stop` | Stops capture, runs the pipeline, posts the transcript. |
+| `/record` | Joins the caller's current voice channel, starts capturing, and remembers who asked and where. Replies with who is in the call. |
+| `/stop` | Stops capture early and runs the pipeline. A convenience — leaving also stops it. |
 | `/transcript` | Replays a stored transcript by id. |
 | `/recordings` | Lists stored transcripts for a channel or a date range. |
 
-Capture is **per speaker-turn**, not one long file: on `receiver.speaking` falling silent for ~1.5 s the
-current segment closes, and a new one opens when that user speaks again. Segments are transkribiert
-individually and merged in order, which keeps Whisper's timestamps aligned and keeps one bad segment
-from poisoning a two-hour file.
+### Capture is per speaker-turn, not one long file
+
+On `receiver.speaking` falling silent for ~1.5 s that speaker's current segment closes and the next one
+opens when they speak again. Each segment becomes a WAV, each is transcribed on its own, and the results
+are merged in time order. This keeps Whisper's timestamps aligned with real speech, keeps one bad
+segment from poisoning a two-hour file, and gives a per-speaker split for free — which is the other half
+of why per-user capture is worth doing.
+
+The bot does not own its own lifecycle in the channel. **Whoever fetched it in can take it out again,
+and that is the normal way a recording ends.** So the trigger to stop is the loss of the bot's voice
+session, not a command:
+
+```
+IDLE
+  └─ /record in text channel T while in voice channel V  →  remembers invoker U and channel T
+RECORDING
+  ├─ bot loses its voice session (disconnected, kicked, moved, server shutting down) → STOPPING
+  ├─ /stop                                                                    → STOPPING
+  └─ nobody has spoken for RECORD_IDLE_MINUTES                                 → STOPPING
+STOPPING
+  ├─ close every open per-speaker segment and write the WAVs
+  ├─ under AUDIO_FLOOR_MINUTES of speech? delete and return to IDLE without posting
+  ├─ "Transcribing…" — the interaction is deferred, not left hanging
+  ├─ call the faster-whisper service once per speaker
+  └─ deliver the result to U                                                   → IDLE
+```
+
+The session loss is detected two ways because either one alone has a blind spot: discord.js fires
+`voiceStateUpdate` with the bot's session set to `null`, and the connection reports
+`VoiceConnectionStatus.Destroyed`. A person joining or leaving the call is **not** a stop signal, and a
+second `/record` while already recording is refused rather than silently joined to the first.
+
+Three guards that exist because this bot is on a machine with a disk:
+
+- **Segments are written to disk as they close**, not held in memory. A crash or a `Ctrl-C` at minute
+  ninety should cost the current segment, not the whole call.
+- **A wall-clock ceiling** (four hours) stops a forgotten bot from filling the disk. It stops cleanly and
+  transcribes what it has.
+- **An idle timeout.** A bot sitting in a channel nobody used it in is worse than one that left.
+
+### Delivering a transcript that does not fit in a message
+
+Discord caps a message at 2000 characters, and an hour-long staff call is comfortably five times that.
+A transcript delivered by chunking into numbered messages is unreadable, so:
+
+- a **short embed** goes out first — voice channel, who was in it, duration, speaker count, duration of
+  speech, a link to `/transcript`;
+- the **full transcript is attached as a file**, with per-speaker sections and timestamps;
+- only if it genuinely fits does the text go inline as well.
+
+The full text is also stored, so `/transcript` can replay it later without a second transcription run.
 
 ### Storage
 
