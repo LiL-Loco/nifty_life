@@ -208,8 +208,21 @@ GRANT SELECT ON nifty_life.portal_user_discord TO 'nifty_admin'@'localhost';
 GRANT SELECT ON nifty_life.portal_email_tokens TO 'nifty_admin'@'localhost';
 
 GRANT SELECT ON nifty_life.portal_users TO 'nifty_website'@'localhost';
-GRANT INSERT (id, email, password_hash, password_salt)
+
+-- Six columns, not four. The INSERT in src/lib/users.ts writes id, email,
+-- username, password_hash, password_salt AND last_login_at in one statement,
+-- and MySQL rejects the WHOLE statement if any single column is missing from
+-- the grant — it does not skip it. This file granted only four, so signup had
+-- been impossible since migration 022 added `username`:
+--
+--   ERROR 1142 (42000): INSERT command denied to user 'nifty_website'@'...'
+--                      for table 'portal_users'
+--
+-- last_login_at is in this INSERT because the register action signs the user in
+-- immediately, so the row's first login is the row's creation.
+GRANT INSERT (id, email, username, password_hash, password_salt, last_login_at)
   ON nifty_life.portal_users TO 'nifty_website'@'localhost';
+
 -- last_login_at is a fact about signing in, not about the account itself.
 GRANT UPDATE (last_login_at) ON nifty_life.portal_users TO 'nifty_website'@'localhost';
 
