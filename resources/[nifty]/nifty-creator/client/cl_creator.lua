@@ -915,7 +915,14 @@ local FACE_1D_GROUPS = {
   { id = 3,  title = 'Nasenbeinhöhe',   left = 'Tief',   right = 'Hoch'  },
   { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
   { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
-  { id = 10, title = 'Wangenspalt',      left = 'Schmal', right = 'Breit' },
+  -- id 10 is the cheek's WIDTH axis in the engine, which is not the same as a
+  -- width on the face: one end hollows the cheek out, the other fills it, and
+  -- the fill direction is the opposite of what the labels here assumed. The
+  -- owner saw it in game on 2026-10-12 and these two were the wrong way round.
+  -- Swapping them is the whole fix — if it now reads backwards, swap them back;
+  -- there is no engine knowledge in this file that would have caught it either
+  -- way.
+  { id = 10, title = 'Wangenspalt',      left = 'Breit',  right = 'Schmal' },
   { id = 11, title = 'Augenöffnung',    left = 'Eng',    right = 'Weit'  },
   { id = 12, title = 'Lippendicke',      left = 'Dünn',  right = 'Dick'  },
   { id = 16, title = 'Kinn-Tiefe',       left = 'Flach',  right = 'Hervor' },
