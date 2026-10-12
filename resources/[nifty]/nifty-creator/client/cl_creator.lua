@@ -1227,6 +1227,10 @@ local function buildOverlayMenu(id)
   -- current value is clamped into the matching palette; if the stored
   -- colourType is unknown, default to the first palette's first entry.
   local palettes = OVERLAY_PALETTES[id]
+  -- Captured so the handler below reads THIS panel by identity. It used to look
+  -- the colour up as .Panels[1], which is the opacity SLIDER added below -
+  -- a slider item, not a colour panel, and it has no CurrentSelection at all.
+  local colourPanel = nil
   if palettes then
     -- Pick the active palette + index from the current state.
     local activeEntry = palettes[1]
@@ -1237,9 +1241,9 @@ local function buildOverlayMenu(id)
     local colourIndex = math.floor((current.colour or 0)) + 1
     if colourIndex < 1 then colourIndex = 1 end
     if colourIndex > #activePalette then colourIndex = #activePalette end
-    local colourItem = NativeUI.CreateColourPanel(activeEntry[2], activePalette)
-    styleItem:AddPanel(colourItem)
-    colourItem:CurrentSelection(colourIndex, true)
+    colourPanel = NativeUI.CreateColourPanel(activeEntry[2], activePalette)
+    styleItem:AddPanel(colourPanel)
+    colourPanel:CurrentSelection(colourIndex, true)
   end
 
   -- The lbg-char style: a single OnListChanged on the item reads the
@@ -1257,19 +1261,15 @@ local function buildOverlayMenu(id)
       local styleValue = index - 2
       local colourType = (palettes and palettes[1] and palettes[1][1]) or 1
       local colourValue = 0
-      if palettes then
-        -- Find the panel for the current selection. UIMenuListItem keeps
-        -- its attached panels under .Panels; the colour panel's value
-        -- is what we want.
-        local liveItem = styleItem
-        local livePanels = liveItem.Panels
-        if livePanels and livePanels[1] then
-          -- The colour panel is whichever entry in OVERLAY_PALETTES matches
-          -- colourType. All current overlays have a single colour panel.
-          colourValue = livePanels[1]:CurrentSelection() - 1
-        end
+      if colourPanel then
+        colourValue = colourPanel:CurrentSelection() - 1
       end
-      local opacity = opacityItem:CurrentSelection() / 1000
+      -- opacityItem is a SLIDER item from CreateSliderItem, so its value is its
+      -- list index: Index() with no argument returns the current one. The list
+      -- runs "0.0%".."100.0%" over 1001 entries, so index - 1 divided by 1000
+      -- is the 0..1 the engine wants. It was calling a panel method on a slider
+      -- item, which does not exist.
+      local opacity = (opacityItem:Index() - 1) / 1000
       face.overlays[tostring(id)] = {
         style = styleValue,
         opacity = opacity,
