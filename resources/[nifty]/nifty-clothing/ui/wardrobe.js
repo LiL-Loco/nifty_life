@@ -267,6 +267,11 @@
   window.addEventListener('message', (e) => {
     const { action, data } = e.data || {};
     if (!action) return;
+    // The wardrobe is one of two UIs on the same page; only react
+    // when the open message says so. The store listens to the same
+    // stream but filters on mode === 'store' instead.
+    if (action === 'open' && data && data.mode && data.mode !== 'wardrobe') return;
+    if (action === 'storeList' || action === 'purchaseResult') return;
     switch (action) {
       case 'open':
         state.open = true;
@@ -276,6 +281,8 @@
         if (data.componentLabels) state.componentLabels = data.componentLabels;
         if (data.propLabels) state.propLabels = data.propLabels;
         document.getElementById('root').classList.remove('hidden');
+        const title = document.getElementById('title');
+        if (title) title.textContent = 'WARDROBE';
         state.screen = 'root';
         renderPanel();
         break;

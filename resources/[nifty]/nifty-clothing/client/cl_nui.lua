@@ -1,25 +1,15 @@
--- nifty-clothing NUI driver — wardrobe bridge.
--- V1 only wires the wardrobe NUI up to the existing wardrobe Lua code
--- through a thin adapter. Each NUI callback fans out to one or more
--- existing server events. The legacy NativeUI surface remains in
--- cl_wardrobe.lua for the store and for legacy compatibility; the
--- wardrobe /wardrobe command now opens the NUI instead of a menu.
+-- nifty-clothing NUI driver — wardrobe + store.
+-- The NUI page hosts two UIs (wardrobe and store); each opens through
+-- a different event and the NUI's `mode` field tells the JS which
+-- surface to render. The JS files (wardrobe.js, store.js) each
+-- listen to the same window.message stream and decide based on
+-- `action` what to do.
 --
--- This file is a SKELETON: the wardrobe NUI integration is a separate
--- task. For now, the wardrobe.js file renders a placeholder root
--- panel and ESC closes it. cl_wardrobe.lua still works for the
--- /wardrobe command when the NUI is unavailable; both paths share
--- the same data state.
+-- This file is a thin adapter: it acquires focus, opens the page,
+-- dispatches every NUI callback to a server event, and pipes
+-- the relevant server replies back to the NUI.
 
 local RESOURCE = GetCurrentResourceName()
-
--- Module-level NUI state. The wardrobe NUI has at most one screen
--- visible at a time (root / slot / outfits / save), so a flat table
--- is enough. The Lua side of the wardrobe is the source of truth;
--- the NUI keeps a mirror that is rebuilt on every 'open' / 'refresh'.
-local state = {
-  owned = {},  -- owned[kind][slot] = { pieces = { { id, name, collection, drawable, texture } } }
-}
 
 -- ---------------------------------------------------------------- focus
 local Focus = exports['nifty-core']
@@ -39,14 +29,9 @@ local function releaseFocus()
   focusHeld = false
 end
 
-local function sendOpen(data)
+local function sendOpen(mode, extra)
   if not acquireFocus() then return end
-  SendNUIMessage({ action = 'open', data = data or {} })
-end
-
-local function sendRefresh(data)
-  if not focusHeld then return end
-  SendNUIMessage({ action = 'refresh', data = data or {} })
+  SendNUIMessage({ action = 'open', data = { mode = mode, extra = extra or {} } })
 end
 
 local function sendClose()
@@ -55,36 +40,36 @@ local function sendClose()
 end
 
 -- ---------------------------------------------------------------- NUI callbacks
--- Stub handlers: each NUI gesture fans out to the equivalent server
--- event. Full state wiring comes in the wardrobe integration PR.
 
 RegisterNUICallback('closePanel', function(_, cb)
   sendClose()
   cb({ ok = true })
 end)
 
-RegisterNUICallback('getOwnedForSlot', function(data, cb)
-  if not (data and data.kind and data.id) then cb({ ok = true }) return end
-  local kind = data.kind
-  local slot = tonumber(data.id) or 0
-
-  local function onReply(reply)
-    if reply and reply.kind == kind and reply.slot == slot then
-      RemoveEventHandler(onReply)
-      state.owned[kind] = state.owned[kind] or {}
-      state.owned[kind][slot] = reply.pieces or {}
-      sendRefresh({ owned = state.owned })
-    end
+-- Wardrobe
+local function onOwnedPieces(reply)
+  if reply and reply.kind and reply.slot then
+    RemoveEventHandler(onOwnedPieces)
+    SendNUIMessage({
+      action = 'refresh',
+      data    = { owned = { [reply.kind] = { [reply.slot] = reply.pieces or {} } } },
+    })
   end
-  RegisterNetEvent('nifty:client:wardrobeListForSlot', onReply)
-  TriggerServerEvent('nifty:server:wardrobeListForSlot', { kind = kind, slot = slot })
+end
+RegisterNUICallback('getOwnedForSlot', function(data, cb)
+  if data and data.kind and data.id then
+    RegisterNetEvent('nifty:client:wardrobeListForSlot', onOwnedPieces)
+    TriggerServerEvent('nifty:server:wardrobeListForSlot', {
+      kind = data.kind, slot = tonumber(data.id),
+    })
+  end
   cb({ ok = true })
 end)
 
 RegisterNUICallback('unequip', function(data, cb)
   if data and data.kind and data.id then
     TriggerServerEvent('nifty:server:clothingUnequip', {
-      kind = data.kind, slot = tonumber(data.id) or 0,
+      kind = data.kind, slot = tonumber(data.id),
     })
   end
   cb({ ok = true })
@@ -93,34 +78,27 @@ end)
 RegisterNUICallback('equip', function(data, cb)
   if data and data.kind and data.id and data.pieceId then
     TriggerServerEvent('nifty:server:clothingEquip', {
-      kind = data.kind, slot = tonumber(data.id) or 0,
-      pieceId = tonumber(data.pieceId) or 0,
+      kind = data.kind, slot = tonumber(data.id), pieceId = tonumber(data.pieceId),
     })
   end
   cb({ ok = true })
 end)
 
-local function onOutfitList(list)
-  RemoveEventHandler(onOutfitList)
-  sendRefresh({ outfits = list or {} })
-end
-
--- Long-lived listener for outfitList so the wardrobe refreshes when
--- the player renames or deletes an outfit. Removed on resource stop.
+-- Long-lived listener so the wardrobe refreshes when an outfit
+-- is renamed or deleted (the server re-broadcasts the list).
 RegisterNetEvent('nifty:client:outfitList', function(list)
-  sendRefresh({ outfits = list or {} })
+  SendNUIMessage({ action = 'refresh', data = { outfits = list or {} } })
 end)
 
+-- One-shot listener used by getOutfits so the JS can flip screens
+-- without a re-fetch. Removed on first reply.
+local function onOutfitListFetch(list)
+  RemoveEventHandler(onOutfitListFetch)
+  SendNUIMessage({ action = 'refresh', data = { outfits = list or {} } })
+end
 RegisterNUICallback('getOutfits', function(_, cb)
-  RegisterNetEvent('nifty:client:outfitList', onOutfitList)
+  RegisterNetEvent('nifty:client:outfitList', onOutfitListFetch)
   TriggerServerEvent('nifty:server:outfitList')
-  cb({ ok = true })
-end)
-
-RegisterNUICallback('applyOutfit', function(data, cb)
-  if data and data.id then
-    TriggerServerEvent('nifty:server:outfitApply', { id = tonumber(data.id) or 0 })
-  end
   cb({ ok = true })
 end)
 
@@ -133,9 +111,6 @@ end)
 
 RegisterNUICallback('deleteOutfit', function(data, cb)
   if data and data.id then
-    -- outfitPack is the server-side delete handler; the name is a
-    -- historical leftover from when the wardrobe packed an outfit
-    -- into the inventory. Today the operation is a straight delete.
     TriggerServerEvent('nifty:server:outfitPack', { outfitId = tonumber(data.id) })
   end
   cb({ ok = true })
@@ -144,34 +119,80 @@ end)
 RegisterNUICallback('renameOutfit', function(data, cb)
   if data and data.id and data.name then
     TriggerServerEvent('nifty:server:outfitRename', {
-      id   = tonumber(data.id),
-      name = data.name,
+      id = tonumber(data.id), name = data.name,
     })
   end
   cb({ ok = true })
 end)
 
--- ---------------------------------------------------------------- open / close
--- The /wardrobe command in cl_wardrobe.lua fires 'nifty:client:openWardrobe'
--- so the same surface can also be opened by housing hooks, scripts,
--- or admin commands without each having to know about the NUI driver.
-AddEventHandler('nifty:client:openWardrobe', function()
-  sendOpen({
-    character = {},
-    slots = {
-      components = { 1, 2, 3, 4, 5, 7, 8, 11 },
-      props      = { 0, 1, 2, 6, 7 },
-    },
-    componentLabels = {
-      [1] = 'Gesicht', [2] = 'Haare', [3] = 'Oberteil', [4] = 'Hose',
-      [5] = 'Tasche',  [7] = 'Accessoires', [8] = 'Ruestung', [11] = 'Jacke',
-    },
-    propLabels = {
-      [0] = 'Kopfbedeckung', [1] = 'Brille', [2] = 'Ohrring',
-      [6] = 'Schmuck',       [7] = 'Uhr',
-    },
-  })
+RegisterNUICallback('applyOutfit', function(data, cb)
+  if data and data.id then
+    TriggerServerEvent('nifty:server:outfitApply', { id = tonumber(data.id) })
+  end
+  cb({ ok = true })
 end)
+
+-- Store
+local function onStoreList(data)
+  if not data then return end
+  -- Don't RemoveEventHandler: the store can re-fetch on a different
+  -- slot and we don't want to lose the listener. The handler is
+  -- route-aware (kind + id match).
+  SendNUIMessage({
+    action = 'storeList',
+    data   = { kind = data.kind, id = data.slot, items = data.items or {} },
+  })
+end
+-- The store server event has no echo keys; we always listen.
+RegisterNetEvent('nifty:client:storeListForSlot', onStoreList)
+
+RegisterNUICallback('getStoreListForSlot', function(data, cb)
+  if data and data.kind and data.id then
+    TriggerServerEvent('nifty:server:storeListForSlot', {
+      kind = data.kind, slot_id = tonumber(data.id),
+    })
+  end
+  cb({ ok = true })
+end)
+
+RegisterNUICallback('purchaseItem', function(data, cb)
+  if data and data.kind and data.slot_id then
+    TriggerServerEvent('nifty:server:clothingPurchase', {
+      kind      = data.kind,
+      slot_id   = tonumber(data.slot_id),
+      collection = '',
+      drawable  = tonumber(data.drawable) or 0,
+      texture   = tonumber(data.texture) or 0,
+    })
+  end
+  cb({ ok = true })
+end)
+
+-- One-shot listener for the purchase reply; the store.js toast
+-- shows the result and the NUI is closed.
+RegisterNetEvent('nifty:client:clothingPurchase', function(data)
+  SendNUIMessage({ action = 'purchaseResult', data = data or {} })
+end)
+
+-- ---------------------------------------------------------------- open / close
+-- Wardrobe
+AddEventHandler('nifty:client:openWardrobe', function()
+  sendOpen('wardrobe')
+end)
+
+-- Store: triggered by cl_targets.lua when the player presses K inside
+-- a store's proximity radius. The storeId is informational; the
+-- server picks the price list for whichever shop the player is in.
+AddEventHandler('nifty:client:openStore', function(storeId)
+  sendOpen('store', { storeId = storeId })
+end)
+
+-- Chat command fallback
+RegisterCommand('+niftyclotheshop', function()
+  TriggerEvent('nifty:client:openStore', 'manual')
+end, false)
+RegisterCommand('-niftyclotheshop', function() end, false)
+RegisterKeyMapping('+niftyclotheshop', 'Nifty Life - Klamottenladen', 'keyboard', 'F7')
 
 AddEventHandler('onResourceStop', function(res)
   if res == RESOURCE and focusHeld then releaseFocus() end

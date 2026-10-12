@@ -33,11 +33,18 @@ server_script 'server/sv_drops.lua'
 -- cl_nui.lua owns focus, push messages, and the RegisterNUICallback
 -- handlers; cl_wardrobe.lua and cl_store.lua keep their data engine
 -- (COMPONENT_LABELS, snapshotCurrent, getCurrentAppearance, etc.)
--- until the legacy NativeUI surface is removed in a follow-up PR.
+-- 2026-10-12: NativeUI removed entirely. The wardrobe and the
+-- store both render through the same vanilla-JS NUI page, gated
+-- by a `mode` field on the open message. wardrobe.js owns the
+-- wardrobe UI; store.js owns the store UI. The NUI page is shared
+-- because the focus broker holds one CEF per resource and the
+-- two UIs are mutually exclusive (you can't be in the wardrobe
+-- and the store at the same time).
 files {
   'ui/index.html',
   'ui/style.css',
   'ui/wardrobe.js',
+  'ui/store.js',
 }
 
 -- Load order: cl_wardrobe.lua + cl_store.lua (data engine) before
