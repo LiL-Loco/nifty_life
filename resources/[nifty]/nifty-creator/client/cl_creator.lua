@@ -1399,6 +1399,13 @@ local function buildParentsMenu()
       halfStepIndex(face.headBlend[w.key] or 0.0),
       'Anteil an der Mischung. Die drei Werte addieren sich nicht zu 100 - die Engine rechnet mit Verhältnissen.', true)
     weightMenuItems[w.key] = item
+    -- Per-item OnSliderChanged fires on every drag step (live preview),
+    -- in addition to the menu-level OnSliderChange below. The per-item
+    -- one is the live-update path; the menu-level is the safety net.
+    item.OnSliderChanged = function(_m, _i, idx)
+      face.headBlend[w.key] = frac(idx, #halfStep)
+      refresh()
+    end
     menu:AddItem(item)
   end
   local skinItem = NativeUI.CreateSliderItem('Hautton', ZtO,
