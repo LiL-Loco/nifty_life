@@ -126,11 +126,10 @@ RegisterNUICallback('saveOutfit', function(data, cb)
 end)
 
 -- ---------------------------------------------------------------- open / close
--- Override the /wardrobe command: open the NUI instead of a NativeUI
--- menu. The legacy NativeUI path stays for callers that ask for it
--- explicitly (e.g. tests or scripted boots).
-RegisterCommand('wardrobe', function()
-  -- Build initial state and push to the NUI.
+-- The /wardrobe command in cl_wardrobe.lua fires 'nifty:client:openWardrobe'
+-- so the same surface can also be opened by housing hooks, scripts,
+-- or admin commands without each having to know about the NUI driver.
+AddEventHandler('nifty:client:openWardrobe', function()
   sendOpen({
     character = {},
     slots = {
@@ -146,7 +145,7 @@ RegisterCommand('wardrobe', function()
       [6] = 'Schmuck',       [7] = 'Uhr',
     },
   })
-end, false)
+end)
 
 AddEventHandler('onResourceStop', function(res)
   if res == RESOURCE and focusHeld then releaseFocus() end
