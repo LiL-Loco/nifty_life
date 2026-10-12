@@ -488,38 +488,50 @@
   };
 
   // ============================================================== face-bone dots
-  // Each bone name is mapped to one or two face features (by axis).
-  // Cheek bones map to FACE_1D entry id=0/1 (cheek width). Eyebrow
-  // bones map to FACE_2D group "Augenbrauen" (id 7 and 6). Chin bones
-  // to "Kinn" (id 17 and 15). etc. Drag direction (dx, dy in pixels)
-  // is added to the current feature value (clamped to -1..1) and sent
-  // as a setFeature. A single horizontal drag (dx dominant) maps to
-  // the x-axis feature; vertical drag (dy dominant) maps to the y.
+  // Each GTA facial bone is mapped to a face feature id (FACE_1D
+  // entry id) and an axis (x for horizontal drag, y for vertical).
+  // Drag direction picks the dominant axis. 200 px of drag = full
+  // -1.0 .. +1.0 sweep of the feature.
+  //
+  // Mapping (from GTA SetPedFaceFeature indices, 0..19):
+  //   0  Nasenbreite           10 Wangenspalt-Bohrung
+  //   1  Nasenboden            11 Wangenspalt
+  //   2  Nasenspitze-Tiefe     12 Lippendicke
+  //   3  Nasenbein-Drehung     13 Augenbrauen-Position
+  //   4  Augenbrauen-Hoehe     14 Kieferbreite
+  //   5  Augenbrauen-Tiefe     15 Kieferhoehe
+  //   6  Wangenspalt           16 Kinn-Tiefe
+  //   7  Augenoeffnung         17 Kinn-Hoehe
+  //   8  Lippenbreite          18 Kinn-Breite
+  //   9  Wangenspalt           19 Kinn-Loch
+  //
+  // Note: the source data uses some non-obvious index ordering; if a
+  // mapping feels off in-game, swap the index.
   const BONE_FEATURE_MAP = {
-    'skel_l_cheek':           { x: 0 },   // FACE_1D Nasenbreite
-    'skel_r_cheek':           { x: 0 },
-    'skel_l_eyeball':         { y: 19 },  // FACE_1D Hals-Dicke (rough)
-    'skel_r_eyeball':         { y: 19 },
-    'skel_l_lip_lower_corner':{ x: 12 },  // FACE_1D Lippendicke
-    'skel_r_lip_lower_corner':{ x: 12 },
-    'skel_l_eyebrow_01':      { x: 7,  y: 6 },  // Brauen
-    'skel_l_eyebrow_02':      { x: 7,  y: 6 },
-    'skel_l_eyebrow_03':      { x: 7,  y: 6 },
-    'skel_r_eyebrow_01':      { x: 7,  y: 6 },
-    'skel_r_eyebrow_02':      { x: 7,  y: 6 },
-    'skel_r_eyebrow_03':      { x: 7,  y: 6 },
-    'skel_l_nose_01':         { y: 1 },   // Nasenboden
-    'skel_l_nose_02':         { y: 1 },
-    'skel_r_nose_01':         { y: 1 },
-    'skel_r_nose_02':         { y: 1 },
-    'skel_l_jawline_root':    { x: 13, y: 14 }, // Kiefer
-    'skel_r_jawline_root':    { x: 13, y: 14 },
-    'skel_l_chin_01':         { x: 17, y: 15 }, // Kinn
-    'skel_l_chin_02':         { x: 17, y: 15 },
-    'skel_l_chin_03':         { x: 17, y: 15 },
-    'skel_r_chin_01':         { x: 17, y: 15 },
-    'skel_r_chin_02':         { x: 17, y: 15 },
-    'skel_r_chin_03':         { x: 17, y: 15 },
+    'skel_l_cheek':            { x: 6 },  // Wangenspalt
+    'skel_r_cheek':            { x: 6 },
+    'skel_l_eyeball':          { y: 7 },  // Augenoeffnung
+    'skel_r_eyeball':          { y: 7 },
+    'skel_l_lip_lower_corner': { x: 8 },  // Lippenbreite
+    'skel_r_lip_lower_corner': { x: 8 },
+    'skel_l_eyebrow_01':       { x: 4, y: 5 },  // Augenbrauen Hoehe/Tiefe
+    'skel_l_eyebrow_02':       { x: 4, y: 5 },
+    'skel_l_eyebrow_03':       { x: 4, y: 5 },
+    'skel_r_eyebrow_01':       { x: 4, y: 5 },
+    'skel_r_eyebrow_02':       { x: 4, y: 5 },
+    'skel_r_eyebrow_03':       { x: 4, y: 5 },
+    'skel_l_nose_01':          { y: 1 },  // Nasenboden
+    'skel_l_nose_02':          { y: 1 },
+    'skel_r_nose_01':          { y: 1 },
+    'skel_r_nose_02':          { y: 1 },
+    'skel_l_jawline_root':     { x: 14, y: 15 },  // Kiefer breite/hoehe
+    'skel_r_jawline_root':     { x: 14, y: 15 },
+    'skel_l_chin_01':          { x: 18, y: 17 },  // Kinn breite/hoehe
+    'skel_l_chin_02':          { x: 18, y: 17 },
+    'skel_l_chin_03':          { x: 18, y: 17 },
+    'skel_r_chin_01':          { x: 18, y: 17 },
+    'skel_r_chin_02':          { x: 18, y: 17 },
+    'skel_r_chin_03':          { x: 18, y: 17 },
   };
 
   const renderFaceBones = (bones) => {
