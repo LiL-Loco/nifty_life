@@ -1376,12 +1376,22 @@ local function buildParentsMenu()
     math.floor((face.headBlend.resemblance or 0.5) * 10) + 1,
     'Wie sehr die Merkmale von Mutter oder Vater geprägt sind.', true)
 
-  -- Half-percent granularity on the three weights: 0..100 in 201 steps.
-  -- The engine reads the ratio, so storing frac01 keeps the precision;
-  -- the right-label shows the percent (0..100, 1 decimal).
-  local halfStep = {}
-  for i = 0, 1000 do halfStep[i + 1] = ('%.1f%%'):format(i * 0.1) end
-  local function halfStepIndex(frac01)
+  -- Granularity of the three weight sliders, in percent.
+  --
+  -- This was 0.1% — a thousand and one positions — which the owner found too
+  -- fine to aim with, in a menu you steer with a controller. Five percent
+  -- lands on a mix by eye and still says "mostly one, a bit of the other",
+  -- which is all these three ever had to express.
+  --
+  -- The engine reads the RATIO, so the stored value stays a 0..1 float however
+  -- coarse the slider is. Change this number and the three sliders follow; the
+  -- index mapping below derives from the list length rather than repeating it.
+  local WEIGHT_STEP_PERCENT = 5
+  local weightSteps = {}
+  for i = 0, math.floor(100 / WEIGHT_STEP_PERCENT) do
+    weightSteps[i + 1] = ('%d%%'):format(i * WEIGHT_STEP_PERCENT)
+  end
+  local function weightStepIndex(frac01)
     -- explicit if/else instead of math.clamp: FiveM's runtime Lua
     -- accepts vectors in math.clamp and raises 'number or vector
     -- expected' on a type mismatch, which we hit when frac01 is a
@@ -1389,7 +1399,11 @@ local function buildParentsMenu()
     -- path that hands math.clamp a vector. Plain clamp here is safer.
     if frac01 < 0 then frac01 = 0 end
     if frac01 > 1 then frac01 = 1 end
-    return math.floor(frac01 * 1000) + 1
+    -- Exact inverse of `frac()` below, which maps an index back with
+    -- (/ (#list - 1)). At 0.1% this was frac01 * 1000 by coincidence of the
+    -- list being 1001 long; deriving it means the next change to
+    -- WEIGHT_STEP_PERCENT cannot desynchronise the two directions.
+    return math.floor(frac01 * (#weightSteps - 1) + 0.5) + 1
   end
   local weightDefs = {
     { key = 'motherWeight', label = 'Mutter-Anteil' },
@@ -1398,15 +1412,15 @@ local function buildParentsMenu()
   }
   local weightMenuItems = {}
   for _, w in ipairs(weightDefs) do
-    local item = NativeUI.CreateSliderItem(w.label, halfStep,
-      halfStepIndex(face.headBlend[w.key] or 0.0),
+    local item = NativeUI.CreateSliderItem(w.label, weightSteps,
+      weightStepIndex(face.headBlend[w.key] or 0.0),
       'Anteil an der Mischung. Die drei Werte addieren sich nicht zu 100 - die Engine rechnet mit Verhältnissen.', true)
     weightMenuItems[w.key] = item
     -- Per-item OnSliderChanged fires on every drag step (live preview),
     -- in addition to the menu-level OnSliderChange below. The per-item
     -- one is the live-update path; the menu-level is the safety net.
     item.OnSliderChanged = function(_m, _i, idx)
-      face.headBlend[w.key] = frac(idx, #halfStep)
+      face.headBlend[w.key] = frac(idx, #weightSteps)
       refresh()
     end
     menu:AddItem(item)
@@ -1420,11 +1434,11 @@ local function buildParentsMenu()
     if item == resItem then
       face.headBlend.resemblance = frac(index, #ZtO)
     elseif item == weightMenuItems.motherWeight then
-      face.headBlend.motherWeight = frac(index, #halfStep)
+      face.headBlend.motherWeight = frac(index, #weightSteps)
     elseif item == weightMenuItems.fatherWeight then
-      face.headBlend.fatherWeight = frac(index, #halfStep)
+      face.headBlend.fatherWeight = frac(index, #weightSteps)
     elseif item == weightMenuItems.thirdWeight then
-      face.headBlend.thirdWeight = frac(index, #halfStep)
+      face.headBlend.thirdWeight = frac(index, #weightSteps)
     elseif item == skinItem then
       face.headBlend.skinTone = frac(index, #ZtO)
     end
