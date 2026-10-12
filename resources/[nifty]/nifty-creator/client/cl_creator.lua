@@ -2298,7 +2298,8 @@ local camFov = 50.0
 local CAM_FOV_MIN   = 15.0
 local CAM_FOV_MAX   = 75.0
 local CAM_FOV_STEP  = 12.0  -- FOV delta per arrow press
-local CAM_EDGE_DEG_PER_SEC = 45.0  -- slow auto-rotate when cursor is at screen edge
+-- CAM_EDGE_DEG_PER_SEC went with the mouse-edge auto-rotation. See the note at
+-- the place it used to run.
 
 -- Mouse lock + camera turn + zoom, all in the same render tick that
 -- already drives the menu. Q / E turn the camera around the player; up
@@ -2354,36 +2355,18 @@ Citizen.CreateThread(function()
         end
       end
 
-      -- Mouse edge: when the cursor is at the left or right screen edge,
-      -- rotate the camera slowly so the player can frame the shot hands-free.
-      -- GetControlNormal returns 0..1 (normalized). Speed increases the
-      -- closer the cursor gets to the extreme edge.
-      do
-        local EDGE_ZONE = 0.015  -- 1.5% from each edge triggers rotation
-        local ok2, cx2, cy2, cz2 = pcall(GetCamCoord, creatorCam)
-        if ok2 and type(cx2) == 'number' then
-          local normX = GetControlNormal(0, 239)  -- INPUT_CURSOR_X
-          local edgeSpeed = 0.0
-          if normX < EDGE_ZONE then
-            local t = 1.0 - (normX / EDGE_ZONE)  -- 0 at edge, 1 at inner boundary
-            edgeSpeed = -CAM_EDGE_DEG_PER_SEC * t
-          elseif normX > (1.0 - EDGE_ZONE) then
-            local t = (normX - (1.0 - EDGE_ZONE)) / EDGE_ZONE  -- 0 at inner boundary, 1 at edge
-            edgeSpeed = CAM_EDGE_DEG_PER_SEC * t
-          end
-          if edgeSpeed ~= 0.0 then
-            local targetYaw = camYaw + edgeSpeed * 0.016  -- 60 fps frame
-            -- Lerp toward target so the camera glides rather than jumps.
-            camYaw = camYaw + (targetYaw - camYaw) * 0.08
-            local rad = math.rad(camYaw)
-            SetCamCoord(creatorCam,
-              cx2 + math.sin(rad) * 0.001,
-              cy2 + math.cos(rad) * 0.001,
-              cz2)
-            PointCamAtCoord(creatorCam, cx2, cy2, cz2)
-          end
-        end
-      end
+      -- The mouse-edge auto-rotation that used to live here was removed on
+      -- 2026-10-12, and it was not merely unwanted - it was wrong on a
+      -- controller. The check was `GetControlNormal(0, 239) < 0.015`, i.e.
+      -- "cursor within 1.5% of the left edge". With a controller there IS no
+      -- cursor, so that control reads 0.0, the test is permanently true, and
+      -- the camera turned itself at 45 degrees per second for as long as the
+      -- menu was open. The owner called it an idle cam; it was the controller
+      -- sitting permanently at the edge.
+      --
+      -- Q / E above still turn the camera deliberately, and the up/down FOV
+      -- zoom below is untouched. Both are one key press per step, which is
+      -- what a controller is good at.
 
       -- Up / down FOV zoom. One-shot per key press, not held; the player
       -- taps to step in or out. Hold-to-zoom would overshoot on slower
