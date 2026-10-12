@@ -5,7 +5,9 @@ geography. Built entirely by one person, launched only when complete.
 
 - **Vocabulary:** [CONTEXT.md](../CONTEXT.md) — the canonical terms. If a word disagrees with this file, it is wrong.
 - **Scope definition:** [launch-gate.md](./launch-gate.md) — the closed, frozen list of what must exist at launch.
-- **Decisions:** [adr/](./adr/) — 15 ADRs, each a decision with its reasoning.
+- **Decisions:** [adr/](./adr/) — 25 ADRs, each a decision with its reasoning.
+- **Staff bot:** [PLAN-bot.md](./PLAN-bot.md) — what the Discord bot does for the operator: lookups,
+  voice transcription and (ADR-0025) moderation actions.
 
 ## What this is
 
