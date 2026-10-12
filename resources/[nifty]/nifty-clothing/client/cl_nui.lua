@@ -105,6 +105,12 @@ local function onOutfitList(list)
   sendRefresh({ outfits = list or {} })
 end
 
+-- Long-lived listener for outfitList so the wardrobe refreshes when
+-- the player renames or deletes an outfit. Removed on resource stop.
+RegisterNetEvent('nifty:client:outfitList', function(list)
+  sendRefresh({ outfits = list or {} })
+end)
+
 RegisterNUICallback('getOutfits', function(_, cb)
   RegisterNetEvent('nifty:client:outfitList', onOutfitList)
   TriggerServerEvent('nifty:server:outfitList')
@@ -121,6 +127,26 @@ end)
 RegisterNUICallback('saveOutfit', function(data, cb)
   if data and data.name then
     TriggerServerEvent('nifty:server:outfitSave', { name = data.name })
+  end
+  cb({ ok = true })
+end)
+
+RegisterNUICallback('deleteOutfit', function(data, cb)
+  if data and data.id then
+    -- outfitPack is the server-side delete handler; the name is a
+    -- historical leftover from when the wardrobe packed an outfit
+    -- into the inventory. Today the operation is a straight delete.
+    TriggerServerEvent('nifty:server:outfitPack', { outfitId = tonumber(data.id) })
+  end
+  cb({ ok = true })
+end)
+
+RegisterNUICallback('renameOutfit', function(data, cb)
+  if data and data.id and data.name then
+    TriggerServerEvent('nifty:server:outfitRename', {
+      id   = tonumber(data.id),
+      name = data.name,
+    })
   end
   cb({ ok = true })
 end)

@@ -41,7 +41,7 @@
   // ---------------------------------------------------------------- state
   const state = {
     open: false,
-    screen: 'root',  // 'root' | 'slot' | 'outfits' | 'save'
+    screen: 'root',  // 'root' | 'slot' | 'outfits' | 'outfit-actions' | 'rename' | 'save'
     character: { firstName: '', lastName: '' },
     slots: [],
     owned: {},
@@ -49,6 +49,7 @@
     componentLabels: {},
     propLabels: {},
     activeSlot: null,
+    activeOutfit: null,
     saveName: '',
   };
 
@@ -154,11 +155,74 @@
       root.appendChild(el('div', 'wc-separator', 'Keine Outfits gespeichert.'));
     } else {
       for (const o of state.outfits) {
-        root.appendChild(button(o.name, null, () => {
-          fetchNui('applyOutfit', { id: o.id });
-        }, { chevron: false }));
+        const row = el('div', '');
+        const main = button(o.name, 'Klicken fuer Aktionen', () => {
+          state.activeOutfit = o;
+          state.screen = 'outfit-actions';
+          renderPanel();
+        }, { chevron: true });
+        row.appendChild(main);
+        // Direct-apply on long-name double-click (gesture omitted)
+        // is too subtle; use the action screen for everything.
+        root.appendChild(row);
       }
     }
+    return root;
+  };
+
+  // Per-outfit action screen: Anziehen, Umbenennen, Loeschen.
+  const renderOutfitActions = () => {
+    const root = el('div', '');
+    const o = state.activeOutfit;
+    if (!o) { state.screen = 'outfits'; return renderOutfits(); }
+    root.appendChild(button('< Zurueck', null, () => {
+      state.activeOutfit = null;
+      state.screen = 'outfits';
+      renderPanel();
+    }, { chevron: false }));
+    root.appendChild(separator(o.name));
+    root.appendChild(button('Anziehen', 'Outfit jetzt tragen.', () => {
+      fetchNui('applyOutfit', { id: o.id });
+    }));
+    root.appendChild(button('Umbenennen', 'Namen aendern.', () => {
+      state.screen = 'rename';
+      state.saveName = o.name;
+      renderPanel();
+    }));
+    root.appendChild(button('Loeschen', 'Outfit entgueltig entfernen.', () => {
+      fetchNui('deleteOutfit', { id: o.id });
+      state.activeOutfit = null;
+      state.screen = 'outfits';
+    }, { danger: true }));
+    return root;
+  };
+
+  // Rename dialog: a single text input + Save button.
+  const renderRename = () => {
+    const root = el('div', '');
+    root.appendChild(button('< Abbrechen', null, () => {
+      state.screen = 'outfit-actions';
+      renderPanel();
+    }, { chevron: false }));
+    root.appendChild(separator('Outfit umbenennen'));
+    const nameInput = input('Neuer Name', state.saveName, (v) => {
+      state.saveName = v;
+    });
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const o = state.activeOutfit;
+        if (o) fetchNui('renameOutfit', { id: o.id, name: state.saveName });
+        state.activeOutfit = null;
+        state.screen = 'outfits';
+      }
+    });
+    root.appendChild(nameInput);
+    root.appendChild(button('Speichern', null, () => {
+      const o = state.activeOutfit;
+      if (o) fetchNui('renameOutfit', { id: o.id, name: state.saveName });
+      state.activeOutfit = null;
+      state.screen = 'outfits';
+    }, { primary: true }));
     return root;
   };
 
@@ -189,10 +253,12 @@
     panel.innerHTML = '';
     let dom;
     switch (state.screen) {
-      case 'slot':    dom = renderSlot(); break;
-      case 'outfits': dom = renderOutfits(); break;
-      case 'save':    dom = renderSave(); break;
-      default:        dom = renderRoot(); break;
+      case 'slot':             dom = renderSlot(); break;
+      case 'outfits':          dom = renderOutfits(); break;
+      case 'outfit-actions':  dom = renderOutfitActions(); break;
+      case 'rename':           dom = renderRename(); break;
+      case 'save':             dom = renderSave(); break;
+      default:                 dom = renderRoot(); break;
     }
     if (dom) panel.appendChild(dom);
   };

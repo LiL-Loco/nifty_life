@@ -618,6 +618,33 @@ RegisterNetEvent('nifty:server:outfitPack', function(payload)
                      { ok = true, outfitId = payload.outfitId })
 end)
 
+-- Rename an outfit. NUI wardrobe drives this; legacy menu used
+-- the same handler too. Owned.renameOutfit validates the name and
+-- the ownership of the row.
+RegisterNetEvent('nifty:server:outfitRename', function(payload)
+  local src = source
+  payload = payload or {}
+  local cid = Identity and Identity.getActiveCharacter and Identity.getActiveCharacter(src) or nil
+  if not cid then
+    TriggerClientEvent('nifty:client:outfitRename', src, { ok = false, reason = 'no character' })
+    return
+  end
+  local id = tonumber(payload.id)
+  local name = type(payload.name) == 'string' and payload.name or nil
+  if not id or not name or name == '' then
+    TriggerClientEvent('nifty:client:outfitRename', src, { ok = false, reason = 'bad_payload' })
+    return
+  end
+  local ok, err = Owned.renameOutfit(cid, id, name)
+  if not ok then
+    TriggerClientEvent('nifty:client:outfitRename', src, { ok = false, reason = err })
+    return
+  end
+  TriggerClientEvent('nifty:client:outfitRename', src, { ok = true, id = id, name = name })
+  -- Re-broadcast the list so the NUI wardrobe refreshes.
+  TriggerClientEvent('nifty:client:outfitList', src, Owned.listOutfits(cid))
+end)
+
 -- Drop while wearing.
 --
 -- The user has the equipped accessory in their inventory and chooses to
