@@ -58,11 +58,11 @@ services:
 
     volumes:
       - db_data:/var/lib/mysql
-      # ONLY the account creation. Deliberately a single file, not the whole
-      # directory: the entrypoint executes everything it finds here, and
-      # grants.sh would run before a single table exists. run-migrations.sh is
-      # the migrate service's job, not the entrypoint's.
-      - ./docker/initdb/000-users.sh:/docker-entrypoint-initdb.d/000-users.sh:ro
+      # NO initdb.d mount. Account creation used to live there as 000-users.sh,
+      # and it was the first thing that broke: a bind mount whose source is
+      # absent from the checkout is not an error, Docker creates it as an empty
+      # directory. The `migrate` service creates the accounts instead, over the
+      # network, before it applies anything.
 
     ports:
       # Loopback only — for the FiveM server on this host. Never 0.0.0.0.
@@ -90,7 +90,13 @@ services:
   # grants.sql deployed nothing at all — the fix sat in the repository and never
   # reached the database. See run-migrations.sh for the ordering rules.
   migrate:
-    image: mariadb:11.4
+    # Built, not `image: mariadb:11.4` with bind mounts. See
+    # docker/Dockerfile.migrate for why: a bind mount whose source is missing
+    # in the checkout is not an error, Docker creates it as an empty directory,
+    # and the container then dies with 127 and says nothing.
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.migrate
     restart: "no"
 
     depends_on:
@@ -106,11 +112,7 @@ services:
       WEB_DB_HOST: ${WEB_DB_HOST:-172.30.%}
       GAME_DB_HOST: ${GAME_DB_HOST:-%}
 
-    volumes:
-      # The whole docker/ directory: the runner, the grants, the migration
-      # chain and the grants template all live under it and resolve relative to
-      # the script's own location.
-      - ./docker:/docker-scripts:ro
+    # No volumes: the scripts are baked into the image by docker/Dockerfile.migrate.
 
     # A preflight, not just a command.
     #

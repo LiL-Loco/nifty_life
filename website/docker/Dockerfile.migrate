@@ -1,0 +1,21 @@
+# The one-shot migration image.
+#
+# Why the scripts are baked in instead of bind-mounted from the compose context:
+# the first attempt mounted ./docker into the container, and on the deploy host
+# that path did not exist in the checkout. Docker does not fail on a missing
+# bind-mount source — it CREATES it as an empty directory. So the container came
+# up with a directory where run-migrations.sh was supposed to be, and exited 127
+# with no output at all.
+#
+# A build context, by contrast, fails loudly: "not found" names the missing path
+# instead of quietly inventing one. Copying also removes the whole class of
+# "whose checkout is this relative to?" questions, which is not a question a
+# deploy should be asking.
+FROM mariadb:11.4
+
+COPY docker/ /docker-scripts/
+
+# Not required — the entrypoint invokes them through bash explicitly — but a
+# script that cannot be run directly should not look runnable.
+RUN chmod +x /docker-scripts/initdb/*.sh \
+  && ls -la /docker-scripts /docker-scripts/initdb

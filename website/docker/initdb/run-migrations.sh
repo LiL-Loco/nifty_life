@@ -73,6 +73,20 @@ q_file() {
 
 recorded() { printf '%s\n' "$APPLIED" | grep -qx "$1"; }
 
+# ---- accounts first ----------------------------------------------------------
+# Migrations 016 and 018 contain GRANT statements of their own, so the accounts
+# have to exist before the chain runs. This used to be a file in the MariaDB
+# entrypoint's initdb.d, which meant a bind mount from the compose context into
+# a directory the deploy host does not expose. It runs here instead: this service
+# already talks to the database as root, and CREATE USER IF NOT EXISTS is
+# idempotent, so calling it on every deploy costs nothing.
+echo "ensuring the three accounts exist"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "   [dry-run] would run 000-users.sh"
+else
+  bash "$HERE/000-users.sh"
+fi
+
 # ---- what has already been applied ------------------------------------------
 HAS_TABLE="$(q_read "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_NAME}' AND table_name='schema_migrations';")"
 

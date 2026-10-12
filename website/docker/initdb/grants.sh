@@ -59,6 +59,7 @@ sed \
   -e "s|'@'localhost'|$(esc "'@'${WEB_DB_HOST}'")|g" \
   -e "s|'@'127.0.0.1'|$(esc "'@'${GAME_DB_HOST}'")|g" \
   "$TEMPLATE" \
-  | mariadb --protocol=socket -u root -p"${MARIADB_ROOT_PASSWORD}" "${MARIADB_DATABASE:-nifty_life}"
+  | mariadb --protocol=tcp -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" \
+        -u "${DB_USER:-root}" -p"${MARIADB_ROOT_PASSWORD}" "${MARIADB_DATABASE:-nifty_life}"
 
-echo "900-grants.sh: accounts created (web=${WEB_DB_HOST}, game=${GAME_DB_HOST}, admin=${WEB_DB_HOST})."
+echo "grants.sh: accounts created (web=${WEB_DB_HOST}, game=${GAME_DB_HOST}, admin=${WEB_DB_HOST})."
