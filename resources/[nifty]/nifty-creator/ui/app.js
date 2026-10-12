@@ -121,14 +121,31 @@
     if (!root) return;
     const stackEl = stack();
     if (!stackEl) return;
+    // Save scroll position of the outgoing panel so it can be restored
+    // if the player pops back. CEF's scrollTop survives innerHTML wipes
+    // only if we cache it before clearing.
+    const previous = state.panels[state.panels.length - 1];
+    if (previous && previous.id === state._renderedPanelId) {
+      const live = document.getElementById('cr-panel-' + previous.id);
+      if (live) previous.scroll = live.scrollTop;
+    }
     stackEl.innerHTML = '';
     const panel = state.panels[state.panels.length - 1];
     if (!panel) return;
     const dom = renderPanel(panel);
     if (dom) {
+      dom.id = 'cr-panel-' + panel.id;
       dom.classList.add('cr-panel');
       stackEl.appendChild(dom);
+      // Restore cached scroll position.
+      if (panel.scroll > 0) {
+        requestAnimationFrame(() => {
+          const live = document.getElementById('cr-panel-' + panel.id);
+          if (live) live.scrollTop = panel.scroll;
+        });
+      }
     }
+    state._renderedPanelId = panel.id;
     updateSubtitle();
     updateSkinCamHint();
     updateSkinCamState();
