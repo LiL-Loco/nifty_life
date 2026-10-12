@@ -1,9 +1,9 @@
 # =============================================================================
 # The website, with its database somewhere else.
 #
-# The database is a Coolify-managed MariaDB resource, not a service in this file.
-# That is the owner's decision (2026-10-12) and it reverses the earlier "MariaDB
-# as a service in the deploy" arrangement from the same day.
+# The database is an EXTERNAL MariaDB on a public address, not a service in this
+# file. The owner decided that on 2026-10-12; it reverses the "MariaDB as a
+# service in the deploy" arrangement from the same day.
 #
 # What that means in practice:
 #
@@ -20,8 +20,8 @@
 #     an admin account would remove that boundary without changing one line of
 #     application code.
 #
-#   * Both containers JOIN Coolify's shared network. The database hostname is a
-#     Docker-internal name that only resolves there — it is not a public address.
+#   * A public database address is not a network boundary. WEB_DB_HOST below must
+#     be the deploy host's IP for the grant to mean anything.
 # =============================================================================
 
 name: nifty-life-website
@@ -56,11 +56,14 @@ services:
 
       # Host patterns for the GRANT statements.
       #
-      # '%' because the source address is no longer ours to choose: the app is on
-      # Coolify's shared network, so the address MariaDB sees depends on that
-      # network's subnet. That is a weaker boundary than the fixed compose subnet
-      # was — it is the price of an external database, and it is only acceptable
-      # while that database is not reachable from outside Coolify.
+      # The database is on a PUBLIC address, so '%' means the web account can be
+      # used from anywhere in the world. That is not a boundary, it is a
+      # convention.
+      #
+      # Set WEB_DB_HOST to the deploy host's public IP. The app reaches the
+      # database over the internet, so the source address MariaDB sees IS known —
+      # and then the grant is a single host again, the same shape it had when
+      # the database was a compose service.
       WEB_DB_HOST: ${WEB_DB_HOST:-%}
       GAME_DB_HOST: ${GAME_DB_HOST:-%}
 
@@ -83,7 +86,7 @@ services:
         exec bash /docker-scripts/initdb/run-migrations.sh
 
     networks:
-      - coolify
+      - nifty
 
   app:
     build:
@@ -119,10 +122,11 @@ services:
       - "${APP_PORT:-3101}:3000"
 
     networks:
-      - coolify
+      - nifty
 
 networks:
-  # Coolify's shared network. The database hostname only resolves inside it.
-  coolify:
-    external: true
-    name: ${COOLIFY_NETWORK:-coolify}
+  # Private to this project, and deliberately not Coolify's shared network: the
+  # database is reached over the internet by IP, so there is nothing internal to
+  # share, and an `external: true` network that does not exist makes `up` fail
+  # before anything starts.
+  nifty:
