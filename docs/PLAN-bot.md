@@ -41,9 +41,13 @@ That is a claim from an upstream changelog, not something this project has verif
 
 > **Phase 0 is a half-day spike and everything else waits for it.** Join a voice channel with
 > `@discordjs/voice` 0.19.2 + davey 0.1.12, record ten seconds of one person speaking German, write a WAV,
-> and run it through Whisper. If the words come back, the risk is gone and Phase 1 starts. If they do
-> not, the fallback is py-cord 2.6.1, which reportedly handles DAVE correctly on the same channel — but
-> that means a second bot process in Python, so we decide then, not now.
+> and run it through faster-whisper. The spike answers three questions, in this order: do we get audio
+> at all, do the German words come back correctly, and does `vad_filter` leave a deliberately silent
+> segment empty. The third is the one that matters most — a VAD filter that lets silence through would
+> make every recording partly fiction, and it is the failure with the worst consequences and the
+> quietest symptoms. If the words do not come back, the fallback is py-cord 2.6.1, which reportedly
+> handles DAVE correctly on the same channel — but that means a second bot process in Python, so we
+> decide then, not now.
 
 A fallback of last resort is Discord's own transcription, which is a human clicking a button and is not
 something a bot can automate.
@@ -53,19 +57,64 @@ something a bot can automate.
 ### The pipeline
 
 ```
-Discord voice ──► @discordjs/voice ──► per-user Opus ──► prism-media Decoder ──► 48 kHz stereo PCM
-                                                                                        │
-                                                              ffmpeg -ar 16000 -ac 1     ▼
-                                                                                    16 kHz mono WAV
-                                                                                        │
-                                                                    whisper -l de      ▼
-                                                                                  German transcript
+Discord voice ─► @discordjs/voice ─► per-user Opus ─► prism-media Decoder ─► 48 kHz stereo PCM
+                                                                                   │
+                                                                     WAV header written here
+                                                                                   ▼
+                                                                            48 kHz stereo WAV
+                                                                                   │
+                                          faster-whisper service, localhost, int8 on CPU
+                                          PyAV decodes and resamples to 16 kHz mono,
+                                          Silero VAD strips silence before the model sees it
+                                                                                   ▼
+                                                             [{ start, end, text, words }, …]
 ```
 
-The valuable detail is **per-user capture**. Discord delivers each participant's audio as separate Opus
-streams, so recording per user gives exact speaker attribution for free. No diarization, no guessing
-who said the line that contradicts the witness. This is the single biggest reason the Discord-voice
-route is better than a Teamspeak mixdown.
+### Why faster-whisper and not openai-whisper
+
+Chosen 2026-10-12 over the `openai-whisper` pip package that was already installed, and it is not a
+close call:
+
+- **No PyTorch.** It runs on CTranslate2, which has its own kernels. The installed `torch 2.11.0+cpu`
+  is not used, and no CUDA build of PyTorch is needed — which removes a ~2.5 GB download that was
+  otherwise on the table purely to unblock transcription.
+- **Silero VAD is built in.** `vad_filter=True` drops non-speech before inference. Silence is the input
+  that makes Whisper hallucinate, so this attacks the failure at its source instead of hoping a
+  threshold downstream catches it. The default only removes silence longer than 2 s;
+  `vad_parameters=dict(min_silence_duration_ms=500)` suits segment-based capture better.
+- **Roughly twice the CPU speed** of openai-whisper at equal accuracy, and `int8` is supported on CPU
+  directly.
+- **Word-level timestamps** are available, which is what makes a transcript navigable to the second
+  that matters.
+- **No separate ffmpeg step.** PyAV decodes and resamples to the 16 kHz mono Whisper needs, so the
+  recorder writes a 48 kHz stereo WAV and hands the file over.
+
+`turbo` (large-v3-turbo) is the model to start on: it is close to large-v3 quality at a fraction of the
+cost, and German is well represented. `small` is the fallback if throughput turns out to matter more
+than vocabulary.
+
+### The transcriber service
+
+faster-whisper is a Python library, and the bot is Node. It runs as a small local service,
+`bot/transcriber/service.py`, listening on `127.0.0.1` with a token from the environment:
+
+- the model is loaded **once** at startup and stays warm, which matters because a model load costs
+  seconds and every `/stop` would otherwise pay it again;
+- `POST /transcribe` takes a WAV path and returns segments as JSON, with `vad_filter`, `language=de`,
+  `word_timestamps` and `beam_size` as parameters;
+- it binds to loopback only. It never listens on a network interface, and the token exists so that a
+  stray local process cannot feed it arbitrary files.
+
+No framework and no dependency beyond `faster-whisper` itself: `http.server` is in the standard
+library, and the same "we own this forever" trade ADR-0002 already makes applies to a two-file HTTP
+wrapper.
+
+### Why per-user capture is the point
+
+Discord delivers each participant's audio as a separate Opus stream, so recording per user gives exact
+speaker attribution for free. No diarization, and no guessing who said the line that contradicts the
+witness. This is the single biggest reason the Discord-voice route is better than a Teamspeak mixdown —
+and it is why faster-whisper's absence of built-in diarization does not matter here.
 
 ### Commands
 
@@ -92,9 +141,13 @@ Audio is deleted after transcription. It is kept only if the recording fails.
 
 ### Cost
 
-Zero. Whisper runs locally, the models are MIT, and the bot is already a Node process on the operator's
-own machine. No API key, no per-minute billing, nothing leaves the host. This is the whole reason for
-running it locally rather than calling a hosted transcription service.
+Zero. faster-whisper is MIT, the weights are downloaded from the Hugging Face Hub once, and everything
+runs on the operator's own machine. No API key, no per-minute billing, nothing leaves the host. This is
+the whole reason for running it locally rather than calling a hosted transcription service, and it is
+also why a hosted one is not being reconsidered at Phase 2.
+
+One caveat worth stating plainly: the models are downloaded on first use, and `turbo` is a ~1.6 GB
+fetch. That is a one-time disk cost, not a licence cost.
 
 ## Phase 2 — Player and Account lookups
 
@@ -154,15 +207,19 @@ change at human speed.
 - **German RP jargon.** Characters have invented names, street names and department slang. Whisper will
   mangle them. Mitigation: segment-level transcription so one bad segment is visible and correctable,
   and a transcript is labelled as machine output, never as evidence on its own.
-- **Hallucination on silence.** Whisper invents text when given noise. Segments are gated on an actual
-  `speaking` event, and empty or near-silent segments are discarded rather than transcribed.
+- **Hallucination on silence.** Whisper invents text when given noise. Two independent guards: a segment
+  is only opened by an actual `speaking` event, and Silero VAD runs before inference with the threshold
+  tuned for short gaps. Phase 0 verifies the second one on purpose, because it is the guard that is
+  supposed to be doing the work and it is the one that fails quietly.
 - **Recording consent.** Team members must know the bot records. It joins visibly, `/record` announces
   itself in the text channel, and the transcript names every participant. This is a staff-only channel,
   but it still gets said out loud in the team channel before first use.
-- **CPU-only Whisper.** `torch 2.11.0+cpu` is installed — CUDA is not, despite an RTX 2070 SUPER being
-  present. CPU transcription of `small` is roughly realtime on an i7-9700K, so a long staff call takes
-  about as long as the call. Installing the CUDA build of PyTorch (~2.5 GB) would change that
-  materially; that is a decision, not a detail, and it is not made in this document.
+- **CPU throughput.** No GPU is involved: faster-whisper does not use PyTorch, so the installed
+  `torch 2.11.0+cpu` and the idle RTX 2070 SUPER are both irrelevant to this feature. `int8` on the
+  i7-9700K is the configuration. A long staff call may take longer to transcribe than it took to
+  happen — which is fine for an on-demand `/transcript`, and is the reason this is not a live-caption
+  feature. The RTX card could run CTranslate2 on CUDA with cuBLAS 12 and cuDNN 9 installed separately,
+  and that remains available as a later speed-up if throughput ever matters.
 - **The bot holds the game account.** Full privileges on the whole schema. Every command is an
   opportunity to write with it. Phase 3's audit table exists partly because of this.
 
