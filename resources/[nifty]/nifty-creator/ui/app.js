@@ -131,7 +131,22 @@
     }
     updateSubtitle();
     updateSkinCamHint();
+    updateSkinCamState();
     updateFaceBonesActive();
+  };
+
+  // Tell Lua which skin-cam to use. The skin-cam in lbg-char's pattern
+  // is a tight head closeup (face) vs a body closeup (body). The
+  // heritage/parents/faceFeatures/hair/makeup panels want the head
+  // closeup; everything else wants the body.
+  let _lastSkinCam = null;
+  const updateSkinCamState = () => {
+    const top = state.panels[state.panels.length - 1];
+    const want = (top && new Set(['heritage', 'parents', 'faceFeatures', 'hair', 'makeup']).has(top.kind))
+      ? 'face' : 'body';
+    if (want === _lastSkinCam) return;
+    _lastSkinCam = want;
+    fetchNui('showSkinCam', { kind: want });
   };
 
   // Tell Lua whether the face-bone projection thread should be
