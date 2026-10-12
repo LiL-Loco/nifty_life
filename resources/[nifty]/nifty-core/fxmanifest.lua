@@ -10,9 +10,12 @@ version '0.2.0'
 -- This is the BASE resource, not a system. It owns the database, the settings
 -- cache, identity and the session guard, and it owns NO gameplay system.
 --
--- `ui_page` is GONE from this file. The HUD moved to nifty-world, the creator to
--- nifty-creator, the phone to nifty-phone and the chat to nifty-chat — each with
--- its own page, which is why nifty-ui exists to arbitrate focus between them.
+-- `ui_page` was removed in 2025-09. The HUD lives in nifty-world, the
+-- creator in nifty-creator, the phone in nifty-phone and the chat in
+-- nifty-chat - each with its own page, which is why nifty-ui exists
+-- to arbitrate focus between them. The 2026-10-12 NUI migration
+-- brought the spawn picker back into nifty-core (it was native-menu
+-- before) and the picker now uses the ui/spawn.html page.
 --
 -- What the base still must not do: reach into a system. `sv_facade.lua` is the
 -- one place a system may reach in, and it hands out data access, not behaviour.
@@ -58,28 +61,9 @@ server_script 'server/sv_facade.lua'
 
 -- nifty-spawn (absorbed). Runs on the client only - server does not deal with
 -- the spawn picker. cl_spawn.lua reads Spawn.Locations and Spawn.CAM_* from
--- shared/spawn.lua (loaded earlier in the shared_scripts block). It also
--- loads the NativeUI library directly (the lbg-char pattern) so the
--- spawn picker has its own menu pool, independent of every other
--- resource's menu.
-client_script '@nifty-ui/share/Utils.lua'
-client_script '@nifty-ui/elements/UIResRectangle.lua'
-client_script '@nifty-ui/elements/UIResText.lua'
-client_script '@nifty-ui/elements/Sprite.lua'
-client_script '@nifty-ui/elements/Badge.lua'
-client_script '@nifty-ui/elements/Colours.lua'
-client_script '@nifty-ui/elements/ColoursPanel.lua'
-client_script '@nifty-ui/elements/StringMeasurer.lua'
-client_script '@nifty-ui/items/UIMenuItem.lua'
-client_script '@nifty-ui/items/UIMenuCheckboxItem.lua'
-client_script '@nifty-ui/items/UIMenuListItem.lua'
-client_script '@nifty-ui/items/UIMenuSliderItem.lua'
-client_script '@nifty-ui/items/UIMenuSliderHeritageItem.lua'
-client_script '@nifty-ui/items/UIMenuColouredItem.lua'
-client_script '@nifty-ui/items/UIMenuProgressItem.lua'
-client_script '@nifty-ui/base/UIMenu.lua'
-client_script '@nifty-ui/base/MenuPool.lua'
-client_script '@nifty-ui/NativeUI.lua'
+-- shared/spawn.lua (loaded earlier in the shared_scripts block). The 2026-10-12
+-- NUI migration replaced the legacy NativeUI menu with a vanilla-JS NUI
+-- (ui/spawn.html, ui/spawn.js, ui/spawn.css).
 client_script 'client/cl_spawn.lua'
 
 -- The focus broker (cl_focus) stays here so chat and phone can keep using
@@ -90,15 +74,13 @@ client_script 'client/cl_welcome.lua'
 
 -- ui/base.css and ui/base.js stay: chat and phone still load base.js
 -- for the Nifty.nui fetch helper, and base.css is the shared colour-token
--- file. The native menu does not need its own NUI page.
---
--- @nifty-ui/stream/*.ytd provides the texture atlases the menu library
--- uses (commonmenu, shop_arrows_upanddown, etc.). They must be in this
--- resource's `files` block so the GTA streaming system registers them.
+-- file. The spawn picker uses its own NUI page (ui/spawn.*).
 files {
   'ui/base.css',
   'ui/base.js',
-  '@nifty-ui/stream/*.ytd',
+  'ui/spawn.html',
+  'ui/spawn.css',
+  'ui/spawn.js',
 }
 
 -- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker
@@ -135,6 +117,14 @@ spawnpoint 'Flughafen' {
 
 -- ADR-0015: voice is Teamspeak, not an in-game resource. Nothing to load here.
 -- ADR-0016: interiors are loaded by Bob74_IPL, ensured in server.cfg.
+
+-- Spawn picker page. The page is hidden until cl_spawn.lua acquires
+-- focus and pushes an 'open' message. cl_welcome.lua / cl_focus.lua
+-- arbitrate who owns the keyboard when both the welcome and the
+-- picker are visible (the welcome opens first; the picker opens
+-- after the player has picked a slot).
+ui_page 'ui/spawn.html'
+
 dependencies {
   '/onesync',
   '/server:4500',
