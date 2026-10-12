@@ -219,7 +219,11 @@ end)
 --- than a raw key table, so a player can rebind them in the FiveM settings menu.
 
 RegisterCommand('niftypanel', function(_, argument)
-  local name = (argument or ''):lower()
+  -- FiveM sometimes passes the argument as a table (when the command
+  -- framework can't parse the typed input as a string), so the type
+  -- check is not paranoia - it was the source of a real crash.
+  if type(argument) ~= 'string' then argument = '' end
+  local name = argument:lower()
   if name == '' or not State[name] then return setPanel(nil) end
   if panelOpen and State.panel == name then return setPanel(nil) end
   setPanel(name)
