@@ -26,6 +26,45 @@ does, because the mirror is what makes the rest trustworthy.
 
 ## The blocker, and why Phase 0 exists
 
+### Phase 0 — status, 2026-10-13
+
+Two of the three questions are answered. The third needs a live voice channel.
+
+**Answered: transcription works, and VAD does not invent text.** Measured on this machine with
+`small`/int8 on the i7-9700K, against German test audio generated in Discord's own PCM shape
+(48 kHz, 16-bit, stereo):
+
+| Case | Result |
+|---|---|
+| German speech, 15.7 s | 2 segments, 2.5× realtime, word timestamps present |
+| Digital silence, 10 s | empty, RMS 0 |
+| Low-level noise, 10 s | empty |
+| Speech + 10 s trailing silence | stops at 15.0 s of 25.7 s — trailing silence produced nothing |
+
+Two honest caveats about that table. First, with `small` the **vad=OFF** column also produced nothing
+on silence and noise, so this run showed that VAD behaves correctly but did *not* reproduce the
+hallucination it exists to prevent. Hallucination propensity is model-dependent and larger models are
+the worse offenders — so **the table has to be re-run with `turbo` before shipping**, and the `turbo`
+result is the one that decides. Second, vocabulary is the real weakness: "Vinewood" came back as
+"Weinwut" and "Pillbox" as "Pilbocks". Correct sentences, invented proper nouns — which is precisely
+what a server's own invented geography is made of.
+
+The HTTP service (`bot/transcriber/service.py`) is built and exercised: 401 without a token, German
+transcription over the wire, word-level timestamps in the response, silence empty at RMS 0.
+
+**Not yet answered: does audio arrive at all?** That is `bot/src/spike/voice-spike.ts` against a real
+voice channel. The spike is written and compiles; it has not been run against Discord.
+
+**Three things building the spike turned up**, all in LEARNINGS.md:
+
+- `@discordjs/voice` 0.19.x moved the `speaking` event off `VoiceReceiver` onto `SpeakingMap`, and
+  `VoiceReceiver` is no longer an `EventEmitter`. Every tutorial online is wrong for this version.
+- `encoder` is not a valid `joinVoiceChannel` option.
+- `@discordjs/opus` will not build here — no MSVC build tools — so `opusscript` is the pure-JS
+  substitute. The bot only ever decodes and never encodes, so it never plays audio anyway.
+
+### Why Phase 0 exists
+
 Discord made **DAVE** end-to-end voice encryption mandatory on every voice channel in **March 2026**.
 `@discordjs/voice` 0.19.0 shipped DAVE support that does not work for receiving: bots enter reconnect
 loops, `receiver.speaking` never fires, and audio packets fail with

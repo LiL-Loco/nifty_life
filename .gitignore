@@ -89,6 +89,10 @@ desktop.ini
 /tmp/
 *.local.*
 
+# Phase 0 voice spike. Raw captured voice audio from staff channels has no
+# business in git history, and it is regenerable by running the spike again.
+/bot/.spike-out/
+
 # `*.local.*` above also matches `.credentials.local.example`, because the name
 # contains `.local.`. This has to come AFTER that rule — later rules win — or the
 # credentials template silently stays untracked and nobody notices.
