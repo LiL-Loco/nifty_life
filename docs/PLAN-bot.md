@@ -24,11 +24,12 @@ does, because the mirror is what makes the rest trustworthy.
 - **Write access:** the bot may ban, warn and resolve reports from Discord. This reverses the
   read-only posture ADR-0007 established, so it carries its own ADR and its own audit table.
 
-## The blocker, and why Phase 0 exists
+## Phase 0 — does the bot actually hear anything?
 
-### Phase 0 — status, 2026-10-13
+Half a day, and the rest of the plan waits for it. The spike (`bot/src/spike/voice-spike.ts`) joins a
+voice channel, records, and writes one WAV per captured segment.
 
-Two of the three questions are answered. The third needs a live voice channel.
+**Status 2026-10-13 — two of three questions answered, and they are the ones that decide.**
 
 **Answered: transcription works, and VAD does not invent text.** Measured on this machine with
 `small`/int8 on the i7-9700K, against German test audio generated in Discord's own PCM shape
@@ -52,44 +53,21 @@ what a server's own invented geography is made of.
 The HTTP service (`bot/transcriber/service.py`) is built and exercised: 401 without a token, German
 transcription over the wire, word-level timestamps in the response, silence empty at RMS 0.
 
-**Not yet answered: does audio arrive at all?** That is `bot/src/spike/voice-spike.ts` against a real
-voice channel. The spike is written and compiles; it has not been run against Discord.
+**Still open: does audio arrive at all?** The spike is written and compiles; it has not been run
+against Discord. If it comes back silent, the one question worth asking first is whether the bot's
+**Connect** and **Speak** permissions are granted on that channel — a bot that joins deaf receives
+nothing, which looks identical to a broken capture path.
 
-**Three things building the spike turned up**, all in LEARNINGS.md:
+### Implementation notes, not decisions
 
-- `@discordjs/voice` 0.19.x moved the `speaking` event off `VoiceReceiver` onto `SpeakingMap`, and
-  `VoiceReceiver` is no longer an `EventEmitter`. Every tutorial online is wrong for this version.
-- `encoder` is not a valid `joinVoiceChannel` option.
-- `@discordjs/opus` will not build here — no MSVC build tools — so `opusscript` is the pure-JS
-  substitute. The bot only ever decodes and never encodes, so it never plays audio anyway.
-
-### Why Phase 0 exists
-
-Discord made **DAVE** end-to-end voice encryption mandatory on every voice channel in **March 2026**.
-`@discordjs/voice` 0.19.0 shipped DAVE support that does not work for receiving: bots enter reconnect
-loops, `receiver.speaking` never fires, and audio packets fail with
-`DecryptionFailed(UnencryptedWhenPassthroughDisabled)`. Worse than silence — the dropped packets
-decode to noise, and Whisper confidently invents sentences out of it. A transcription feature that
-hallucinates evidence is worse than no transcription feature.
-
-The issue ([discordjs#11419](https://github.com/discordjs/discord.js/issues/11419)) was closed as fixed
-in 0.19.2 with `@snazzah/davey` 0.1.12. Current versions as of 2026-10-12: `@discordjs/voice` 0.19.2,
-`@snazzah/davey` 0.1.12, `discord.js` 14.27.0 (already installed).
-
-That is a claim from an upstream changelog, not something this project has verified. So:
-
-> **Phase 0 is a half-day spike and everything else waits for it.** Join a voice channel with
-> `@discordjs/voice` 0.19.2 + davey 0.1.12, record ten seconds of one person speaking German, write a WAV,
-> and run it through faster-whisper. The spike answers three questions, in this order: do we get audio
-> at all, do the German words come back correctly, and does `vad_filter` leave a deliberately silent
-> segment empty. The third is the one that matters most — a VAD filter that lets silence through would
-> make every recording partly fiction, and it is the failure with the worst consequences and the
-> quietest symptoms. If the words do not come back, the fallback is py-cord 2.6.1, which reportedly
-> handles DAVE correctly on the same channel — but that means a second bot process in Python, so we
-> decide then, not now.
-
-A fallback of last resort is Discord's own transcription, which is a human clicking a button and is not
-something a bot can automate.
+Discord encrypts voice end-to-end, and the library version that handles it correctly is pinned in
+`bot/package.json`. There is an upstream issue history worth knowing about
+([discordjs#11419](https://github.com/discordjs/discord.js/issues/11419)) because the wrong version
+produces noise rather than silence, and noise is what Whisper turns into invented sentences. That
+failure mode is why Phase 0 exists at all — but it is a build-time detail, not something an operator
+has to reason about. It lives in LEARNINGS.md with the other two findings from building the spike: the
+`speaking` event moving to `SpeakingMap` in 0.19.x, and `opusscript` standing in for an opus native
+build that does not compile on this machine.
 
 ## Phase 1 — Transcriber
 
@@ -301,7 +279,9 @@ change at human speed.
 
 ## Risks, honestly
 
-- **DAVE.** Phase 0 exists for this reason and must not be skipped.
+- **Unverified capture.** The bot has never received a packet from Discord. Until the spike runs
+  against a live channel, "the bot can hear" is an assumption. If it comes back silent, check the
+  channel's **Connect** and **Speak** permissions before suspecting the code.
 - **German RP jargon.** Characters have invented names, street names and department slang. Whisper will
   mangle them. Mitigation: segment-level transcription so one bad segment is visible and correctable,
   and a transcript is labelled as machine output, never as evidence on its own.
