@@ -46,7 +46,6 @@ local SessionGuard = Nifty.SessionGuard
 local Economy   = Nifty.Economy
 local Inventory = exports['nifty-inventory']
 local Stuetze   = Nifty.Stuetze
-local Phone     = exports['nifty-phone']
 
 -- Owned is the per-character clothing ownership table from the base. The
 -- finishAppearance hook below uses Owned.grant to convert the outfit chosen
@@ -168,13 +167,6 @@ local function enterWorld(src, character, hasSession)
   spawn = lastPosition or (SpawnPoints[character.spawn_point] or SpawnPoints.default),
   usePicker = false,
   })
-
-  -- The unread badge has to exist before the player first presses the key,
-  -- otherwise the phone opens with no idea how many messages are waiting. Sent
-  -- only if the character is actually carrying a handset (ADR-0018).
-  if Inventory:has(character.id, 'phone', 1) then
-    TriggerClientEvent('nifty:client:phoneUnread', src, Phone:unreadCount(character.id))
-  end
 end
 
 -- Client signals its resources are up. Used instead of guessing when the

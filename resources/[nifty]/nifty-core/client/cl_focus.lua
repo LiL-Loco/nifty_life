@@ -16,8 +16,8 @@
   all instead of each resource doing the obvious thing.
 
   The contract a system resource uses:
-    exports.nifty_ui:acquire('nifty-phone')   -> true|false
-    exports.nifty_ui:release('nifty-phone')
+    exports.nifty_ui:acquire('nifty-creator') -> true|false
+    exports.nifty_ui:release('nifty-creator')
     exports.nifty_ui:holder()                 -> string|nil
 
   Acquire is a REQUEST, not a steal. A surface that is already open must be told

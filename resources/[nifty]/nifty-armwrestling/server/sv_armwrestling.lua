@@ -43,8 +43,8 @@ local PROXIMITY_TRIGGER   = 2.0    -- how close the proximity blip should be to 
 -- state[tableIdx] = {
 --   p1 = server id or nil,
 --   p2 = server id or nil,
---   started = os.clock() when the match went live, nil while waiting for a second player
---   tEnd = os.clock() when the server will pick a winner
+--   started = os.time() when the match went live, nil while waiting for a second player
+--   tEnd = os.time() when the server will pick a winner
 --   pos = current hand position (0.0 .. 1.0); 0.5 is the start
 --   tick = handle of the Citizen thread driving the hand tick
 -- }
@@ -103,7 +103,7 @@ end
 
 local function startMatch(tableIdx)
   local m = state[tableIdx]
-  m.started = os.clock()
+  m.started = os.time()
   m.tEnd = m.started + MATCH_START_DELAY + MATCH_HOLD_SECONDS
   m.pos = 0.5
   broadcast(tableIdx, 'nifty:arm:start', tableIdx, m.tEnd)
@@ -134,7 +134,7 @@ local function startMatch(tableIdx)
 
       broadcast(tableIdx, 'nifty:arm:tick', tableIdx, cur.pos)
 
-      if os.clock() >= cur.tEnd then
+      if os.time() >= cur.tEnd then
         -- Pick a winner. P1 and P2 each get a 50/50 shot, with a small
         -- bias toward whichever side the hand is already on (closer to
         -- losing, less likely to win). This makes the game feel like the

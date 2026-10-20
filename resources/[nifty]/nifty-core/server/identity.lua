@@ -1,7 +1,11 @@
 -- Identity (ADR-0014 layer 3).
 --
--- Owns the character lifecycle and the session record:
---   connect -> whitelist -> load-or-create character -> play -> save -> end session
+-- Owns the character record and the session lifecycle:
+--   connect -> whitelist -> load character -> play -> save -> end session
+--
+-- Character creation itself lives on the website and is performed by the
+-- create_character_from_web stored procedure (ADR-0021). The base never
+-- inserts a character, so there is no "or-create" half here.
 --
 -- The rule this file exists to enforce is ADR-0001: a FiveM slot ID is never a
 -- key. It is recorded once in `sessions` and nowhere else, and the in-memory
@@ -11,19 +15,15 @@
 
 local RESOURCE = GetCurrentResourceName()
 
-math.randomseed(os.time() + math.floor(os.clock() * 1000))
+-- Lua 5.4 auto-seeds `math.random` with a high-quality seed. The previous
+-- `math.randomseed(os.time() + math.floor(math.clock() * 1000))` was a
+-- carryover from earlier FiveM versions; both `os.clock` and `math.clock`
+-- are removed from the server-side sandbox now (timing-attack protection),
+-- and seeding is no longer needed.
 
 -- Runtime-only. Maps FiveM slot -> { characterId, sessionId }. Lost on
 -- restart, which is fine: `sessions` is the durable record, this is a cache.
 local ActiveSessions = {}
-
--- Per-player attempt counters, so a client cannot spam character creation.
-local CreationAttempts = {}
-local MAX_CREATE_ATTEMPTS = 5
-
-local function uuid()
-  return Nifty.newUuid()
-end
 
 Identity = {}
 
@@ -32,7 +32,7 @@ Identity = {}
 -- Two APIs can answer this and only one is guaranteed to exist. `GetPlayerIdentifiers`
 -- has been in the server runtime since forever and returns prefixed entries like
 -- `discord:123456`. `GetPlayerIdentifiersByType` is a newer convenience wrapper that
--- is NOT present on every build — calling it unconditionally kills the resource on
+-- is NOT present on every build - calling it unconditionally kills the resource on
 -- the first connection, which is exactly what happened on this server. So the
 -- guaranteed API is primary and the optional one is only used when it exists.
 --
@@ -101,146 +101,6 @@ function Identity.getCharacter(accountId)
   ]], { accountId }, 'identity:character')
 end
 
--- Create the character and its wallet together. A character without a wallet is
--- an unplayable state, so both rows go in one transaction or neither does.
--- Create the one character this account is allowed.
---
--- `number` is REQUIRED and comes from the caller, which got it from
--- `exports['nifty-phone']:reserve()`. That inversion is the reason the base has
--- no idea the phone system exists.
---
--- It used to: this function called `Phone.newNumber()` and
--- `Inventory.grantStartingItems(characterId)` directly, because all three lived in
--- one resource and a global was free. After the split a global is not free — it is
--- a resource boundary. Leaving those calls in would make nifty-core depend on
--- nifty-phone and nifty-inventory, while nifty-inventory already depends on
--- nifty-core for the database. Two resources that each need the other to have
--- started is a boot order with no valid first element, and FXServer resolves it by
--- failing one of them at random.
---
--- The orchestrator is nifty-world (sv_main.lua), which is allowed to know about
--- both systems because its whole job is the connect-to-play sequence.
---
--- The number still has to land in the SAME transaction as the character row
--- (ADR-0021) — a character without a number could never be messaged, and the
--- number is permanent, so it cannot be added afterwards as a convenience. Passing
--- it in rather than calling out preserves that: the INSERT below is still inside
--- this transaction, it just receives its value from outside.
-function Identity.createCharacter(src, payload, number)
-  local attempts = (CreationAttempts[src] or 0) + 1
-  CreationAttempts[src] = attempts
-  if attempts > MAX_CREATE_ATTEMPTS then
-    return nil, 'too many attempts'
-  end
-
-  -- Refused here rather than allowed to reach the transaction and fail there.
-  -- "No free number" is a real condition and it deserves its own message; a
-  -- UNIQUE violation twenty lines down reads like a database fault.
-  if type(number) ~= 'string' or number == '' then
-    return nil, 'no free phone number'
-  end
-
-  local account = Identity.resolveAccount(src)
-  if not account then return nil, 'no account' end
-
-  if Identity.getCharacter(account.id) then
-    return nil, 'this account already has a character'
-  end
-
-  local firstName, err = Validate.characterName(payload and payload.firstName)
-  if not firstName then return nil, err end
-
-  local lastName
-  if payload and payload.lastName and payload.lastName ~= '' then
-    lastName, err = Validate.characterName(payload.lastName)
-    if not lastName then return nil, err end
-  end
-
-  local dateOfBirth
-  dateOfBirth, err = Validate.dateOfBirth(payload and payload.dateOfBirth)
-  if not dateOfBirth and err then return nil, err end
-
-  local gender
-  gender, err = Validate.gender(payload and payload.gender)
-  if not gender then return nil, err end
-
-  local appearance
-  appearance, err = Validate.appearance(payload and payload.appearance)
-  if not appearance then return nil, err end
-
-  local spawnPoint
-  spawnPoint, err = Validate.spawnPoint(payload and payload.spawnPoint)
-  if not spawnPoint then return nil, err end
-
-  local characterId = uuid()
-  local encoded = json.encode(appearance)
-
-  -- ADR-0021: the number is assigned here, inside the same transaction as the
-  -- character. A character with no number could not be messaged, and the number
-  -- is permanent, so it cannot be added later as a convenience — it has to exist
-  -- from the first second of the character's life.
-  --
-  -- The VALUE was reserved by the caller (nifty-phone). Collision is handled by
-  -- asking the database there rather than retrying inside this transaction: a
-  -- transaction cannot be partially retried from the outside, so the rare collision
-  -- must never reach it. If one does anyway, the UNIQUE constraint is the backstop
-  -- and the whole insert fails cleanly.
-  if not number then return nil, 'no free phone number' end
-
-  -- ADR-0008 is enforced by UNIQUE, not by this check. If two requests race,
-  -- the second insert fails here and is reported honestly.
-  --
-  -- `last_name` and `date_of_birth` are both OPTIONAL — most characters will have
-  -- no second name, and the date of birth is only refused when it is malformed,
-  -- not when it is absent. So both arrive here as nil, and a nil in the middle
-  -- of a Lua table ends the table: `#{a, b, nil, nil, c, d}` has an undefined
-  -- length, the driver receives fewer values than there are placeholders, and
-  -- the whole INSERT fails to bind. Character creation was broken for exactly
-  -- the players who left a field empty.
-  --
-  -- NULLIF(?, '') keeps the parameter list hole-free while the columns stay
-  -- genuinely NULL, which is what "optional" has to mean in the schema.
-  local ok = Db.transaction({
-    {
-      sql = [[INSERT INTO characters
-                (id, account_id, first_name, last_name, date_of_birth, gender, appearance, spawn_point)
-              VALUES (?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?)]],
-      params = { characterId, account.id, firstName, lastName or '', dateOfBirth or '',
-                 gender, encoded, spawnPoint },
-    },
-    {
-      sql = [[INSERT INTO wallets (character_id, cash, bank)
-              VALUES (?, ?, ?)]],
-      params = { characterId,
-                 tostring(GetSetting('economy.starting.cash', 0)),
-                 tostring(GetSetting('economy.starting.bank', 0)) },
-    },
-    {
-      sql = [[UPDATE accounts SET status = 'active' WHERE id = ?]],
-      params = { account.id },
-    },
-    {
-      sql = [[INSERT INTO phone_accounts (character_id, number, is_active)
-              VALUES (?, ?, 1)]],
-      params = { characterId, number },
-    },
-  }, 'identity:createCharacter')
-
-  if not ok then return nil, 'could not create character' end
-
-  -- ADR-0018: every character starts with a handset and an ID, but that is the
--- INVENTORY system's decision, not the base's. It used to be granted right here,
--- which meant nifty-core wrote into a table and called a function it had no business
--- knowing. The orchestrator (nifty-world) now calls
--- `exports['nifty-inventory']:grantStartingItems(characterId)` after this returns,
--- and it is idempotent — the same character granted twice is the same state, so a
--- retry cannot duplicate the handset.
-
-  print(('[%s] created character %s for account %s'):format(RESOURCE, characterId, account.id))
-
-  return Identity.getCharacter(account.id)
-end
-
 -- Open a session. The slot ID goes in for auditing only.
 function Identity.beginSession(src, characterId)
   local sessionId = Db.insert([[
@@ -270,7 +130,7 @@ function Identity.activeSlots()
 end
 
 -- The DB session id for this connection, or nil. Used by the Stütze to link a
--- payout to the session it was paid in — ADR-0009 needs that link to tell
+-- payout to the session it was paid in - ADR-0009 needs that link to tell
 -- "someone stayed online too long" apart from "someone was paid too much".
 function Identity.getActiveSessionId(src)
   local entry = ActiveSessions[src]
@@ -292,7 +152,7 @@ function Identity.saveCharacter(src, patch)
     end
     -- Every piece the loadout wears must be one this character owns.
     -- checkEquipped is what stops a forged saveCharacter from sneaking
-    -- a drawable past — a client cannot claim they own a piece they did
+    -- a drawable past - a client cannot claim they own a piece they did
     -- not buy or pick in the creator.
     local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
     if not owned then
@@ -340,7 +200,6 @@ function Identity.endSession(src)
   end
 
   ActiveSessions[src] = nil
-  CreationAttempts[src] = nil
 end
 
 -- Identity closes its own sessions.
@@ -348,12 +207,11 @@ end
 -- This lived in sv_main and was moved here deliberately. sv_main orchestrates a
 -- connection; the session belongs to this module. Registering it here also means
 -- the guarantee is exercised by the harness, which loads this file but not
--- sv_main — and it keeps the rule "the guard drives teardown, the owner performs
+-- sv_main - and it keeps the rule "the guard drives teardown, the owner performs
 -- it" free of exceptions.
 SessionGuard.onClose('identity', Identity.endSession)
 
 exports('getActiveCharacter', Identity.getActiveCharacter)
 exports('activeSlots', Identity.activeSlots)
-exports('createCharacter', Identity.createCharacter)
 exports('saveCharacter', Identity.saveCharacter)
 exports('endSession', Identity.endSession)

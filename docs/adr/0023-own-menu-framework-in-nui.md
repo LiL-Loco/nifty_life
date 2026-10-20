@@ -27,7 +27,6 @@ Everything else keeps its own surface, because none of them is a menu:
 | `nifty-ui` | **yes** | Renders every menu; owns focus |
 | `nifty-creator` | no | Builds a menu through exports |
 | `nifty-chat` | yes | The log is always drawn, and must survive any menu opening |
-| `nifty-phone` | yes | A persistent overlay, not a menu |
 | `nifty-world` | yes | HUD is always drawn |
 
 ## What it does not change

@@ -5,7 +5,7 @@
 
   A `local` in fxmanifest does NOT reach the files loaded after it. Every
   `server_script` chunk is compiled and run in its OWN scope, so a local written in
-  fxmanifest is gone by the time the next file runs — and the failure shows up as a
+  fxmanifest is gone by the time the next file runs -- and the failure shows up as a
   nil index deep inside the business logic, pointing at the database rather than
   at scope.
 
@@ -25,27 +25,44 @@ if not Nifty.core then
   return
 end
 
-Nifty.Db = Nifty.core.Db
-Nifty.GetSetting = Nifty.core.GetSetting
-Nifty.Identity = Nifty.core.Identity
+-- Fail loud, not silent, when the facade is missing a field we depend on.
+-- A nil here used to propagate to whichever system first tried to use the
+-- value, and the failure pointed at the wrong file. Catching it here makes
+-- the cause one line long and the fix obvious: which nifty-core server_script
+-- failed to load, or which global was never assigned. The base sets the
+-- facade in sv_facade.lua; whatever feeds it failed.
+local function requireFacadeField(name, value)
+  if value == nil then
+    local msg = ('nifty-world: facade field %q is nil. nifty-core likely ' ..
+      'failed to load a server_script (check its console for the actual ' ..
+      'error), or the corresponding global was never assigned.'):format(name)
+    print(msg)
+    error(msg, 2)
+  end
+  return value
+end
 
---- SessionGuard too. It looked like base plumbing, but three systems register teardown with it
---- (economy stops the Stuetze, jobs settles wages, world clears bootstrap state), and a
---- global that only the base could see would leave all three silently nil.
-Nifty.SessionGuard = Nifty.core.SessionGuard
+Nifty.Db           = requireFacadeField('Db',           Nifty.core.Db)
+Nifty.GetSetting   = requireFacadeField('GetSetting',   Nifty.core.GetSetting)
+Nifty.Identity     = requireFacadeField('Identity',     Nifty.core.Identity)
 
---- Economy, Stuetze and Jobs (the absorbed resources' globals) are exposed
---- through the same facade as Db/Identity/etc. so server-side consumers can
---- use `Nifty.Economy:round(...)` etc. without round-tripping through exports
---- per call.
-Nifty.Economy = Nifty.core.Economy
-Nifty.Stuetze = Nifty.core.Stuetze
-Nifty.Jobs    = Nifty.core.Jobs
+-- SessionGuard too. It looked like base plumbing, but three systems register teardown
+-- with it (economy stops the Stuetze, jobs settles wages, world clears bootstrap
+-- state), and a global that only the base could see would leave all three silently
+-- nil.
+Nifty.SessionGuard = requireFacadeField('SessionGuard', Nifty.core.SessionGuard)
 
--- Owned follows the same pattern. The finishAppearance hook in sv_main.lua
--- grants per-piece ownership after a creator save.
-Nifty.Owned    = Nifty.core.Owned
+-- Economy, Stuetze and Jobs (the absorbed resources' globals) are exposed through
+-- the same facade as Db/Identity/etc. so server-side consumers can use
+-- `Nifty.Economy:round(...)` etc. without round-tripping through exports per call.
+Nifty.Economy      = requireFacadeField('Economy',      Nifty.core.Economy)
+Nifty.Stuetze      = requireFacadeField('Stuetze',      Nifty.core.Stuetze)
+Nifty.Jobs         = requireFacadeField('Jobs',         Nifty.core.Jobs)
 
--- Price is the per-(drawable, texture) clothing pricebook. Same chain as
--- Owned: Db-backed in nifty-core, exposed through the facade.
-Nifty.Price    = Nifty.core.Price
+-- Owned follows the same pattern. The finishAppearance hook in sv_main.lua grants
+-- per-piece ownership after a creator save.
+Nifty.Owned        = requireFacadeField('Owned',        Nifty.core.Owned)
+
+-- Price is the per-(drawable, texture) clothing pricebook. Same chain as Owned:
+-- Db-backed in nifty-core, exposed through the facade.
+Nifty.Price        = requireFacadeField('Price',        Nifty.core.Price)

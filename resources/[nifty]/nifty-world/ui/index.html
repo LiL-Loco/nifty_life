@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <div id="creator" class="creator hidden">
+ <div id="creator" class="creator hidden">
 
     <header class="creator__header">
       <h1>Character erstellen</h1>
@@ -125,9 +125,9 @@
     while the input is open. Nothing here opens NUI focus on its own — see
     client/cl_chat.lua, which owns that decision.
   -->
-  <div id="chatLog" class="chat-log"></div>
+ <div id="chatLog" class="chat-log"></div>
 
-  <div id="chatInput" class="chat-input hidden">
+ <div id="chatInput" class="chat-input hidden">
     <span class="chat-input__caret">/</span>
     <input
       type="text"
@@ -139,7 +139,7 @@
       placeholder="Nachricht — Enter zum Senden, Esc zum Abbrechen">
   </div>
 
-  <div id="panel" class="panel-shell hidden">
+ <div id="panel" class="panel-shell hidden">
     <div class="panel-shell__inner">
       <header class="panel-shell__header">
         <h2 id="panelTitle">—</h2>
@@ -149,52 +149,6 @@
     </div>
   </div>
 
-  <!-- Phone (ADR-0018, ADR-0021) ----------------------------------------- -->
-  <!--
-    A separate overlay rather than a fourth panel. The panel shell is sized for
-    lists of items; a conversation is a different shape, and this is also the
-    surface Peeper and the document apps will land on (ADR-0019).
-  -->
-  <div id="phone" class="phone hidden">
-
-    <div class="phone__device">
-      <div class="phone__statusbar">
-        <span id="phoneNumber" class="phone__number">—</span>
-        <span class="phone__carrier">Nifty</span>
-        <span id="phoneBadgeTop" class="phone__badge hidden">0</span>
-      </div>
-
-      <nav class="phone__tabs">
-        <button type="button" class="phone__tab is-active" data-app="messages">Nachrichten</button>
-        <button type="button" class="phone__tab" data-app="compose">Schreiben</button>
-      </nav>
-
-      <!-- Messages ------------------------------------------------------- -->
-      <section class="phone__app is-active" id="appMessages">
-        <div id="phoneList" class="phone__list"></div>
-      </section>
-
-      <!-- Compose -------------------------------------------------------- -->
-      <section class="phone__app" id="appCompose">
-        <label class="phone__field">
-          <span class="phone__label">Nummer</span>
-          <input type="text" id="phoneTo" placeholder="555-0000" maxlength="16" autocomplete="off">
-        </label>
-        <label class="phone__field">
-          <span class="phone__label">Nachricht</span>
-          <textarea id="phoneBody" rows="6" placeholder="Nachricht schreiben..."></textarea>
-        </label>
-        <button type="button" id="phoneSend" class="btn btn--primary">Senden</button>
-        <p class="phone__hint" id="phoneComposeHint">
-          Nummer und Empfänger werden vom Server geprüft, nicht von diesem Fenster.
-        </p>
-      </section>
-
-      <footer class="phone__homebar"></footer>
-    </div>
-
-  </div>
-
-  <script src="app.js"></script>
+ <script src="app.js"></script>
 </body>
 </html>

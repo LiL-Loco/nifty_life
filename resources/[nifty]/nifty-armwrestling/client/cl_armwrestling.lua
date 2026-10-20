@@ -51,8 +51,8 @@ local RESULT_WIN   = 'mp_player_int_uppersmoker'
 
 local myTable = nil      -- table index when the local player is in a match
 local mySide  = nil      -- 1 = side a, 2 = side b
-local myTEnd  = nil      -- os.clock() at which the server will end the match
-local myTStart = nil     -- os.clock() at which the server fired nifty:arm:start
+local myTEnd  = nil      -- os.time() at which the server will end the match
+local myTStart = nil     -- os.time() at which the server fired nifty:arm:start
 local myPos   = 0.5      -- last hand position received from the server (0..1)
 local promptActive = false
 
@@ -229,7 +229,7 @@ end
 
 local function startHold(tEnd)
   myTEnd   = tEnd
-  myTStart = os.clock()
+  myTStart = os.time()
   myPos    = 0.5
 end
 
@@ -267,9 +267,9 @@ local function playResult(won)
   -- losses. We do the same with the player's own first name.
   local name = GetPlayerName(PlayerId()) or 'Du'
   if won then
-    myBigMsg = { text = name .. ' gewinnt',  r = 80, g = 220, b = 110, a = 255, untilAt = os.clock() + BIG_MSG_DURATION }
+    myBigMsg = { text = name .. ' gewinnt',  r = 80, g = 220, b = 110, a = 255, untilAt = os.time() + BIG_MSG_DURATION }
   else
-    myBigMsg = { text = name .. ' verliert', r = 220, g = 70,  b = 70,  a = 255, untilAt = os.clock() + BIG_MSG_DURATION }
+    myBigMsg = { text = name .. ' verliert', r = 220, g = 70,  b = 70,  a = 255, untilAt = os.time() + BIG_MSG_DURATION }
   end
 end
 
@@ -332,7 +332,7 @@ CreateThread(function()
       -- second; on the GO tick we leave the scaleform up for the rest of
       -- the second so it doesn't blank between numbers.
       if myTStart then
-        local elapsed = os.clock() - myTStart
+        local elapsed = os.time() - myTStart
         if elapsed < MATCH_START_DELAY then
           local phase = math.floor(elapsed) + 1
           local text
@@ -345,7 +345,7 @@ CreateThread(function()
       -- Big-message banner: shown for BIG_MSG_DURATION seconds after
       -- a match result. Wins green, losses red, both with the player's
       -- own first name as the headline.
-      if myBigMsg and os.clock() < myBigMsg.untilAt then
+      if myBigMsg and os.time() < myBigMsg.untilAt then
         drawBigMessage(myBigMsg.text, myBigMsg.r, myBigMsg.g, myBigMsg.b, myBigMsg.a)
       end
 

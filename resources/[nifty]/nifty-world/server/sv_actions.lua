@@ -22,7 +22,6 @@ local RESOURCE = GetCurrentResourceName()
 --- From the base facade, fetched by shared/core.lua at load. These were globals
 --- when this file lived inside nifty-core; see the note in shared/core.lua about
 --- why a local in fxmanifest would not have survived the chunk boundary.
-local Db = Nifty.Db
 local Identity = Nifty.Identity
 local SessionGuard = Nifty.SessionGuard
 
@@ -36,7 +35,6 @@ local Economy   = Nifty.Economy
 local Inventory = exports['nifty-inventory']
 local Jobs      = Nifty.Jobs
 local Shop      = exports['nifty-shop']
-local Phone     = exports['nifty-phone']
 local Ownership = exports['nifty-housing']
 
 --- Actions allowed per window. A shop purchase opens a transaction and writes
@@ -265,107 +263,6 @@ RegisterNetEvent('nifty:server:useItem', function(code, quantity)
 
   local ok, err = Inventory:use(characterId, code, quantity or 1)
   respond(src, ok, err)
-end)
-
--- ---------------------------------------------------------------------------
--- Phone (ADR-0018, ADR-0019, ADR-0021)
--- ---------------------------------------------------------------------------
-
---- The handset is an inventory item, so holding one is checked here rather than
---- assumed. A character without the item cannot open the account behind someone
---- else's back ÔÇö which is the entire reason the device is not the identity.
-local function hasPhone(characterId)
-  return Inventory:has(characterId, 'phone', 1)
-end
-
-RegisterNetEvent('nifty:server:phoneInbox', function()
-  local src = source
-  local characterId = sessionCharacter(src)
-  if not characterId then return end
-
-  -- Answered, not ignored. A player who presses the key and gets no reaction
-  -- cannot tell "you have no phone" from "the server is broken", and the second
-  -- reading is the expensive one ÔÇö it sends them to look for a bug that is not
-  -- there.
-  if not hasPhone(characterId) then
-    return respond(src, false, 'Du hast kein Telefon dabei.')
-  end
-
-  TriggerClientEvent('nifty:client:phone', src, {
-    account = Phone:getAccount(characterId),
-    inbox = Phone:inbox(characterId, 25, 0),
-    unread = Phone:unreadCount(characterId),
-  })
-end)
-
-RegisterNetEvent('nifty:server:phoneSend', function(recipientNumber, body)
-  local src = source
-  local allowed, tooFast = allowAction(src)
-  if not allowed then return respond(src, false, tooFast) end
-
-  local characterId = sessionCharacter(src)
-  if not characterId then return end
-  if not hasPhone(characterId) then return respond(src, false, 'you have no phone') end
-
-  if type(recipientNumber) ~= 'string' or type(body) ~= 'string' then
-    return respond(src, false, 'bad request')
-  end
-
-  -- The recipient is resolved from a NUMBER the player typed, never from a
-  -- character id the client supplied ÔÇö that would let anyone message anyone.
-  local recipient = Phone:findByNumber(recipientNumber)
-  if not recipient then return respond(src, false, 'unknown number') end
-
-  local _, err = Phone:send(characterId, recipient.id, body)
-  respond(src, err == nil, err)
-end)
-
-RegisterNetEvent('nifty:server:phoneRead', function()
-  local src = source
-  local characterId = sessionCharacter(src)
-  if not characterId then return end
-
-  Phone:markAllRead(characterId)
-  TriggerClientEvent('nifty:client:phoneUnread', src, 0)
-end)
-
-RegisterNetEvent('nifty:server:phoneClear', function(messageId)
-  local src = source
-  local characterId = sessionCharacter(src)
-  if not characterId then return end
-
-  if type(messageId) ~= 'string' then return end
-  if not Phone:clear(characterId, messageId) then return end
-
-  TriggerClientEvent('nifty:client:phone', src, {
-    account = Phone:getAccount(characterId),
-    inbox = Phone:inbox(characterId, 25, 0),
-    unread = Phone:unreadCount(characterId),
-  })
-end)
-
-RegisterNetEvent('nifty:server:phoneReport', function(messageId, reason)
-  local src = source
-  local allowed, tooFast = allowAction(src)
-  if not allowed then return respond(src, false, tooFast) end
-
-  local characterId = sessionCharacter(src)
-  if not characterId then return end
-
-  if type(messageId) ~= 'string' or type(reason) ~= 'string' then
-    return respond(src, false, 'bad request')
-  end
-
-  -- Who is being reported is derived from the MESSAGE, never from the client.
-  -- Otherwise a player could file a report against anyone by typing their name.
-  local message = Db.one(
-    'SELECT sender_id FROM phone_messages WHERE id = ? AND recipient_id = ?',
-    { messageId, characterId }, 'phone:reportTarget')
-
-  if not message then return respond(src, false, 'unknown message') end
-
-  local _, err = Phone:report(characterId, message.sender_id, messageId, reason)
-  respond(src, err == nil, err)
 end)
 
 -- ---------------------------------------------------------------------------
