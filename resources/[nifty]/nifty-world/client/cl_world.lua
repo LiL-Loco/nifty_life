@@ -109,8 +109,19 @@ AddEventHandler('onResourceStop', function(resource)
   releaseFocus()
 end)
 
+-- Not just the focus flag. A SOFT disconnect — the server restarting, a network
+-- blip — fires playerDropped while this Lua VM survives, so every "is open"
+-- flag set before it is still set afterwards. Chat is the sharp case: Input.open
+-- stayed true, so openInput() returned early and T did nothing for the rest of
+-- the session, with no error anywhere and nothing on screen to explain it.
+--
+-- The NUI message matters for the same reason: the CEF survives a soft drop
+-- too, so without it the panel is still drawn on the other side of it.
 AddEventHandler('playerDropped', function()
   focusHeld = false
+  panelOpen = false
+  State.panel = nil
+  render()
 end)
 
 local function setPanel(name)

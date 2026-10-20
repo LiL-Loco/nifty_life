@@ -60,6 +60,8 @@ AddEventHandler('onResourceStop', function(resource)
   releaseFocus()
 end)
 
+-- This resource holds no open flag of its own, so clearing the focus is all
+-- there is to do. The panel state lives in nifty-world.
 AddEventHandler('playerDropped', function()
   focusHeld = false
 end)

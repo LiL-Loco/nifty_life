@@ -82,6 +82,11 @@ local function tryCall(name, ...)
   return fn(...)
 end
 
+-- Face-bone projection runs only while that panel is up; the flag lives here,
+-- next to the focus state, because the playerDropped handler below has to clear
+-- it and a local declared after its first use would silently become a global.
+local faceBonesActive = false
+
 -- ---------------------------------------------------------------- focus
 -- NUI focus, owned entirely by this resource. Nothing about it is shared.
 --
@@ -139,8 +144,18 @@ AddEventHandler('onResourceStop', function(resource)
   releaseFocus()
 end)
 
+-- Not just the focus flag. A SOFT disconnect — the server restarting, a network
+-- blip — fires playerDropped while this Lua VM survives, so every "is open"
+-- flag set before it is still set afterwards. Chat is the sharp case: Input.open
+-- stayed true, so openInput() returned early and T did nothing for the rest of
+-- the session, with no error anywhere and nothing on screen to explain it.
+--
+-- The NUI message matters for the same reason: the CEF survives a soft drop
+-- too, so without it the panel is still drawn on the other side of it.
 AddEventHandler('playerDropped', function()
   focusHeld = false
+  faceBonesActive = false
+  SendNUIMessage({ action = 'creator:close' })
 end)
 
 -- ---------------------------------------------------------------- push helpers
@@ -235,7 +250,6 @@ end
 --
 -- 24 bones / frame * 8 bytes / bone = a few hundred bytes per push.
 -- FiveM's CEF can sustain that easily at 60 fps.
-local faceBonesActive = false
 local FACE_BONE_PUSH_MS = 1000 / 30  -- cap at 30 Hz to keep CPU in check
 
 Citizen.CreateThread(function()
