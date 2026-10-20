@@ -137,14 +137,27 @@ local sfCountdown = nil
 local sfBigMsg    = nil
 
 local function requireScaleform(name)
+  -- REQUEST_SCALEFORM_MOVIE RETURNS THE HANDLE.
+  --
+  -- There is no GET_SCALEFORM_MOVIE_HANDLE. The name reads exactly right and
+  -- does not exist in the game's native set - not in the documented ones and
+  -- not in the undocumented ones - so the call was a call on nil, and the
+  -- countdown and the win banner never appeared.
+  --
+  -- The request is made unconditionally because the handle is what it
+  -- returns, and the movie is released once at the end of the match - asking
+  -- for it again when it is already resident is what keeps that balanced.
+  local handle = RequestScaleformMovie(name)
+
   if not HasScaleformMovieLoaded(name) then
-    RequestScaleformMovie(name)
     local deadline = GetGameTimer() + 3000
     while not HasScaleformMovieLoaded(name) and GetGameTimer() < deadline do
       Wait(0)
     end
   end
-  return GetScaleformMovieHandle(name) or nil
+
+  if not HasScaleformMovieLoaded(name) then return nil end
+  return handle or nil
 end
 
 local function drawBigMessage(text, r, g, b, a)

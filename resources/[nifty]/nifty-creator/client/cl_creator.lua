@@ -1305,7 +1305,18 @@ exports('setHairColour', function(channel, index)
   if channel ~= 'primary' and channel ~= 'highlight' then return end
   face.hairColour[channel] = index
   -- Native call mirrors the old per-channel OnListChanged path.
-  SetPedHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight or 0)
+  --
+  -- THROUGH nifty-world's resolved natives, not through the bare global. This
+  -- client spells the native `SetPedHairColor` on some builds and
+  -- `_SetPedHairColor` on others, and nifty-world is the one place that
+  -- knows which. Calling the bare name here was a crash waiting for the build
+  -- that does not have it - and this file's own rule, written next to
+  -- refresh() above, says that this resource must not have its own answer to
+  -- that question.
+  local n = natives()
+  if type(n.setHairColor) == 'function' then
+    n.setHairColor(PlayerPedId(), face.hairColour.primary or 0, face.hairColour.highlight or 0)
+  end
   refresh()
 end)
 
@@ -1322,8 +1333,13 @@ end)
 exports('setEyeColour', function(index)
   if type(index) ~= 'number' then return end
   face.eyeColour = index
-  if type(SetPedEyeColor) == 'function' then
-    SetPedEyeColor(PlayerPedId(), index)
+  -- Same reasoning as the hair colour above. The guard was on a BARE global:
+  -- on a build that only has `_SetPedEyeColor` the guard failed and the eye
+  -- colour silently never changed - the player moves the slider, nothing
+  -- happens, and nothing says why.
+  local n = natives()
+  if type(n.setEyeColor) == 'function' then
+    n.setEyeColor(PlayerPedId(), index)
   end
   refresh()
 end)
