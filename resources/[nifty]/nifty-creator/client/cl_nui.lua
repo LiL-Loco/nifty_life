@@ -103,8 +103,25 @@ end
 
 local function sendOpen()
   if not acquireFocus() then
+    -- WHY THE LOCAL BINDING — this line used to be the whole expression:
+    --   tostring(Focus and type(Focus.holder) == 'function' and Focus.holder() or 'unknown')
+    --
+    -- `Focus.holder()` crosses a RESOURCE boundary, and an export that returns
+    -- nil comes back over that boundary as ZERO values, not as one nil. Lua only
+    -- collapses a multi-value call to a single value when it is NOT the direct
+    -- argument of another call — so the inline `tostring(Focus.holder())` became
+    -- `tostring()` with no argument at all and threw
+    --   bad argument #1 to 'tostring' (value expected)
+    -- on the very line that was supposed to EXPLAIN the failure.
+    --
+    -- Binding it first makes the arity explicit: no values becomes plain nil,
+    -- which then renders as "nil" like any other value. Verified against lua 5.4.
+    local holder
+    if Focus and type(Focus.holder) == 'function' then
+      holder = Focus.holder()
+    end
     print(('[cl_nui] could not acquire focus (holder: %s)'):format(
-      Focus and type(Focus.holder) == 'function' and tostring(Focus.holder()) or 'unknown'))
+      tostring(holder or 'unknown')))
     return
   end
   local payload = buildPayload()
@@ -367,6 +384,16 @@ end)
 -- `nifty:client:openCreator` is the entry point. The server fires it once
 -- the player has been authorised (no character yet, or force re-create).
 -- The handler opens the camera, parks the player, then sends the NUI.
+--
+-- The RegisterNetEvent is load-bearing and it lives HERE, in the resource that
+-- OWNS the event, not in nifty-world (which only reacts to it). FiveM keeps one
+-- shared handler table per event name, and the server's TriggerClientEvent
+-- arrives with eventSource 'net'; a table without `safeForNet` is DROPPED and
+-- the client only prints "was not safe for net". That is a black creator with
+-- no error anywhere else - the message looks like a server problem and is
+-- entirely a client-side registration problem. Declaring it in the owner means
+-- it does not matter whether nifty-world is started, restarted, or fails.
+RegisterNetEvent('nifty:client:openCreator')
 AddEventHandler('nifty:client:openCreator', function(data)
   tryCall('openCreator', data or {})
   sendOpen()
