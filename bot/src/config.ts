@@ -39,6 +39,29 @@ export interface BotConfig {
    * never has to go looking for it.
    */
   adminUrl: string;
+  /**
+   * Channel where staff-side audit events are posted: bans, warns, joins,
+   * leaves, whitelist changes. Empty means "no log channel, skip these".
+   */
+  staffLogChannelId: string | null;
+  /**
+   * Channel where the bot posts welcome / goodbye / auto-mod notifications
+   * for the general audience. Empty means "skip these".
+   */
+  publicLogChannelId: string | null;
+  /**
+   * Channels where AutoMod watches for spam / link / caps violations. If
+   * empty, AutoMod is active in every text channel the bot can see.
+   */
+  automodChannelIds: string[];
+  /**
+   * Discord channel-id for new-member welcome DMs. The DM itself is sent to
+   * the joining user — this entry is the channel where the bot also drops a
+   * public "say hi to <name>" embed so other members see new joins.
+   */
+  welcomeChannelId: string | null;
+  /** URL the welcome DM/embed points new members at for the application. */
+  applyUrl: string;
 }
 
 function required(name: string): string {
@@ -88,6 +111,29 @@ export function loadConfig(): BotConfig {
     throw new Error(`WEB_ADMIN_URL is not a valid http(s) URL: ${rawAdminUrl}`);
   }
 
+  function optionalId(name: string): string | null {
+    const raw = (process.env[name] ?? '').trim();
+    if (!raw) return null;
+    if (!/^\d{5,32}$/.test(raw)) {
+      throw new Error(`${name} is not a valid Discord id: ${raw}`);
+    }
+    return raw;
+  }
+
+  const staffLogChannelId = optionalId('DISCORD_STAFF_LOG_CHANNEL_ID');
+  const publicLogChannelId = optionalId('DISCORD_PUBLIC_LOG_CHANNEL_ID');
+  const welcomeChannelId = optionalId('DISCORD_WELCOME_CHANNEL_ID');
+  const automodChannelIds = (process.env.DISCORD_AUTOMOD_CHANNEL_IDS ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => /^\d{5,32}$/.test(id));
+
+  const applyUrlRaw = (process.env.WEB_APPLY_URL ?? '').trim();
+  if (applyUrlRaw && !/^http?:\/\/[^\s]+$/.test(applyUrlRaw)) {
+    throw new Error(`WEB_APPLY_URL is not a valid http(s) URL: ${applyUrlRaw}`);
+  }
+  const applyUrl = applyUrlRaw || 'https://colortastic.de/apply';
+
   return {
     token: required('DISCORD_BOT_TOKEN'),
     guildId: required('DISCORD_GUILD_ID'),
@@ -102,5 +148,10 @@ export function loadConfig(): BotConfig {
       database: process.env.DB_NAME ?? 'nifty_life',
     },
     resyncMs,
+    staffLogChannelId,
+    publicLogChannelId,
+    welcomeChannelId,
+    automodChannelIds,
+    applyUrl,
   };
 }
