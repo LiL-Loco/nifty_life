@@ -54,7 +54,9 @@ Nifty.SessionGuard = requireFacadeField('SessionGuard', Nifty.core.SessionGuard)
 
 -- Economy, Stuetze and Jobs (the absorbed resources' globals) are exposed through
 -- the same facade as Db/Identity/etc. so server-side consumers can use
--- `Nifty.Economy:round(...)` etc. without round-tripping through exports per call.
+-- `Nifty.Economy.round(...)` etc. without round-tripping through exports per call.
+-- The DOT is not a typo. A facade field is a plain Lua table, and `:` would pass
+-- the table itself as the first argument — see the note in sv_facade.lua.
 Nifty.Economy      = requireFacadeField('Economy',      Nifty.core.Economy)
 Nifty.Stuetze      = requireFacadeField('Stuetze',      Nifty.core.Stuetze)
 Nifty.Jobs         = requireFacadeField('Jobs',         Nifty.core.Jobs)

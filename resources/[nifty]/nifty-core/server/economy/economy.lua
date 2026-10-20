@@ -66,6 +66,26 @@ end
 
 Economy.round = round2
 
+-- WHY THERE IS NO `==` ANYWHERE NEAR A MONEY AMOUNT
+--
+-- The server's Lua does not parse a decimal literal into the same double that
+-- the arithmetic produces. Measured on the running server:
+--
+--     12.35   as a literal   -> 12.349999999998544
+--     0.1     as a literal   ->  0.099999999999994316
+--     650.00  as a literal   ->  650
+--     math.floor(12.345 * 100 + 0.5) / 100  ->  12.35   (the nearest double)
+--
+-- Both the literal and the computed value PRINT as "12.35" and "0.1". Only a
+-- %.17g print tells them apart. So `rounded == 12.35` is FALSE on the server
+-- and TRUE in a stock Lua — a comparison that passes on a developer machine and
+-- fails in production, with no error and a plausible-looking number on screen.
+--
+-- Nothing in this framework compares a decimal literal with `==`: amounts are
+-- either whole numbers, or compared with a tolerance, or compared as the STRING
+-- the database returned. The rule for new code is the same — compare money with
+-- a tolerance, never with `==` against a literal.
+
 --- Guard a client-supplied amount. Non-numbers, NaN, infinity and absurd values
 --- are refused at the edge; a player does not get to pay 1e300 for a sandwich.
 local MAX_AMOUNT = 100000000.00

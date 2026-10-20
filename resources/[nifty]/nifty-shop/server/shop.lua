@@ -30,7 +30,7 @@ local Shop = {}
 --- so adding an item to `item_defs` plus a price row is the whole of adding it
 --- to the shop — there is no second list that can fall out of sync.
 local function priceFor(code)
-  return Economy:round(GetSetting('economy.price.' .. code, 0))
+  return Economy.round(GetSetting('economy.price.' .. code, 0))
 end
 
 --- The shelf. Items without a price setting are simply not for sale, which is
@@ -73,19 +73,19 @@ function Shop.buy(characterId, code, quantity)
   local unitPrice = priceFor(def.code)
   if unitPrice <= 0 then return false, 'not for sale' end
 
-  local total = Economy:round(unitPrice * quantity)
+  local total = Economy.round(unitPrice * quantity)
 
   -- Cash, not bank: this is a corner shop transaction, and charging the bank
   -- would let a broke character eat without ever touching the payout sink that
   -- the whole Stütze argument rests on.
-  local paid, err = Economy:debit(characterId, 'cash', total, 'purchase', 'shop', def.code)
+  local paid, err = Economy.debit(characterId, 'cash', total, 'purchase', 'shop', def.code)
   if not paid then return false, err end
 
   local delivered, deliveryError = Inventory:add(characterId, def.code, quantity)
   if not delivered then
     -- Refund in full. Partial refunds would mean the shop quietly kept money for
     -- an item the player never received.
-    Economy:credit(characterId, 'cash', total, 'purchase', 'shop', def.code)
+    Economy.credit(characterId, 'cash', total, 'purchase', 'shop', def.code)
     print(('[%s] refunded %s to %s: could not deliver %s (%s)'):format(
       RESOURCE, tostring(total), characterId, def.code, tostring(deliveryError)))
     return false, deliveryError
@@ -113,9 +113,9 @@ function Shop.sell(characterId, code, quantity)
   local removed, removeError = Inventory:remove(characterId, def.code, quantity)
   if not removed then return false, removeError end
 
-  local payout = Economy:round((unitPrice / 2) * quantity)
+  local payout = Economy.round((unitPrice / 2) * quantity)
   if payout > 0 then
-    Economy:credit(characterId, 'cash', payout, 'sale', 'shop', def.code)
+    Economy.credit(characterId, 'cash', payout, 'sale', 'shop', def.code)
   end
 
   return true, nil
@@ -124,15 +124,15 @@ end
 --- Move money between a character's own accounts.
 ---
 --- A bank is not a shop, so this is not a shop special case — it is the same
---- movement, and `Economy:transfer` already owns it. Delegating means the
+--- movement, and `Economy.transfer` already owns it. Delegating means the
 --- compensate-on-failure logic exists in exactly one place; two copies of it
 --- means one of them is wrong within a month.
 function Shop.deposit(characterId, amount)
-  return Economy:transfer(characterId, 'cash', 'bank', amount)
+  return Economy.transfer(characterId, 'cash', 'bank', amount)
 end
 
 function Shop.withdraw(characterId, amount)
-  return Economy:transfer(characterId, 'bank', 'cash', amount)
+  return Economy.transfer(characterId, 'bank', 'cash', amount)
 end
 
 exports('catalogue', Shop.catalogue)

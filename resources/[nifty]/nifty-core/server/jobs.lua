@@ -208,9 +208,9 @@ function Jobs.startDuty(characterId, code)
     return false, ('already on duty as %s'):format(elsewhere)
   end
 
-  local fee = Economy:round(GetSetting('economy.price.payslip', 0))
+  local fee = Economy.round(GetSetting('economy.price.payslip', 0))
   if fee > 0 then
-    local paid, err = Economy:debit(characterId, 'cash', fee, 'job_wage', 'job', code)
+    local paid, err = Economy.debit(characterId, 'cash', fee, 'job_wage', 'job', code)
     if not paid then return false, err end
   end
 
@@ -269,10 +269,10 @@ function Jobs.endDuty(characterId, code)
       RESOURCE, characterId, code, seconds, minimum))
   else
     local hourly = Jobs.wagePerHour(code)
-    payout = Economy:round(hourly * (seconds / 3600))
+    payout = Economy.round(hourly * (seconds / 3600))
 
     if payout > 0 then
-      Economy:credit(characterId, 'cash', payout, 'job_payoff', 'job', code)
+      Economy.credit(characterId, 'cash', payout, 'job_payoff', 'job', code)
     end
   end
 

@@ -139,7 +139,7 @@ function Inventory.view(characterId)
     items = items,
     usedSlots = #items,
     totalSlots = slotCapacity(),
-    usedWeight = Economy:round(usedWeight),
+    usedWeight = Economy.round(usedWeight),
     maxWeight = weightLimit(),
   }
 end

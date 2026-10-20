@@ -79,9 +79,9 @@ local function respond(src, ok, message)
   local characterId = sessionCharacter(src)
   if not characterId then return end
 
-  Economy:push(src, characterId)
+  Economy.push(src, characterId)
   Inventory:push(src, characterId)
-  Jobs:sync(characterId, src)
+  Jobs.sync(characterId, src)
 end
 
 -- ---------------------------------------------------------------------------
@@ -96,10 +96,10 @@ RegisterNetEvent('nifty:server:requestState', function()
   local characterId = sessionCharacter(src)
   if not characterId then return end
 
-  TriggerClientEvent('nifty:client:economy', src, Economy:get(characterId))
+  TriggerClientEvent('nifty:client:economy', src, Economy.get(characterId))
   TriggerClientEvent('nifty:client:inventory', src, Inventory:view(characterId))
-  TriggerClientEvent('nifty:client:jobs', src, Jobs:listFor(characterId))
-  TriggerClientEvent('nifty:client:jobCatalogue', src, Jobs:list())
+  TriggerClientEvent('nifty:client:jobs', src, Jobs.listFor(characterId))
+  TriggerClientEvent('nifty:client:jobCatalogue', src, Jobs.list())
   TriggerClientEvent('nifty:client:shop', src, Shop:catalogue())
 end)
 
@@ -117,7 +117,7 @@ RegisterNetEvent('nifty:server:jobJoin', function(code)
 
   if type(code) ~= 'string' then return respond(src, false, 'bad request') end
 
-  local ok, err = Jobs:join(characterId, code)
+  local ok, err = Jobs.join(characterId, code)
   respond(src, ok, err)
 end)
 
@@ -131,7 +131,7 @@ RegisterNetEvent('nifty:server:jobLeave', function(code)
 
   if type(code) ~= 'string' then return respond(src, false, 'bad request') end
 
-  local ok, err = Jobs:leave(characterId, code)
+  local ok, err = Jobs.leave(characterId, code)
   respond(src, ok, err)
 end)
 
@@ -145,7 +145,7 @@ RegisterNetEvent('nifty:server:dutyStart', function(code)
 
   if type(code) ~= 'string' then return respond(src, false, 'bad request') end
 
-  local ok, err = Jobs:startDuty(characterId, code)
+  local ok, err = Jobs.startDuty(characterId, code)
   respond(src, ok, err)
 end)
 
@@ -161,7 +161,7 @@ RegisterNetEvent('nifty:server:dutyEnd', function(code)
 
   -- Pays out. The response carries the earnings so the player sees the number
   -- that landed rather than having to infer it from a balance change.
-  local ok, seconds, payout = Jobs:endDuty(characterId, code)
+  local ok, seconds, payout = Jobs.endDuty(characterId, code)
   if not ok then return respond(src, false, seconds) end
 
   TriggerClientEvent('nifty:client:result', src, {
@@ -172,9 +172,9 @@ RegisterNetEvent('nifty:server:dutyEnd', function(code)
 
   local refreshed = sessionCharacter(src)
   if refreshed then
-    Economy:push(src, refreshed)
+    Economy.push(src, refreshed)
     Inventory:push(src, refreshed)
-    Jobs:sync(refreshed, src)
+    Jobs.sync(refreshed, src)
   end
 end)
 

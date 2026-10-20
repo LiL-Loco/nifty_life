@@ -121,9 +121,9 @@ function Ownership.acquireProperty(characterId, propertyId)
   -- Housing is free to obtain (ADR-0013); businesses are bought. Splitting this
   -- by kind keeps "no entry price" a housing decision rather than a global one.
   if property.kind == 'business' then
-    local price = Economy:round(GetSetting('economy.price.property_' .. property.tier, 0))
+    local price = Economy.round(GetSetting('economy.price.property_' .. property.tier, 0))
     if price > 0 then
-      local ok, err = Economy:debit(characterId, 'bank', price, 'property_purchase', 'property', propertyId)
+      local ok, err = Economy.debit(characterId, 'bank', price, 'property_purchase', 'property', propertyId)
       if not ok then return false, err end
     end
   end
@@ -210,7 +210,7 @@ function Ownership.saveVehicle(vehicleId, state)
      WHERE id = ?
   ]], {
     tonumber(state.x) or 0, tonumber(state.y) or 0, tonumber(state.z) or 0,
-    tonumber(state.heading) or 0, tostring(Economy:round(state.fuel)),
+    tonumber(state.heading) or 0, tostring(Economy.round(state.fuel)),
     state.stored and 1 or 0, vehicleId,
   }, 'ownership:saveVehicle')
 

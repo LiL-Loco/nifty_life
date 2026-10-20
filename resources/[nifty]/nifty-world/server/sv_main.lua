@@ -131,9 +131,9 @@ local function enterWorld(src, character, hasSession)
   -- Layer 4. Order matters: money and items are pushed before the Stütze arms,
   -- so the first balance a player sees is the truth rather than the truth plus
   -- an instalment that arrives a frame later.
-  Economy:push(src, character.id)
+  Economy.push(src, character.id)
   Inventory:push(src, character.id)
-  Stuetze:start(src, character.id)
+  Stuetze.start(src, character.id)
 
   -- Resume at the player's last known position if the column has one. A
   -- null `position` means "first time after the creator finished" - use
@@ -381,7 +381,7 @@ end)
 -- which owns it; all this needs is to stop its own timers.
 SessionGuard.onStop('bootstrap', function(src)
   BootstrapAttempts[src] = nil
-  Stuetze:stop(src)
+  Stuetze.stop(src)
 end)
 
 RegisterCommand('niftystatus', function(src)

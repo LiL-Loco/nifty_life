@@ -406,7 +406,7 @@ RegisterNetEvent('nifty:server:clothingPurchase', function(payload)
     return
   end
 
-  local paid, payErr = Economy:debit(cid, 'cash', price, 'purchase', 'clothing', tostring(drawable))
+  local paid, payErr = Economy.debit(cid, 'cash', price, 'purchase', 'clothing', tostring(drawable))
   if not paid then
     TriggerClientEvent('nifty:client:clothingPurchase', src, { ok = false, reason = payErr or 'no_money' })
     return
