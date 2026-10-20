@@ -937,6 +937,20 @@ randomise = function()
     end
   end
 
+  -- THE SELECTION IS ONLY HALF OF THE BUTTON.
+  --
+  -- `randomise` fills the selection and then stopped there. The panel was
+  -- never told about it and the ped never wore it, so "Zufallsaufzug" did
+  -- nothing visible at all - while `randomiseAll` and `reset`, its two
+  -- siblings, both ended with a refresh() and both worked.
+  --
+  -- The refresh does two things: it pushes the new state to the panel, and
+  -- it applies the whole appearance to the ped through nifty-world. That
+  -- second half matters here, because finding out how many textures a
+  -- drawable has means APPLYING that drawable - so without the refresh the
+  -- ped would be left wearing one slot in texture 0 and everything else
+  -- exactly as it was.
+  refresh()
 end
 
 --- Roll every choice the creator exposes: outfit, face features, overlays,
