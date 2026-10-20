@@ -35,7 +35,9 @@ AddEventHandler('playerSpawned', function()
   -- The hook does NOT pick between them — the server does, ~50-500 ms
   -- later, via `nifty:client:openCreator` or `nifty:client:enterWorld`.
   DoScreenFadeOut(0)
+  print(('[FADE-ORDER] t=%d playerSpawned handler: DoScreenFadeOut(0)'):format(GetGameTimer()))
   while not IsScreenFadedOut() do Wait(0) end
+  print(('[FADE-ORDER] t=%d playerSpawned handler: now faded out'):format(GetGameTimer()))
 
   -- Park at the creator stage. CreatorScene is loaded as a shared
   -- script, so it is available wherever nifty-core runs. Freezing

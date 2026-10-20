@@ -5,7 +5,7 @@
 // rather than animate a stack.
 //
 // State is held by Lua (nifty-clothing/client/cl_wardrobe.lua).
-// NUI receives pushes via 'open' / 'refresh' / 'close' and posts back
+// NUI receives pushes via 'clothing:open' / 'clothing:refresh' / 'clothing:close' and posts back
 // via fetch NUI.
 
 (() => {
@@ -275,7 +275,7 @@
     // The wardrobe is one of two UIs on the same page; only react
     // when the open message says so. The store listens to the same
     // stream but filters on mode === 'store' instead.
-    if (action === 'open' && data && data.mode && data.mode !== 'wardrobe') return;
+    if (action === 'clothing:open' && data && data.mode && data.mode !== 'wardrobe') return;
     if (action === 'storeList' || action === 'purchaseResult') return;
     switch (action) {
       case 'open':
@@ -296,7 +296,7 @@
         if (data.outfits) state.outfits = data.outfits;
         renderPanel();
         break;
-      case 'close':
+      case 'clothing:close':
         state.open = false;
         document.getElementById('root').classList.add('hidden');
         document.getElementById('panel').innerHTML = '';

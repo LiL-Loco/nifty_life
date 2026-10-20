@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+/*
+ * Nifty Life 2.0 — shared NUI design tokens.
+ *
+ * THEME: "Tema 1" from tweakcn, fetched through the shadcn registry
+ * (https://tweakcn.com/r/themes/cmn3tb20x000604jl8uhn23c8). Dark only: the site
+ * sets `color-scheme: dark` and has no light sibling, and a NUI panel that is
+ * brighter than the game behind it is unreadable at night.
+ *
+ * Tailwind v4 is CSS-first: this `@theme` block IS the configuration. There is
+ * no tailwind.config.js, and adding one would be silently ignored — the same
+ * class of mistake as the `tailwindcss` vs `@tailwindcss/postcss` entry in
+ * LEARNINGS.md.
+ *
+ * THE THEME IS WRITTEN OUT THREE TIMES. Here, in
+ * `packages/loadscreen/src/loadscreen.css`, and in the website's
+ * `src/app/globals.css`. Three copies, one source. A brand change has to be
+ * made in all three, and that is the deliberate trade for every panel owning
+ * its own surface — the alternative, sharing across resources, is what put a
+ * full-screen page in nifty-core and covered the character creator.
+ */
+
+@theme {
+  --color-background: oklch(0 0 0);
+  --color-foreground: oklch(0.9551 0 0);
+  --color-card: oklch(0.1448 0 0);
+  --color-card-foreground: oklch(0.9551 0 0);
+  --color-popover: var(--color-background);
+  --color-popover-foreground: oklch(0.9551 0 0);
+  --color-primary: oklch(0.7166 0.1561 247.1092);
+  --color-primary-foreground: oklch(0 0 0);
+  --color-secondary: oklch(0.3974 0.0871 247.2300);
+  --color-secondary-foreground: oklch(0.9551 0 0);
+  --color-muted: oklch(0.2674 0.0047 325.7068);
+  --color-muted-foreground: oklch(0.6731 0 0);
+  --color-accent: oklch(0.2464 0.0627 248.8650);
+  --color-accent-foreground: oklch(0.9970 0 0);
+  --color-destructive: oklch(0.8597 0.1155 73.1029);
+  --color-border: oklch(0.2150 0.0025 325.6623);
+  --color-input: oklch(0.3523 0 0);
+  --color-ring: oklch(0.7166 0.1561 247.1092);
+
+  --color-success: oklch(0.72 0.15 150);
+
+  --radius-panel: 0.375rem;
+
+  --font-sans: 'Montserrat', ui-sans-serif, sans-serif, system-ui;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+/*
+ * The three rules every panel needs and that cost an afternoon to find.
+ *
+ * 1. `background: transparent` — a FiveM panel is an overlay on a running
+ *    game, not a page. Omit it and every panel becomes an opaque black box
+ *    covering the world.
+ * 2. `overflow: hidden` — CEF renders this document at viewport size; a
+ *    scrollable body produces a second scrollbar the player can see.
+ * 3. `.hidden` is `display: none !important` — the old panels' visibility
+ *    contract, kept so the Lua `SendNUIMessage` open/close path keeps working
+ *    unchanged on both sides.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* NUI text is never selectable: the player is holding a mouse cursor over a
+     game, and a drag that selects text reads as a broken panel. */
+  user-select: none;
+}
+
+.hidden {
+  display: none !important;
+}

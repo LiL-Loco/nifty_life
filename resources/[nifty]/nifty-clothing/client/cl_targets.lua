@@ -48,11 +48,64 @@ end
 
 local markers = {}
 
+--- One `lib.points` instance per store. Rebuilt with the markers.
+local points = {}
+
+--- Drop every `lib.points` instance this resource created.
+local function clearProximityPoints()
+  for i = #points, 1, -1 do
+    points[i]:remove()
+  end
+  points = {}
+end
+
+--- The proximity check, as `lib.points` instead of a per-frame loop.
+---
+--- WHAT THIS WAS. `while true do Wait(0)` walking every store sixty times a
+--- second, per player, to find the nearest one. At 48 players that is 2 880
+--- squared-distance computations a second, nearly all of which produce nothing
+--- to draw because the player is nowhere near a shop.
+---
+--- WHY IT SCALED. The distance check ran at frame rate but its result only
+--- changes when the player moves. `lib.points` splits the two: distance is
+--- evaluated every 300 ms, and the per-frame work — the marker and the prompt
+--- — only runs while a shop is actually within range. One point per store,
+--- created when the markers are dropped.
+local function rebuildProximityPoints()
+  clearProximityPoints()
+
+  for id, m in pairs(markers) do
+    local s = m.store
+    points[#points + 1] = lib.points.new({
+      coords = vector3(s.x, s.y, s.z),
+      distance = PROXIMITY,
+      nearby = function(self)
+        -- Only redraw when the nearest store changes - leaves the on-screen
+        -- state stable for the most part.
+        if currentStoreId ~= id then currentStoreId = id end
+
+        DrawMarker(MARKER_TYPE, s.x, s.y, s.z - 1.0, 0, 0, 0,
+          0, 0, 0, 0.6, 0.6, 0.3, 168, 80, 168, 100,
+          false, true, 2, false, nil, nil, false)
+        DrawText3D(s.x, s.y, s.z + 0.3, ('K - %s'):format(s.name))
+
+        -- nil resets the point's internal distance state so `nearby` runs
+        -- again next frame instead of being treated as already consumed.
+        self.currentDistance = nil
+      end,
+    })
+  end
+end
+
 local function clearAll()
   for _, m in pairs(markers) do
     if m.blip and DoesBlipExist(m.blip) then RemoveBlip(m.blip) end
   end
   markers = {}
+
+  -- The proximity points go with them; leaving one alive keeps a shop's marker
+  -- and prompt on screen after the marker itself is gone.
+  clearProximityPoints()
 end
 
 local function dropMarkers()
@@ -69,6 +122,8 @@ local function dropMarkers()
       blip = blip,
     }
   end
+
+  rebuildProximityPoints()
 end
 
 AddEventHandler('onClientResourceStart', function(resource)
@@ -87,46 +142,6 @@ end)
 
 local currentStoreId = nil
 
-CreateThread(function()
-  while true do
-    local ped = PlayerPedId()
-    if ped and ped ~= 0 then
-      local coords = GetEntityCoords(ped)
-
-      -- GetEntityCoords can briefly return a vector with nil components
-      -- (very early spawn, teleport, or hidden ped). Skip this tick rather
-      -- than crash on arithmetic below.
-      if coords and coords.x and coords.y and coords.z then
-        local px, py, pz = coords.x, coords.y, coords.z
-        local nearestId, nearestDist = nil, 9999.0
-
-        for id, m in pairs(markers) do
-          local s = m.store
-          local dx, dy, dz = px - s.x, py - s.y, pz - s.z
-          local d2 = dx * dx + dy * dy + dz * dz
-          if d2 < nearestDist then
-            nearestDist = d2
-            nearestId = id
-          end
-        end
-
-        -- Only redraw the marker when the nearest store changes - leaves
-        -- the on-screen state stable for the most part.
-        currentStoreId = nearestId
-
-        if nearestId and nearestDist <= (PROXIMITY * PROXIMITY) then
-          local s = markers[nearestId].store
-          DrawMarker(MARKER_TYPE, s.x, s.y, s.z - 1.0, 0, 0, 0,
-            0, 0, 0, 0.6, 0.6, 0.3, 168, 80, 168, 100,
-            false, true, 2, false, nil, nil, false)
-          DrawText3D(s.x, s.y, s.z + 0.3, ('K - %s'):format(s.name))
-        end
-      end
-    end
-
-    Wait(0)
-  end
-end)
 
 -- ----------------------------------------------------------------------------
 -- Keypress

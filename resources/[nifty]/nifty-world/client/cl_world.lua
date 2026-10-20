@@ -60,7 +60,76 @@ local function render()
   })
 end
 
+-- ---------------------------------------------------------------- focus
+-- NUI focus, owned entirely by this resource. Nothing about it is shared.
+--
+-- `SetNuiFocus` only does anything when the CALLING resource declares a
+-- `ui_page`, because it acts on that resource's own CEF. This one declares one.
+-- The focus broker in nifty-core could therefore never hand the keyboard over,
+-- whatever it reported: it has no ui_page on purpose, so every native call it
+-- issued was a silent no-op — it logged `granted`, returned true, and the player
+-- got no cursor while every click punched their character through a wall.
+--
+-- WHAT IS GIVEN UP, STATED PLAINLY: with no shared broker nobody can ask "who
+-- holds the keyboard right now?", so two surfaces that can be open at once are
+-- arbitrated by whoever opened last. ox_inventory lives with the identical
+-- constraint and papers over it with `Wait(100)` and a hopeful comment.
+--
+-- `SetNuiFocusKeepInput(false)` is not decoration: ox_target raises that flag
+-- globally on every target interaction and never lowers it
+-- (ox_target/client/state.lua), so without it a click on an open panel also
+-- reaches the game and moves the character.
+local focusHeld = false
+
+--- Take the keyboard and show the cursor.
+local function acquireFocus()
+  if focusHeld then return end
+
+  SetNuiFocus(true, true)
+  SetNuiFocusKeepInput(false)
+  focusHeld = true
+end
+
+--- Hand it back. Safe to call when we never had it.
+local function releaseFocus()
+  if not focusHeld then return false end
+
+  focusHeld = false
+  SetNuiFocus(false, false)
+  SetNuiFocusKeepInput(false)
+  return true
+end
+
+-- Stopping with the keyboard held strands a captured cursor with no way out but a
+-- reconnect, so the stop path has to release it. This handler cannot be inherited
+-- from anywhere: every resource that can hold focus needs its own.
+AddEventHandler('onResourceStop', function(resource)
+  if resource ~= RESOURCE then return end
+
+  releaseFocus()
+end)
+
+AddEventHandler('playerDropped', function()
+  focusHeld = false
+end)
+
 local function setPanel(name)
+  -- Opening takes the keyboard; closing gives it back. This resource used to do
+  -- neither: it rendered a modal panel — shop, jobs — on top of whatever was
+  -- already there and assumed it had the keyboard. It did not. Pressing F2 with
+  -- the character creator open drew the shop OVER the creator with no cursor and
+  -- no way to click it, and the F2 that was supposed to dismiss it did nothing.
+  --
+  -- Acquiring is refused rather than stolen, so a panel can never appear on top
+  -- of a surface that legitimately owns the keyboard. A refusal is normal — the
+  -- chat input hits it too — and it is reported rather than swallowed, because a
+  -- key that opens nothing is indistinguishable from a key that is not bound.
+  if name ~= nil then
+    acquireFocus()
+  else
+    releaseFocus()
+  end
+
   panelOpen = name ~= nil
   State.panel = name
   render()

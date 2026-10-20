@@ -37,6 +37,16 @@ Everything else keeps its own surface, because none of them is a menu:
 
 **Still no build step.** Plain HTML/CSS/JS, served from `ui_page`. No npm, no bundler, no TypeScript. This is the constraint that makes the own-implementation route viable at all.
 
+> **SUPERSEDED IN PART (2026-10-20).** The NUI *panels* now build through
+> React + shadcn + Vite + TypeScript — see
+> [ADR-0026](0026-nui-panels-react-shadcn.md). The reasoning above still holds
+> for the `nifty-ui` menu framework this ADR specifies: it exists precisely so
+> the panels stop being six independent surfaces, and nothing about the tool
+> decision changes that. What changed is the substrate: the three failure modes
+> that cost an evening (action-name collisions across CEF frames, the implicit
+> first argument on an export call, and `RegisterNetEvent` on a client event)
+> are exactly what a typed build fails on and a hand-written file does not.
+
 ## Consequences
 
 - The **API shape is LemonUI's** — `Menu`, `Checkbox`, `Slider`, `ListItem`, `Separator`, `SubMenu`, `Button` — because that vocabulary is already the community standard and re-inventing the naming costs us and gains nothing. MIT permits it; we write our own implementation rather than copy theirs.

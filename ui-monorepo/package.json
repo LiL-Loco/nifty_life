@@ -1,0 +1,45 @@
+{
+  "name": "nifty-ui-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "React + shadcn/ui NUI panels for Nifty Life 2.0 FiveM resources.",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter '@nifty/*' build",
+    "build:chat": "bun run --filter '@nifty/chat' build",
+    "build:armwrestling": "bun run --filter '@nifty/armwrestling' build",
+    "build:world": "bun run --filter '@nifty/world' build",
+    "build:inventory": "bun run --filter '@nifty/inventory' build",
+    "build:clothing": "bun run --filter '@nifty/clothing' build",
+    "build:creator": "bun run --filter '@nifty/creator' build",
+    "typecheck": "bun run --filter '@nifty/*' typecheck",
+    "clean": "rm -rf packages/*/dist"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "@tailwindcss/vite": "^4",
+    "tailwindcss": "^4"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-scroll-area": "^1.2.1",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slider": "^1.2.1",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.1",
+    "@radix-ui/react-toggle-group": "^1.1.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.5"
+  }
+}

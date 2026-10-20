@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+
+/*
+ * Nifty Life 2.0 — loading screen.
+ *
+ * THEME: "Tema 1" from tweakcn, fetched through the shadcn registry
+ * (https://tweakcn.com/r/themes/cmn3tb20x000604jl8uhn23c8).
+ *
+ * WHY THIS FILE EXISTS AT ALL INSTEAD OF SHARING THE NUI STYLESHEET
+ *
+ * The loading screen is drawn BEFORE any Lua VM exists — no GetParentResourceName,
+ * no RegisterNUICallback, no SendNUIMessage. Its only channel is the
+ * window.postMessage the client pushes. That also means it cannot depend on the
+ * NUI build toolchain: whatever it needs, it carries.
+ *
+ * So the theme is written out three times in this repository — here, in
+ * `packages/ui/src/styles.css` (the six panels), and in
+ * `website/src/app/globals.css`. Three copies, one source, and a change to the
+ * brand has to be made in all three. That is the deliberate trade for the
+ * loading screen being the first thing a player ever sees.
+ */
+
+@theme {
+  --color-background: oklch(0 0 0);
+  --color-foreground: oklch(0.9551 0 0);
+  --color-card: oklch(0.1448 0 0);
+  --color-card-foreground: oklch(0.9551 0 0);
+  --color-popover: var(--color-background);
+  --color-popover-foreground: oklch(0.9551 0 0);
+  --color-primary: oklch(0.7166 0.1561 247.1092);
+  --color-primary-foreground: oklch(0 0 0);
+  --color-secondary: oklch(0.3974 0.0871 247.2300);
+  --color-secondary-foreground: oklch(0.9551 0 0);
+  --color-muted: oklch(0.2674 0.0047 325.7068);
+  --color-muted-foreground: oklch(0.6731 0 0);
+  --color-accent: oklch(0.2464 0.0627 248.8650);
+  --color-accent-foreground: oklch(0.9970 0 0);
+  --color-destructive: oklch(0.8597 0.1155 73.1029);
+  --color-border: oklch(0.2150 0.0025 325.6623);
+  --color-input: oklch(0.3523 0 0);
+  --color-ring: oklch(0.7166 0.1561 247.1092);
+
+  --radius-panel: 0.375rem;
+
+  --font-sans: 'Montserrat', ui-sans-serif, sans-serif, system-ui;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+/*
+ * The loading screen is the ONE page where `background: transparent` on
+ * html/body is load-bearing rather than cosmetic. A NUI panel floats over the
+ * game; the loading screen is drawn before the game exists. The gradient below
+ * is the entire look, so the body must not paint over it.
+ */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ---- the atmosphere: three layered glows over a base gradient ----------
+   The glow colours are derived from the theme's own hues rather than the old
+   hand-picked amber/blue pair, so the atmosphere belongs to the theme rather
+   than sitting next to it. */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5rem;
+  padding: 4rem 1.5rem;
+  overflow: hidden;
+  background: #000;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    radial-gradient(120% 80% at 50% 115%, oklch(0.7166 0.1561 247.1092 / 0.32) 0%, transparent 62%),
+    radial-gradient(90% 60% at 50% 0%, oklch(0.2464 0.0627 248.8650 / 0.5) 0%, transparent 70%),
+    radial-gradient(140% 120% at 50% 50%, transparent 30%, oklch(0 0 0 / 0.92) 100%),
+    linear-gradient(180deg, oklch(0.1448 0 0) 0%, oklch(0.2182 0.0019 286.2389) 55%, oklch(0 0 0) 100%);
+}
+
+/* Halftone dot texture, two offset radial gradients on a 5px grid, masked
+   out radially so the centre stays clean. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.28;
+  background-image:
+    radial-gradient(circle at center, oklch(1 0 0 / 0.5) 0.9px, transparent 1.1px),
+    radial-gradient(circle at center, oklch(1 0 0 / 0.22) 0.7px, transparent 0.9px);
+  background-size: 5px 5px, 5px 5px;
+  background-position: 0 0, 2.5px 2.5px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
+  mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
+}
+
+.hero > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---- the mark --------------------------------------------------------- */
+.hero-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.86;
+  text-align: center;
+}
+
+.hero-mark-top,
+.hero-mark-bottom {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  -webkit-text-stroke: 2px oklch(0 0 0);
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 oklch(0 0 0 / 0.55), 0 0 44px oklch(0 0 0 / 0.7);
+}
+
+/* "Nifty" takes the theme's primary. It was #f0a53a amber before the theme
+   change; the accent is now the theme's, so the mark and the bar agree. */
+.hero-mark-top {
+  font-size: clamp(2.6rem, 9vw, 5.2rem);
+  color: var(--color-primary);
+}
+
+.hero-mark-bottom {
+  font-size: clamp(4.4rem, 17vw, 10rem);
+  color: #fff;
+  margin-top: -0.08em;
+}
+
+/* The text-indent cancels the trailing letter-spacing so the letterspaced
+   "2.0" reads as centred rather than pushed right. */
+.hero-mark-version {
+  margin-top: 0.9rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+/* ---- the progress pill: the site's button, reused as a bar ------------- */
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.15rem;
+  width: min(26rem, 100%);
+}
+
+.pill {
+  position: relative;
+  width: 100%;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 3px solid oklch(0 0 0);
+  background: var(--color-muted);
+  overflow: hidden;
+}
+
+/* A child, not a width transition on ::after — scaling a pseudo-element
+   distorts the radius. */
+.pill-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: var(--color-primary);
+  box-shadow: inset 0 -3px 0 oklch(0 0 0 / 0.18);
+  transition: width 90ms linear;
+}
+
+/* The leading edge lives on the pill, not the fill, so it stays put at 0% and
+   at 100% instead of leaving a bright sliver at the far side. */
+.pill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1.6rem;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.35) 70%,
+    oklch(1 0 0 / 0.55) 100%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 90ms linear;
+  pointer-events: none;
+}
+
+.pill[data-running='1']::after {
+  opacity: 1;
+}
+
+.stage-status {
+  margin: 0;
+  min-height: 1.6em;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-emoji {
+  margin-left: 0.5rem;
+}
+
+/* ---- the foot --------------------------------------------------------- */
+.hero-foot {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-fill,
+  .pill::after {
+    transition: none;
+  }
+}

@@ -41,8 +41,10 @@ shared_scripts {
 -- keeps the data engine; cl_nui.lua owns the NUI lifecycle and the
 -- RegisterNUICallback handlers.
 --
--- The NUI runs in CEF. SetNuiFocus is called through nifty-core's focus
--- broker (exports['nifty-core']:acquire / release), never directly. The
+-- The NUI runs in CEF. Focus is owned entirely by this resource — it makes its
+-- own SetNuiFocus calls in cl_nui.lua, because that native only reaches a CEF
+-- from the resource that declares one, and nifty-core declares none on purpose.
+-- The
 -- skin-cam UX uses bone-projection from Lua into the NUI (cl_nui.lua's
 -- projectFaceBones thread).
 
@@ -51,19 +53,35 @@ shared_scripts {
 -- decoding all of it at boot would cost every player who never opens a menu.
 -- `cl_gamedata.lua` reads each file the first time something actually needs it.
 files {
-  'data/*.json',
-  'data/tattoos/*.json',
-  'ui/index.html',
-  'ui/style.css',
-  'ui/app.js',
-  'ui/images/*.webp',
+  'ui/dist/index.html',
+  'ui/dist/assets/*.js',
+  'ui/dist/assets/*.css',
+  'ui/dist/images/*.webp',
 }
+
+-- The panel is BUILT from ui-monorepo/packages/creator (React + shadcn + Vite).
+-- `ui/dist/**` is the build artefact and is committed deliberately: a FiveM
+-- server is deployed from a checkout, so a gitignore rule that swallows dist/
+-- would leave every `ui_page` pointing at a file that is not there.
+--
+-- To rebuild:
+--   ssh root@<host> 'cd /root/ui-monorepo && bun install && bun run build:creator'
+--   then copy packages/creator/dist over this resource's ui/dist and restart.
+--
+-- The Lua side is UNCHANGED. cl_nui.lua still sends creator:open, creator:refresh
+-- … and registers the same 26 callbacks; the panel types them through
+-- @nifty/bridge, so a renamed action is a build error rather than a dead button.
+-- The 46 parent portraits live in packages/creator/public/images and are emitted
+-- to ui/dist/images by the build — the panel loads them as `images/<Name>.webp`.
+
 
 -- Load order: cl_labels.lua and cl_gamedata.lua first (they populate
 -- `Labels` and `GameData`); then cl_creator.lua (the data engine); then
 -- cl_nui.lua (the NUI driver that opens, refreshes, closes and registers
 -- every NUI callback). cl_nui.lua must load AFTER cl_creator.lua because
 -- it references every public helper there.
+-- The shared focus API is deliberately NOT included here — see nifty-chat's
+-- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
 client_scripts {
   'client/cl_labels.lua',
   'client/cl_gamedata.lua',
@@ -73,7 +91,7 @@ client_scripts {
 
 -- NUI page. The CEF renders ui/index.html. The page is hidden until
 -- openCreator sends an `open` message.
-ui_page 'ui/index.html'
+ui_page 'ui/dist/index.html'
 
 -- No server_script. Creating a character is now the website's job, through
 -- create_character_from_web (migration 021); what is left here is appearance,

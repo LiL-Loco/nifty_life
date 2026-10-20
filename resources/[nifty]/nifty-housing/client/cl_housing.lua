@@ -24,6 +24,14 @@ local RESOURCE = GetCurrentResourceName()
 --- propertyId -> { blip, marker, name, owned }
 local entrances = {}
 
+--- How close a player has to be for a door to appear. Squared-2D, so this is a
+--- radius in metres compared without a sqrt().
+local PROXIMITY = 2.5
+
+--- One `lib.points` instance per entrance. Rebuilt whenever the entrance list
+--- arrives, because the entrances come from the server and do not exist at load.
+local points = {}
+
 --- Tier decides colour, not value. One extra lookup is cheaper than asking the
 --- server what a district is worth, and the answer cannot go stale on screen.
 local TIER_COLOURS = {
@@ -66,12 +74,79 @@ end
 -- Building and tearing down
 -- ---------------------------------------------------------------------------
 
+
+--- Shown while standing at a door. Text is chosen by the state the SERVER last
+--- reported — a client that decided this itself could show "take this house" to
+--- somebody who already owns it, and the player would learn about it by being
+--- refused.
+local function promptFor(entrance)
+  if entrance.owned then
+    return ('~a~%s~s~n~i~Deine Wohnung~s~'):format(entrance.name)
+  end
+  return ('~a~%s~s~n~i~[E] In Besitz nehmen~s~'):format(entrance.name)
+end
+
+--- The proximity check, as `lib.points` instead of a per-frame loop.
+---
+--- WHAT THIS WAS. A `while true do Wait(0)` that ran sixty times a second,
+--- per player, walking every entrance in Lua and comparing squared 2D distance
+--- to find the nearest one. With 48 players that is 2 880 distance
+--- computations a second, none of which change anything unless the player
+--- actually stands in front of a door.
+---
+--- WHY IT SCALED. The loop ran at the frame rate, and the work inside it was
+--- independent of the frame rate. A player standing in open ground ran the
+--- same check 60 times a second to draw nothing, 60 times a second to draw the
+--- same marker. `lib.points` splits those: distance is checked every 300 ms,
+--- and the per-frame work — the marker and the text — only runs while the
+--- player is inside the radius.
+---
+--- One `instance` is created per entrance when the entrance list arrives, not
+--- once at load, because the entrances come from the server and do not exist
+--- until then. `clearEntrances` has to drop them again, or a property that was
+--- sold keeps drawing its marker forever.
+local function rebuildProximityPoints()
+  clearProximityPoints()
+
+  for id, entrance in pairs(entrances) do
+    -- Cheapest possible distance check: a squared 2D comparison. Two
+    -- properties in the same tower share a door, so Y is the axis that
+    -- actually separates them, and this is also why the marker Y in the seed
+    -- is a measured value and not a rounded one.
+    points[#points + 1] = lib.points.new({
+      coords = vector3(entrance.x, entrance.y, entrance.z),
+      distance = PROXIMITY,
+      nearby = function(self)
+        DrawMarker(1, entrance.x, entrance.y, entrance.z, 0.0, 0.0, 0.0,
+          0.0, 0.0, 0.0, 0.6, 0.6, 0.3, 200, 120, 120, 120,
+          false, true, 2, false, nil, nil, false)
+        DrawText3D(entrance.x, entrance.y, entrance.z + 0.3, promptFor(entrance))
+        -- nil resets the point's internal distance state, so `nearby` runs
+        -- again on the next frame instead of being considered consumed.
+        self.currentDistance = nil
+      end,
+    })
+  end
+end
+
+--- Drop every `lib.points` instance this resource created.
+local function clearProximityPoints()
+  for i = #points, 1, -1 do
+    points[i]:remove()
+  end
+  points = {}
+end
+
 local function clearEntrances()
   for id, entrance in pairs(entrances) do
     if entrance.blip then RemoveBlip(entrance.blip) end
     if entrance.marker then DeleteMarker(entrance.marker) end
     entrances[id] = nil
   end
+
+  -- The proximity points go with them. Leaving one alive would keep drawing
+  -- a marker and a prompt for a property that was just sold or deactivated.
+  clearProximityPoints()
 end
 
 --- Rebuild from scratch on every push. Patching a list instead would let a
@@ -110,6 +185,8 @@ local function buildEntrances(list)
       }
     end
   end
+
+  rebuildProximityPoints()
 end
 
 RegisterNetEvent('nifty:client:properties', function(list)
@@ -126,51 +203,7 @@ end)
 -- Proximity prompt
 -- ---------------------------------------------------------------------------
 
---- Shown while standing at a door. Text is chosen by the state the SERVER last
---- reported — a client that decided this itself could show "take this house" to
---- somebody who already owns it, and the player would learn about it by being
---- refused.
-local function promptFor(entrance)
-  if entrance.owned then
-    return ('~a~%s~s~n~i~Deine Wohnung~s~'):format(entrance.name)
-  end
-  return ('~a~%s~s~n~i~[E] In Besitz nehmen~s~'):format(entrance.name)
-end
 
-CreateThread(function()
-  local nearestId, nearestDistance = nil, 2.5
-
-  while true do
-    Wait(0)
-
-    local player = PlayerPedId()
-    local px, py, _ = GetEntityCoords(player)
-
-    nearestId, nearestDistance = nil, 2.5
-
-    for id, entrance in pairs(entrances) do
-      -- Cheapest possible distance check: a squared 2D comparison. Two
-      -- properties in the same tower share a door, so Y is the axis that
-      -- actually separates them, and this is also why the marker Y in the seed
-      -- is a measured value and not a rounded one.
-      local dx, dy = px - entrance.x, py - entrance.y
-      local distanceSquared = (dx * dx + dy * dy)
-
-      if distanceSquared < nearestDistance then
-        nearestDistance = distanceSquared
-        nearestId = id
-      end
-    end
-
-    if nearestId then
-      local entrance = entrances[nearestId]
-      DrawMarker(1, entrance.x, entrance.y, entrance.z, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.6, 0.6, 0.3, 200, 120, 120, 120,
-        false, true, 2, false, nil, nil, false)
-      DrawText3D(entrance.x, entrance.y, entrance.z + 0.3, promptFor(entrance))
-    end
-  end
-end)
 
 --- E at a door. Deliberately dumb: no client-side check of tier, cost or
 --- eligibility. It forwards the property id and lets `Ownership.acquireProperty`

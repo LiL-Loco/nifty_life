@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nifty Life 2.0</title>
+
+    <!--
+      Theme fonts, loaded from the CDN.
+
+      The loading screen is the first thing a player sees and the first thing
+      the client downloads, so a font that arrives late is a visible layout
+      shift in the one place nobody expects one. The system stack
+      (`--font-sans` fallback) is what renders until the webfont lands, and the
+      two are close enough in weight that the swap is not jarring.
+
+      display=swap, not block: `block` would hold the text invisible for up to
+      3s on a slow connection, which is exactly what a loading screen must not
+      do to someone who has just clicked "connect".
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=IBM+Plex+Mono:wght@400;600&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

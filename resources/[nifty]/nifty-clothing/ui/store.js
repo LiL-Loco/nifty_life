@@ -165,8 +165,8 @@
     // The store only reacts when the open message says so. The
     // wardrobe listens to the same stream but filters on
     // mode === 'wardrobe' instead.
-    if (action === 'open' && data && data.mode && data.mode !== 'store') return;
-    if (action === 'refresh' || action === 'outfitList') return;
+    if (action === 'clothing:open' && data && data.mode && data.mode !== 'store') return;
+    if (action === 'clothing:refresh' || action === 'outfitList') return;
     switch (action) {
       case 'open':
         state.open = true;
@@ -195,7 +195,7 @@
           toast('Kauf fehlgeschlagen: ' + (data && data.reason ? data.reason : 'unbekannt'), true);
         }
         break;
-      case 'close':
+      case 'clothing:close':
         state.open = false;
         document.getElementById('root').classList.add('hidden');
         document.getElementById('panel').innerHTML = '';

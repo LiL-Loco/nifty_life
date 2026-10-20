@@ -4,18 +4,24 @@
   This file owns ONE thing that nothing else in the resource may touch while it is
   true: the game's keyboard and cursor.
 
-  It does NOT own focus outright. `SetNuiFocus` is a single global client native,
-  and after the resource split there are ten surfaces in this project that want the
-  keyboard — chat, creator, phone, panels. If each of them called the native
-  itself, last writer wins and the player types into a window they are not looking
-  at. So focus is ARBITRATED by nifty-core's cl_focus broker
-  (ADR-0018 made the phone the second surface; the split made it the
-  tenth) and this file only asks.
+  `SetNuiFocus` is a single global client native, and after the resource split there
+  are ten surfaces in this project that want the keyboard — chat, creator, phone,
+  panels. Whoever opens last wins, so a player can end up typing into a window they
+  are not looking at. There used to be a broker in nifty-core to stop that. It is
+  gone, and the reason is the next paragraph: it could never have worked.
+
+  The CALL has to be made from HERE. SetNuiFocus acts on the calling resource's own
+  CEF instance, so it only does anything from a resource that declares a ui_page.
+  nifty-core deliberately declares none — every ui_page is its own full-screen
+  composited browser, and one parked there once swallowed every click in the
+  creator. A broker living there
+  therefore could not hand over the keyboard however much it wanted to; it only
+  ever logged `granted` and did nothing. This file makes the call itself.
 
   The rules that fall out of asking rather than taking:
-    - The chat input refuses to open while another surface holds focus.
-    - Another surface opening closes this one, via `focusAcquire`'s failure.
     - Every exit path releases, through one function, including resource stop.
+    - A refusal is reported to the player rather than swallowed: a chat box that
+      does not appear looks exactly like a key binding that is not bound.
 
   The chat LOG is the exception: it is always visible and never holds focus. A
   chat you cannot read while walking is not a chat.
@@ -25,23 +31,59 @@ local RESOURCE = GetCurrentResourceName()
 
 local Input = { open = false }
 
---- The shared focus broker. Fetched once: an export call per keystroke would be a
---- round trip for a decision that does not change between keypresses.
-local Focus = exports['nifty-core']
+-- ---------------------------------------------------------------- focus
+-- NUI focus, owned entirely by this resource. Nothing about it is shared.
+--
+-- `SetNuiFocus` only does anything when the CALLING resource declares a
+-- `ui_page`, because it acts on that resource's own CEF. This one declares one.
+-- The focus broker in nifty-core could therefore never hand the keyboard over,
+-- whatever it reported: it has no ui_page on purpose, so every native call it
+-- issued was a silent no-op — it logged `granted`, returned true, and the player
+-- got no cursor while every click punched their character through a wall.
+--
+-- WHAT IS GIVEN UP, STATED PLAINLY: with no shared broker nobody can ask "who
+-- holds the keyboard right now?", so two surfaces that can be open at once are
+-- arbitrated by whoever opened last. ox_inventory lives with the identical
+-- constraint and papers over it with `Wait(100)` and a hopeful comment.
+--
+-- `SetNuiFocusKeepInput(false)` is not decoration: ox_target raises that flag
+-- globally on every target interaction and never lowers it
+-- (ox_target/client/state.lua), so without it a click on an open chat box also
+-- reaches the game and moves the character.
+local focusHeld = false
 
---- Ask the broker whether we may have the keyboard. Returns false if another
---- surface already holds it, which is a normal outcome and not an error.
-local function acquire()
-  local got = Focus:acquire(RESOURCE)
-  return got == true
+--- Take the keyboard and show the cursor.
+local function acquireFocus()
+  if focusHeld then return end
+
+  SetNuiFocus(true, true)
+  SetNuiFocusKeepInput(false)
+  focusHeld = true
 end
 
---- Hand it back. Safe to call when we never had it — the broker ignores a release
---- from a surface that does not hold focus, which is exactly what we want here so
---- the close paths do not have to track state themselves.
-local function release()
-  Focus:release(RESOURCE)
+--- Hand it back. Safe to call when we never had it, so the close paths do not
+--- have to track state themselves.
+local function releaseFocus()
+  if not focusHeld then return false end
+
+  focusHeld = false
+  SetNuiFocus(false, false)
+  SetNuiFocusKeepInput(false)
+  return true
 end
+
+-- Stopping with the keyboard held strands a captured cursor with no way out but a
+-- reconnect, so the stop path has to release it. This handler cannot be inherited
+-- from anywhere: every resource that can hold focus needs its own.
+AddEventHandler('onResourceStop', function(resource)
+  if resource ~= RESOURCE then return end
+
+  releaseFocus()
+end)
+
+AddEventHandler('playerDropped', function()
+  focusHeld = false
+end)
 
 --- Close the input, releasing focus, whatever route we got here by.
 ---
@@ -51,7 +93,7 @@ local function closeInput()
   if not Input.open then return end
 
   Input.open = false
-  release()
+  releaseFocus()
   SendNUIMessage({ action = 'chatInput', data = { open = false } })
 end
 
@@ -60,17 +102,7 @@ end
 local function openInput()
   if Input.open then return end
 
-  if not acquire() then
-    -- Another surface owns the keyboard. Say so instead of silently doing nothing:
-    -- a chat box that refuses to appear looks exactly like a broken key binding,
-    -- and the player has no way to tell which it is.
-    SendNUIMessage({
-      action = 'chatSystem',
-      data = { text = 'Ein anderes Fenster ist offen.' },
-    })
-    return
-  end
-
+  acquireFocus()
   Input.open = true
   SendNUIMessage({ action = 'chatInput', data = { open = true } })
 end
@@ -91,18 +123,16 @@ RegisterCommand('niftychatclose', function()
   closeInput()
 end, false)
 
---- The resource stopping must not leave a captured cursor behind. This is the one
---- handler that cannot wait for a UI event, because there will not be one.
+--- Only the local flag is left to clear here. Dropping the actual cursor is done
+--- by the focus block above, which registers its own `onResourceStop`. Here only
+--- the local flag is left: the chat box must not come back from a restart
+--- believing it is open.
 AddEventHandler('onResourceStop', function(resource)
   if resource ~= RESOURCE then return end
   Input.open = false
-  release()
 end)
 
---- The broker holds a NAME, and this resource can be restarted while holding it.
---- `onClientResourceStop` in nifty-core covers the case where WE are the one going
---- away, but this covers us coming BACK: clear the local flag so a fresh start does
---- not believe it already has focus.
+--- Coming BACK from a restart. Fresh Lua state means a fresh, empty input box.
 AddEventHandler('onClientResourceStart', function(resource)
   if resource ~= RESOURCE then return end
   Input.open = false

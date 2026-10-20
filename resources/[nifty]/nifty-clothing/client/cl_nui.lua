@@ -12,30 +12,66 @@
 local RESOURCE = GetCurrentResourceName()
 
 -- ---------------------------------------------------------------- focus
-local Focus = exports['nifty-core']
+-- NUI focus, owned entirely by this resource. Nothing about it is shared.
+--
+-- `SetNuiFocus` only does anything when the CALLING resource declares a
+-- `ui_page`, because it acts on that resource's own CEF. This one declares one.
+-- The focus broker in nifty-core could therefore never hand the keyboard over,
+-- whatever it reported: it has no ui_page on purpose, so every native call it
+-- issued was a silent no-op — it logged `granted`, returned true, and the player
+-- got no cursor while every click punched their character through a wall.
+--
+-- WHAT IS GIVEN UP, STATED PLAINLY: with no shared broker nobody can ask "who
+-- holds the keyboard right now?", so two surfaces that can be open at once are
+-- arbitrated by whoever opened last. ox_inventory lives with the identical
+-- constraint and papers over it with `Wait(100)` and a hopeful comment.
+--
+-- `SetNuiFocusKeepInput(false)` is not decoration: ox_target raises that flag
+-- globally on every target interaction and never lowers it
+-- (ox_target/client/state.lua), so without it a click on an open panel also
+-- reaches the game and moves the character.
 local focusHeld = false
 
+--- Take the keyboard and show the cursor.
 local function acquireFocus()
-  if focusHeld then return true end
-  if not Focus or type(Focus.acquire) ~= 'function' then return false end
-  local ok = Focus.acquire(RESOURCE)
-  if ok then focusHeld = true end
-  return ok
+  if focusHeld then return end
+
+  SetNuiFocus(true, true)
+  SetNuiFocusKeepInput(false)
+  focusHeld = true
 end
 
+--- Hand it back. Safe to call when we never had it.
 local function releaseFocus()
-  if not focusHeld then return end
-  if Focus and type(Focus.release) == 'function' then Focus.release(RESOURCE) end
+  if not focusHeld then return false end
+
   focusHeld = false
+  SetNuiFocus(false, false)
+  SetNuiFocusKeepInput(false)
+  return true
 end
+
+-- Stopping with the keyboard held strands a captured cursor with no way out but a
+-- reconnect, so the stop path has to release it. This handler cannot be inherited
+-- from anywhere: every resource that can hold focus needs its own.
+AddEventHandler('onResourceStop', function(resource)
+  if resource ~= RESOURCE then return end
+
+  releaseFocus()
+end)
+
+AddEventHandler('playerDropped', function()
+  focusHeld = false
+end)
+
 
 local function sendOpen(mode, extra)
-  if not acquireFocus() then return end
-  SendNUIMessage({ action = 'open', data = { mode = mode, extra = extra or {} } })
+  acquireFocus()
+  SendNUIMessage({ action = 'clothing:open', data = { mode = mode, extra = extra or {} } })
 end
 
 local function sendClose()
-  SendNUIMessage({ action = 'close' })
+  SendNUIMessage({ action = 'clothing:close' })
   releaseFocus()
 end
 
@@ -51,7 +87,7 @@ local function onOwnedPieces(reply)
   if reply and reply.kind and reply.slot then
     RemoveEventHandler(onOwnedPieces)
     SendNUIMessage({
-      action = 'refresh',
+      action = 'clothing:refresh',
       data    = { owned = { [reply.kind] = { [reply.slot] = reply.items or {} } } },
     })
   end
@@ -87,14 +123,14 @@ end)
 -- Long-lived listener so the wardrobe refreshes when an outfit
 -- is renamed or deleted (the server re-broadcasts the list).
 RegisterNetEvent('nifty:client:outfitList', function(list)
-  SendNUIMessage({ action = 'refresh', data = { outfits = list or {} } })
+  SendNUIMessage({ action = 'clothing:refresh', data = { outfits = list or {} } })
 end)
 
 -- One-shot listener used by getOutfits so the JS can flip screens
 -- without a re-fetch. Removed on first reply.
 local function onOutfitListFetch(list)
   RemoveEventHandler(onOutfitListFetch)
-  SendNUIMessage({ action = 'refresh', data = { outfits = list or {} } })
+  SendNUIMessage({ action = 'clothing:refresh', data = { outfits = list or {} } })
 end
 RegisterNUICallback('getOutfits', function(_, cb)
   RegisterNetEvent('nifty:client:outfitList', onOutfitListFetch)
@@ -205,7 +241,6 @@ end, false)
 RegisterCommand('-niftyclotheshop', function() end, false)
 RegisterKeyMapping('+niftyclotheshop', 'Nifty Life - Klamottenladen', 'keyboard', 'F7')
 
-AddEventHandler('onResourceStop', function(res)
-  if res == RESOURCE and focusHeld then releaseFocus() end
-end)
-AddEventHandler('playerDropped', function() releaseFocus() end)
+-- Releasing focus on stop and on disconnect is handled by the focus block above,
+-- which registers those handlers itself. Two copies would be two sources of truth
+-- for one flag.

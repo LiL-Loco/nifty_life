@@ -28,9 +28,25 @@ description 'The website look, as the loading screen.'
 version '0.1.0'
 
 files {
-  'index.html',
-  'loadscreen.css',
-  'loadscreen.js',
+  'dist/index.html',
+  'dist/assets/*.js',
+  'dist/assets/*.css',
 }
 
-loadscreen 'index.html'
+-- BUILT from ui-monorepo/packages/loadscreen (React + Tailwind).
+--
+-- The loading screen is the one page that CANNOT use the NUI bridge: it is
+-- drawn before any Lua VM exists, so there is no GetParentResourceName, no
+-- RegisterNUICallback and no SendNUIMessage. Its only channel is the
+-- window.postMessage the client pushes (eventName, not action) -- see
+-- src/loadscreen-contract.ts, transcribed from LoadingScreens.cpp.
+--
+-- That is also why its CSS is duplicated rather than imported: nothing here can
+-- depend on the toolchain being available at connect time.
+--
+-- To rebuild:
+--   ssh root@<host> 'cd /root/ui-monorepo && bun install && bun run build:loadscreen'
+--   then copy packages/loadscreen/dist over this resource's dist and restart.
+
+
+loadscreen 'dist/index.html'

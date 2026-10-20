@@ -15,6 +15,11 @@ version '0.3.0'
 --
 -- stores.lua + prices.lua last: pure data, no side effects.
 shared_scripts {
+  -- `@ox_lib/init.lua` FIRST: the shop proximity check uses `lib.points`. A
+  -- resource cannot reference it before its shared_script block has run, and
+  -- nifty-clothing is ensured before ox_lib is, so without this the order was
+  -- luck rather than declaration.
+  '@ox_lib/init.lua',
   'shared/core.lua',
   '@nifty-core/shared/constants.lua',
   '@nifty-core/shared/appearance_config.lua',
@@ -41,14 +46,28 @@ server_script 'server/sv_drops.lua'
 -- two UIs are mutually exclusive (you can't be in the wardrobe
 -- and the store at the same time).
 files {
-  'ui/index.html',
-  'ui/style.css',
-  'ui/wardrobe.js',
-  'ui/store.js',
+  'ui/dist/index.html',
+  'ui/dist/assets/*.js',
+  'ui/dist/assets/*.css',
 }
+
+-- The panel is BUILT from ui-monorepo/packages/clothing (React + shadcn + Vite).
+-- `ui/dist/**` is the build artefact and is committed deliberately: a FiveM
+-- server is deployed from a checkout, so a gitignore rule that swallows dist/
+-- would leave every `ui_page` pointing at a file that is not there.
+--
+-- To rebuild:
+--   ssh root@<host> 'cd /root/ui-monorepo && bun install && bun run build:clothing'
+--   then copy packages/clothing/dist over this resource's ui/dist and restart.
+--
+-- The Lua side is unchanged and still sends the same action names; the panel
+-- types them through @nifty/bridge so a renamed action is a build error.
+
 
 -- Load order: cl_wardrobe.lua + cl_store.lua (data engine) before
 -- cl_nui.lua (driver), because cl_nui.lua references the same state.
+-- The shared focus API is deliberately NOT included here — see nifty-chat's
+-- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
 client_script 'client/cl_hood.lua'
 client_script 'client/cl_targets.lua'
 client_script 'client/cl_drops.lua'
@@ -58,9 +77,10 @@ client_script 'client/cl_nui.lua'
 
 -- NUI page. The CEF renders ui/index.html. The page is hidden until
 -- the wardrobe NUI driver sends an `open` message.
-ui_page 'ui/index.html'
+ui_page 'ui/dist/index.html'
 
 dependencies {
+  'ox_lib',
   'nifty-core',
   'nifty-world',
   'nifty-chat',

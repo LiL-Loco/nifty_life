@@ -817,7 +817,7 @@
       modelLabels.push('Frisur ' + (d + 1));
     }
     const cur = state.selection.components && state.selection.components['2'] || {};
-    const drawable = Math.min(tonumber(cur.drawable) || 0, option.drawables - 1);
+    const drawable = Math.min(Number(cur.drawable) || 0, option.drawables - 1);
 
     root.appendChild(separator('Modell'));
     root.appendChild(list('Frisur', modelLabels, drawable, (i) => {
@@ -990,8 +990,8 @@
       : (state.componentLabels && state.componentLabels[id]) || ('Slot ' + id));
 
     const cur = (state.selection[kind] || {})[String(id)] || {};
-    const drawable = Math.min(tonumber(cur.drawable) || 0, option.drawables - 1);
-    const texture = Math.min(tonumber(cur.texture) || 0, Math.max(1, option.textures) - 1);
+    const drawable = Math.min(Number(cur.drawable) || 0, option.drawables - 1);
+    const texture = Math.min(Number(cur.texture) || 0, Math.max(1, option.textures) - 1);
 
     // Lazy-fetch item names. The result lands in state.itemNames via
     // the 'itemNames' message handler, which then re-renders.
@@ -1121,38 +1121,38 @@
     const { action, data } = e.data || {};
     if (!action) return;
     switch (action) {
-      case 'open':
+      case 'creator:open':
         applyOpen(data || {});
         break;
-      case 'refresh':
+      case 'creator:refresh':
         applyRefresh(data || {});
         break;
-      case 'close':
+      case 'creator:close':
         applyClose();
         break;
-      case 'skinCam':
+      case 'creator:skinCam':
         if (data && data.kind) state.skinCam = data.kind;
         updateSkinCamHint();
         break;
-      case 'error':
+      case 'creator:error':
         toast(data && data.message, true);
         break;
-      case 'tattooZones':
+      case 'creator:tattooZones':
         if (data && data.zones) {
           state.tattoos.zones = data.zones;
           renderActive();
         }
         break;
-      case 'tattoosByZone':
+      case 'creator:tattoosByZone':
         if (data && typeof data.zoneId === 'number') {
           state.tattoos.byZone[data.zoneId] = data.tattoos || [];
           renderActive();
         }
         break;
-      case 'faceBones':
+      case 'creator:faceBones':
         renderFaceBones(data && data.bones);
         break;
-      case 'itemNames':
+      case 'creator:itemNames':
         if (data && data.kind && (data.id !== undefined) && data.names) {
           state.itemNames[`${data.kind}:${data.id}`] = data.names;
           renderActive();
@@ -1221,3 +1221,22 @@
     return out;
   };
 })();
+
+// === TEMPORARY probe (2026-10-20) =============================================
+// Fires once, shortly after the page loads, and reports whether the CEF frame is
+// actually running. `IsNuiFocused` reads the game's own bookkeeping and returned
+// 1 while every button in this panel was dead, so the game-side number cannot
+// distinguish "panel rendered" from "panel exists in the manifest". This can.
+// Removed together with RegisterNUICallback('diagPing') on the Lua side.
+window.addEventListener('load', function () {
+  setTimeout(function () {
+    fetch('https://' + GetParentResourceName() + '/diagPing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      body: JSON.stringify({}),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { console.log('[NUI-PROBE] frame alive, server says', JSON.stringify(d)); })
+      .catch(function (e) { console.log('[NUI-PROBE] fetch FAILED: ' + e); });
+  }, 1500);
+});

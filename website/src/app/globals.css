@@ -15,70 +15,66 @@
  * / `--color-line` / `--color-accent` the hand-written stylesheet carried.
  */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.375rem;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.9551 0 0);
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(0.1448 0 0);
+  --card-foreground: oklch(0.9551 0 0);
 
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: var(--background);
+  --popover-foreground: oklch(0.9551 0 0);
 
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: oklch(0.7166 0.1561 247.1092);
+  --primary-foreground: oklch(0 0 0);
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.3974 0.0871 247.2300);
+  --secondary-foreground: oklch(0.9551 0 0);
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted: oklch(0.2674 0.0047 325.7068);
+  --muted-foreground: oklch(0.6731 0 0);
 
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.2464 0.0627 248.8650);
+  --accent-foreground: oklch(0.9970 0 0);
 
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(0.8597 0.1155 73.1029);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(0.2150 0.0025 325.6623);
+  --input: oklch(0.3523 0 0);
+  --ring: oklch(0.7166 0.1561 247.1092);
 
-  /* Sidebar tokens. The site is dark-only, so the dark values are the only ones
-     defined — no .light sibling. The values match the rest of the neutral dark
-     palette so a sidebar panel does not look like a different surface. */
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.922 0 0);
-  --sidebar-primary-foreground: oklch(0.205 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Sidebar tokens, taken from the theme rather than left on the old neutral
+     values. Dark-only: no .light sibling. The surfaces sit at `background` /
+     `card` like every other panel, and only `sidebar-primary` carries the
+     accent — the same rule the rest of the UI follows. */
+  --sidebar: var(--background);
+  --sidebar-foreground: oklch(0.9551 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: oklch(0.9970 0 0);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 
   /* Status colour that the shadcn palette does not name: the "everything is
      fine" green used on the application status pill and the ban-free row in
      the registrations table. */
   --success: oklch(0.72 0.15 150);
 
-  /* The landing page's amber. Kept outside the standard set on purpose: it
-     belongs to the hero, not the design system. */
-  --color-amber: #f0a53a;
+  /* The accent, kept as a NAME even though it now resolves to the theme's
+     primary. Roughly ten call sites use `text-amber` / `bg-amber` for the hero
+     mark, the status pill and the loading screen's progress bar. Aliasing the
+     token means a brand change flips all of them at once instead of leaving a
+     site half amber and half blue. */
+  --color-amber: var(--primary);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Montserrat', ui-sans-serif, sans-serif, system-ui;
+  --font-mono: 'IBM Plex Mono', monospace;
 
   /* The width of the portal shell — navbar, main, footer all sit inside this
      so a card cannot be wider than the bar above and below it. */
   --container-shell: 72rem;
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
 /**
@@ -92,7 +88,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
+  --color-popover: var(--color-background);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
@@ -406,13 +402,3 @@
 }
 /*---break---
  */
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}

@@ -24,13 +24,26 @@ shared_scripts {
   '@nifty-core/shared/appearance_config.lua',
 }
 
-ui_page 'ui/index.html'
+ui_page 'ui/dist/index.html'
 
 files {
-  'ui/index.html',
-  'ui/style.css',
-  'ui/app.js',
+  'ui/dist/index.html',
+  'ui/dist/assets/*.js',
+  'ui/dist/assets/*.css',
 }
+
+-- The panel is BUILT from ui-monorepo/packages/world (React + shadcn + Vite).
+-- `ui/dist/**` is the build artefact and is committed deliberately: a FiveM
+-- server is deployed from a checkout, so a gitignore rule that swallows dist/
+-- would leave every `ui_page` pointing at a file that is not there.
+--
+-- To rebuild:
+--   ssh root@<host> 'cd /root/ui-monorepo && bun install && bun run build:world'
+--   then copy packages/world/dist over this resource's ui/dist and restart.
+--
+-- The Lua side is unchanged and still sends the same action names; the panel
+-- types them through @nifty/bridge so a renamed action is a build error.
+
 
 server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/sv_main.lua'
@@ -40,6 +53,8 @@ server_script 'server/sv_actions.lua'
 -- handler arms it for death respawns and registers the character's home
 -- as a spawn point so the respawn lands there too. There is no nifty
 -- dependency on a spawn resource of our own.
+-- The shared focus API is deliberately NOT included here — see nifty-chat's
+-- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
 client_script 'client/cl_identity.lua'
 client_script 'client/cl_world.lua'
 

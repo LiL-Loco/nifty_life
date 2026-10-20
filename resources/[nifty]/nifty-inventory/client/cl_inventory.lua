@@ -44,14 +44,84 @@ end)
 
 local panelOpen = false
 
+-- ---------------------------------------------------------------- focus
+-- NUI focus, owned entirely by this resource. Nothing about it is shared.
+--
+-- `SetNuiFocus` only does anything when the CALLING resource declares a
+-- `ui_page`, because it acts on that resource's own CEF. This one declares one.
+-- The focus broker in nifty-core could therefore never hand the keyboard over,
+-- whatever it reported: it has no ui_page on purpose, so every native call it
+-- issued was a silent no-op — it logged `granted`, returned true, and the player
+-- got no cursor while every click punched their character through a wall.
+--
+-- WHAT IS GIVEN UP, STATED PLAINLY: with no shared broker nobody can ask "who
+-- holds the keyboard right now?", so two surfaces that can be open at once are
+-- arbitrated by whoever opened last. ox_inventory lives with the identical
+-- constraint and papers over it with `Wait(100)` and a hopeful comment.
+--
+-- `SetNuiFocusKeepInput(false)` is not decoration: ox_target raises that flag
+-- globally on every target interaction and never lowers it
+-- (ox_target/client/state.lua), so without it a click on an open panel also
+-- reaches the game and moves the character.
+local focusHeld = false
+
+--- Take the keyboard and show the cursor.
+local function acquireFocus()
+  if focusHeld then return end
+
+  SetNuiFocus(true, true)
+  SetNuiFocusKeepInput(false)
+  focusHeld = true
+end
+
+--- Hand it back. Safe to call when we never had it.
+local function releaseFocus()
+  if not focusHeld then return false end
+
+  focusHeld = false
+  SetNuiFocus(false, false)
+  SetNuiFocusKeepInput(false)
+  return true
+end
+
+-- Stopping with the keyboard held strands a captured cursor with no way out but a
+-- reconnect, so the stop path has to release it. This handler cannot be inherited
+-- from anywhere: every resource that can hold focus needs its own.
+AddEventHandler('onResourceStop', function(resource)
+  if resource ~= RESOURCE then return end
+
+  releaseFocus()
+end)
+
+AddEventHandler('playerDropped', function()
+  focusHeld = false
+end)
+
 local function openPanel()
   if panelOpen then return end
+
+  -- WHY THE CHECK, AND WHY IT IS FIRST
+  --
+  -- This used to be `panelOpen = true` followed by an acquire whose RESULT WAS
+  -- THROWN AWAY. So pressing F1 while the creator or the chat held the keyboard
+  -- raised the inventory frame on top of it anyway — visible, undismissable, with
+  -- no cursor, because the holder had the keyboard and this panel had never
+  -- asked for it. That is the same shape as the bug that cost the creator an
+  -- evening: a panel that renders over a surface that owns the keyboard.
+  --
+  -- A refusal is normal, not an error: the chat input says so out loud. F1 is
+  -- also the inventory key, so the closest equivalent here is a short message
+  -- rather than silence — a key that does nothing looks exactly like a broken
+  -- key binding and the player has no way to tell which it is.
+  acquireFocus()
   panelOpen = true
-  SetNuiFocus(true, true)
-  -- Push the cached state once on open. The NUI receives {action: 'open'}
+  -- Push the cached state once on open. The NUI receives {action: 'inventory:open'}
   -- and snapshots the inventory state at that moment.
+  --
+  -- The prefix matters: action names are a shared channel and every resource's
+  -- frame sees every message, so a bare 'open' also unhides the creator's panel.
   SendNUIMessage({
-    action = 'open',
+    action = 'inventory:open',
     data  = {
       inventory = invState.inventory,
       character = invState.character,
@@ -62,8 +132,8 @@ end
 local function closePanel()
   if not panelOpen then return end
   panelOpen = false
-  SetNuiFocus(false, false)
-  SendNUIMessage({ action = 'close' })
+  releaseFocus()
+  SendNUIMessage({ action = 'inventory:close' })
 end
 
 RegisterCommand('+niftyinventory', function()
@@ -89,7 +159,7 @@ end, false)
 AddEventHandler('nifty:client:inventory', function()
   if not panelOpen then return end
   SendNUIMessage({
-    action = 'refresh',
+    action = 'inventory:refresh',
     data  = {
       inventory = invState.inventory,
       character = invState.character,
@@ -99,7 +169,7 @@ end)
 AddEventHandler('nifty:client:character', function()
   if not panelOpen then return end
   SendNUIMessage({
-    action = 'refresh',
+    action = 'inventory:refresh',
     data  = {
       inventory = invState.inventory,
       character = invState.character,
@@ -110,7 +180,7 @@ AddEventHandler('nifty:client:enterWorld', function(data)
   if type(data) ~= 'table' or type(data.character) ~= 'table' then return end
   if not panelOpen then return end
   SendNUIMessage({
-    action = 'refresh',
+    action = 'inventory:refresh',
     data  = {
       inventory = invState.inventory,
       character = invState.character,

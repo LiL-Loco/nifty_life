@@ -346,6 +346,14 @@ local function respawnModel()
 
   SetPlayerModel(PlayerId(), hash)
   SetModelAsNoLongerNeeded(hash)
+
+  -- The replacement ped comes back not drawn (CFX #4980). NOTE: do not try to
+  -- fix that here with SetEntityVisible — it does not work. The visibility flag
+  -- and the alpha are already correct on the broken ped; only a geometry
+  -- rebuild clears it, which is why an earlier attempt at exactly that fix
+  -- reported pedVisible=1 / alpha=255 while the player still saw nothing.
+  -- openCreator calls refresh() after discoverSlots for that reason.
+
   return PlayerPedId()
 end
 
@@ -435,38 +443,74 @@ zoomCamera = function(direction)
   SetCamFov(creatorCam, camFov)
 end
 
+-- Reveal the screen for this surface, and KEEP it revealed.
+--
+-- WHY THIS IS NOT JUST `DoScreenFadeIn`.
+--
+-- The fade-out and the fade-in have different owners here. nifty-core blacks
+-- the screen out on playerSpawned (cl_welcome.lua) and deliberately does not
+-- decide who gets it back — the server does, ~1.5s later, by sending either
+-- openCreator or enterWorld. That handover is the reason `faded=1` was
+-- measured here: a DoScreenFadeIn from this side lost a race it was never told
+-- it was in.
+--
+-- The reference implementation (lambits/lbg-char, AnimCam) does not have this
+-- problem because both halves live in ONE sequential routine: fade out, wait,
+-- build the camera, fade in. There is no second owner to race.
+--
+-- Rather than restructure that ownership for the sake of one screen, this
+-- asserts the end state and then verifies it. `DoScreenFadeIn` is a REQUEST to
+-- fade; it is not a promise that it will be the last thing to touch the screen.
+-- So: request, wait for the transition to finish, and if anything blacked the
+-- screen again in the meantime, request it again. The check loop is bounded so
+-- it can never spin forever.
+local function revealScreen()
+  DoScreenFadeIn(500)
+  CreateThread(function()
+    for _ = 1, 40 do           -- up to ~2s, exits as soon as it holds
+      Wait(100)
+      if not IsScreenFadedOut() then return end
+      DoScreenFadeIn(300)
+    end
+  end)
+end
+
 local function startCamera()
   local scene = CreatorScene
-  local headingRad = scene.heading * math.pi / 180.0
-  local dirX = math.cos(headingRad)
-  local dirY = math.sin(headingRad)
+  local ped = PlayerPedId()
 
-  -- Three-stage flyover to match the GTA Online entry cinematic:
-  -- far/high overview -> mid-range -> close-up. Each stage is a
-  -- separate scripted cam; SetCamActiveWithInterp blends them so the
-  -- cut between cameras is not visible. Total ~2.4s, then the menu
-  -- opens (the third stage's position is the working menu camera).
-  -- The three-stage flyover (far overview -> mid -> close-up, with the menu
-  -- opening only after the last interpolation) was removed on 2026-10-12 at
-  -- the owner's request. The working camera is placed directly and the menu
-  -- opens on it.
+  -- The camera is positioned RELATIVE TO THE PED, not from absolute scene
+  -- coordinates.
   --
-  -- The screen is still held black by nifty-core's pre-welcome hook, so the
-  -- fade-in stays here, and firing is still disabled so a player cannot shoot
-  -- themselves while posing.
+  -- The old version computed `cos(heading) / sin(heading)` from the scene's
+  -- 195-degree heading and multiplied that by a fixed 2.0. That is the wrong
+  -- axis in GTA's world space, so the camera landed somewhere in the scenery a
+  -- couple of metres from the player — which is what "the camera is stuck in
+  -- front of a door" was, all along. It was never a rendering or a visibility
+  -- problem, and no amount of SetNuiFocus or model rebuilding would have moved
+  -- it.
+  --
+  -- GetOffsetFromEntityInWorldCoords derives the offset in the ped's own frame,
+  -- so the camera ends up behind whoever the ped is facing, wherever they were
+  -- parked. This is what qb-clothing's enableCam does and it cannot drift.
+  --
+  -- The scene block's camHeight / camRadius / camPitch / camNearFov are used
+  -- here now; they were carried in appearance_config.lua since the scene was
+  -- written and nothing read them.
+  DestroyAllCams(false)
 
-  DoScreenFadeIn(500)
+  local coords = GetOffsetFromEntityInWorldCoords(ped, 0.0, scene.camRadius or 2.0, 0.0)
+
+  revealScreen()
   DisablePlayerFiring(PlayerId(), true)
 
   creatorCam = CreateCamWithParams(
     'DEFAULT_SCRIPTED_CAMERA',
-    scene.x + dirX * 2.0,
-    scene.y + dirY * 2.0,
-    scene.z + 1.4,
-    -5.0, 0.0, (scene.heading or 0.0),
-    35.0, false, 0
+    coords.x, coords.y, coords.z + (scene.camHeight or 0.35),
+    0.0, scene.camPitch or -8.0, GetEntityHeading(ped) + 180.0,
+    scene.camNearFov or 35.0, false, 0
   )
-  PointCamAtEntity(creatorCam, PlayerPedId(), 0.0, 0.0, 0.0, true)
+  PointCamAtEntity(creatorCam, ped, 0.0, 0.0, 0.0, true)
   SetCamActive(creatorCam, true)
   RenderScriptCams(creatorCam, true, false, 0)
 
@@ -963,6 +1007,24 @@ exports('openCreator', function(data)
 
   respawnModel()
   discoverSlots()
+
+  -- Force the ped geometry to rebuild after SetPlayerModel.
+  --
+  -- SetPlayerModel replaces the ped entity and the replacement comes back not
+  -- drawn (CFX #4980). SetEntityVisible does NOT fix this: the flag is already
+  -- true and the alpha already 255 — the ped is present and "visible" as far as
+  -- every query is concerned, and still nothing is rendered. Only a geometry
+  -- rebuild clears it, which is what SetPedCollectionComponentVariation does.
+  --
+  -- That is also why the ped appeared the moment a slider was moved in testing:
+  -- every interaction routes through refresh() -> applyAppearanceParts ->
+  -- SetPedCollectionComponentVariation. Opening the creator simply never called
+  -- it, so the ped stayed undrawn until the player's first click.
+  --
+  -- This has to run AFTER discoverSlots, because appearanceNow() resolves
+  -- collections through slots and there is nothing to resolve before then.
+  refresh()
+
   print(('[%s] openCreator: post-discoverSlots components=%d props=%d'):format(
     RESOURCE,
     slots.components and (function() local n=0; for _ in pairs(slots.components) do n=n+1 end; return n end)() or 0,
@@ -1222,11 +1284,15 @@ end)
 -- for the first collection of the requested slot. The NUI uses this
 -- to label Modell/Ausfuehrung rows with their real German name from
 -- the engine data, instead of "Modell N" / "Ausfuehrung N".
+-- `slots`, NOT `state.slots`. There is no `state` table in this file - it is
+-- a file-local named `slots` - so reading `state.slots` indexed nil and this
+-- export threw on every call, which is why the Modell/Ausfuehrung labels in the
+-- slot picker stayed empty instead of showing the engine's German names.
 exports('getItemNames', function(kind, id)
   if type(id) ~= 'number' then return nil end
   local isProp = (kind == 'props')
   if not isProp and kind ~= 'components' then return nil end
-  local slot = (state.slots[kind] or {})[tostring(id)]
+  local slot = (slots[kind] or {})[tostring(id)]
   if not slot or #slot == 0 then return nil end
   local option = slot[1]
   local drawables = option.drawables or 0
@@ -1327,3 +1393,44 @@ CAM_FOV_STEP  = 12.0  -- FOV delta per menu press
 -- menu's drawn rectangle so it cannot wander off into the world and
 -- accidentally interact with something the menu does not control.
 
+
+-- =================================================================
+-- NUI export surface — the panel's action buttons.
+--
+-- These five were DEFINED but never exported: `randomise`, `randomiseAll`,
+-- `reset`, `submit` and `cancel` were assigned as globals (`name = function()`)
+-- and then called from cl_nui.lua through `tryCall`, which resolves exports
+-- only. Every press therefore failed with "No such export <name> in resource
+-- nifty-creator" — the panel shows that as a silent no-op, so the button simply
+-- does nothing and nothing says why.
+--
+-- `submit` is the panel's "Fertig" button (ui/app.js:641 -> fetchNui('submit')),
+-- so it is not optional either: without the export, a finished character can
+-- never be submitted.
+--
+-- WHY THESE READ THE GLOBAL, NOT THE `local` FORWARD DECLARATION.
+--
+-- At the top of this file `cancel`, `reset`, `randomise`, `randomiseAll` and
+-- `submit` are declared `local` so other functions above them can reference
+-- them. Their bodies are then assigned later as bare `name = function()`, which
+-- — despite the local declaration — assigns a GLOBAL, because the name is no
+-- longer being declared.
+--
+-- So the local declared at the top stays nil forever. An export written as
+-- `function() return cancel() end` closes over that local and therefore
+-- returned nil, which surfaced as "No such export cancel" from the panel.
+--
+-- This file already had the working form further up and did not notice:
+--
+--     exports('zoomCamera', function(direction)
+--       zoomCamera(direction)
+--     end)
+--
+-- which resolves the global, which is the one that was actually assigned. These
+-- five now use that same shape, because changing the assignments to `local` would
+-- re-shadow every reference and is a much larger change than it looks.
+exports('randomise', function() randomise() end)
+exports('randomiseAll', function() randomiseAll() end)
+exports('reset', function() reset() end)
+exports('cancel', function() cancel() end)
+exports('submit', function() submit() end)

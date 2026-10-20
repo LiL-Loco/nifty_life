@@ -17,33 +17,33 @@ local RESOURCE = GetCurrentResourceName()
 -- single source of truth for state mutations; cl_nui.lua never writes
 -- `face.*` / `selection.*` directly.
 local api = {
-  openCreator      = function(...) return exports[RESOURCE].openCreator(...) end,
-  closeCreator     = function(...) return exports[RESOURCE].closeCreator(...) end,
-  isCreatorOpen    = function(...) return exports[RESOURCE].isCreatorOpen(...) end,
-  setFeature       = function(...) return exports[RESOURCE].setFeature(...) end,
-  setSlot          = function(...) return exports[RESOURCE].setSlot(...) end,
-  setOverlay       = function(...) return exports[RESOURCE].setOverlay(...) end,
-  setHairColour    = function(...) return exports[RESOURCE].setHairColour(...) end,
-  setHairOverlayOpacity = function(...) return exports[RESOURCE].setHairOverlayOpacity(...) end,
-  setEyeColour     = function(...) return exports[RESOURCE].setEyeColour(...) end,
-  setHeadBlend     = function(...) return exports[RESOURCE].setHeadBlend(...) end,
-  randomise        = function(...) return exports[RESOURCE].randomise(...) end,
-  randomiseAll     = function(...) return exports[RESOURCE].randomiseAll(...) end,
-  reset            = function(...) return exports[RESOURCE].reset(...) end,
-  submit           = function(...) return exports[RESOURCE].submit(...) end,
-  cancel           = function(...) return exports[RESOURCE].cancel(...) end,
-  zoomCamera       = function(...) return exports[RESOURCE].zoomCamera(...) end,
-  camYaw           = function(...) return exports[RESOURCE].camYaw(...) end,
-  pickModel        = function(...) return exports[RESOURCE].pickModel(...) end,
-  pickTattoo       = function(...) return exports[RESOURCE].pickTattoo(...) end,
-  removeTattoo     = function(...) return exports[RESOURCE].removeTattoo(...) end,
-  swapOverlayPalette = function(...) return exports[RESOURCE].swapOverlayPalette(...) end,
-  showSkinCam      = function(...) return exports[RESOURCE].showSkinCam(...) end,
-  getState         = function(...) return exports[RESOURCE].getState(...) end,
-  captureParentPortrait = function(...) return exports[RESOURCE].captureParentPortrait(...) end,
-  getTattooZones   = function(...) return exports[RESOURCE].getTattooZones(...) end,
-  getTattoosByZone = function(...) return exports[RESOURCE].getTattoosByZone(...) end,
-  projectFaceBones = function(...) return exports[RESOURCE].projectFaceBones(...) end,
+  openCreator      = function(...) return exports[RESOURCE]:openCreator(...) end,
+  closeCreator     = function(...) return exports[RESOURCE]:closeCreator(...) end,
+  isCreatorOpen    = function(...) return exports[RESOURCE]:isCreatorOpen(...) end,
+  setFeature       = function(...) return exports[RESOURCE]:setFeature(...) end,
+  setSlot          = function(...) return exports[RESOURCE]:setSlot(...) end,
+  setOverlay       = function(...) return exports[RESOURCE]:setOverlay(...) end,
+  setHairColour    = function(...) return exports[RESOURCE]:setHairColour(...) end,
+  setHairOverlayOpacity = function(...) return exports[RESOURCE]:setHairOverlayOpacity(...) end,
+  setEyeColour     = function(...) return exports[RESOURCE]:setEyeColour(...) end,
+  setHeadBlend     = function(...) return exports[RESOURCE]:setHeadBlend(...) end,
+  randomise        = function(...) return exports[RESOURCE]:randomise(...) end,
+  randomiseAll     = function(...) return exports[RESOURCE]:randomiseAll(...) end,
+  reset            = function(...) return exports[RESOURCE]:reset(...) end,
+  submit           = function(...) return exports[RESOURCE]:submit(...) end,
+  cancel           = function(...) return exports[RESOURCE]:cancel(...) end,
+  zoomCamera       = function(...) return exports[RESOURCE]:zoomCamera(...) end,
+  camYaw           = function(...) return exports[RESOURCE]:camYaw(...) end,
+  pickModel        = function(...) return exports[RESOURCE]:pickModel(...) end,
+  pickTattoo       = function(...) return exports[RESOURCE]:pickTattoo(...) end,
+  removeTattoo     = function(...) return exports[RESOURCE]:removeTattoo(...) end,
+  swapOverlayPalette = function(...) return exports[RESOURCE]:swapOverlayPalette(...) end,
+  showSkinCam      = function(...) return exports[RESOURCE]:showSkinCam(...) end,
+  getState         = function(...) return exports[RESOURCE]:getState(...) end,
+  captureParentPortrait = function(...) return exports[RESOURCE]:captureParentPortrait(...) end,
+  getTattooZones   = function(...) return exports[RESOURCE]:getTattooZones(...) end,
+  getTattoosByZone = function(...) return exports[RESOURCE]:getTattoosByZone(...) end,
+  projectFaceBones = function(...) return exports[RESOURCE]:projectFaceBones(...) end,
 }
 
 -- Resolve any nil forward declarations (export not yet wired by the engine)
@@ -55,6 +55,24 @@ for k, v in pairs(api) do
   end
 end
 
+-- WHY EVERY WRAPPER ABOVE USES A COLON (`exports[RESOURCE]:name(...)`)
+--
+-- FiveM consumes an implicit first argument on an export call, so the spelling
+-- decides whether your arguments arrive or vanish:
+--
+--     exports[RESOURCE].zoomCamera(...)   -- export receives (nil, ...)
+--     exports[RESOURCE]:zoomCamera(...)   -- export receives (...)
+--
+-- With the dot form `zoomCamera` got `direction = nil` and threw "attempt to
+-- perform arithmetic on a nil value"; `camYaw` lost its delta; `setFeature` lost
+-- its id. The wrappers below all used it, so every parameterised button in the
+-- panel was broken while every no-argument one happened to work — which is
+-- exactly the "some buttons are dead" shape this had.
+--
+-- Same trap as the focus broker in nifty-core/cl_focus.lua, and the reason
+-- nifty-chat used `Focus:acquire(...)` (colon) while three other callers used
+-- `Focus.acquire(...)` (dot) and silently got nil.
+
 local function tryCall(name, ...)
   local fn = api[name]
   if type(fn) ~= 'function' then
@@ -65,22 +83,65 @@ local function tryCall(name, ...)
 end
 
 -- ---------------------------------------------------------------- focus
-local Focus = exports['nifty-core']
+-- NUI focus, owned entirely by this resource. Nothing about it is shared.
+--
+-- `SetNuiFocus` only does anything when the CALLING resource declares a
+-- `ui_page`, because it acts on that resource's own CEF. This one declares one.
+-- The focus broker in nifty-core could therefore never hand the keyboard over,
+-- whatever it reported: it has no ui_page on purpose, so every native call it
+-- issued was a silent no-op — it logged `granted`, returned true, and the player
+-- got no cursor while every click punched their character through a wall. Thirty
+-- consecutive `SetNuiFocus(true, true)` from that context read `focused=false`;
+-- the same line here reads `focused=1` within 100 ms.
+--
+-- WHAT IS GIVEN UP, STATED PLAINLY: with no shared broker nobody can ask "who
+-- holds the keyboard right now?", so two surfaces that can be open at once are
+-- arbitrated by whoever opened last. ox_inventory lives with the identical
+-- constraint and papers over it with `Wait(100)` and a hopeful comment.
+--
+-- `SetNuiFocusKeepInput(false)` is not decoration: ox_target raises that flag
+-- globally on every target interaction and never lowers it
+-- (ox_target/client/state.lua), so without it a click on an open panel also
+-- reaches the game and moves the character.
+--
+-- WHY THE OLD `callExport` HELPER IS GONE: it existed to absorb the implicit
+-- argument shift on export calls — `Focus.acquire(R)` hands the export `(nil, R)`
+-- and the resource name arrives nil, while `Focus:acquire(R)` hands it `(R)`.
+-- Both compile and both return a boolean, so nothing at the call site said
+-- "wrong". There are no export calls left to make.
 local focusHeld = false
 
+--- Take the keyboard and show the cursor.
 local function acquireFocus()
-  if focusHeld then return true end
-  if not Focus or type(Focus.acquire) ~= 'function' then return false end
-  local ok = Focus.acquire(RESOURCE)
-  if ok then focusHeld = true end
-  return ok
+  if focusHeld then return end
+
+  SetNuiFocus(true, true)
+  SetNuiFocusKeepInput(false)
+  focusHeld = true
 end
 
+--- Hand it back. Safe to call when we never had it.
 local function releaseFocus()
-  if not focusHeld then return end
-  if Focus and type(Focus.release) == 'function' then Focus.release(RESOURCE) end
+  if not focusHeld then return false end
+
   focusHeld = false
+  SetNuiFocus(false, false)
+  SetNuiFocusKeepInput(false)
+  return true
 end
+
+-- Stopping with the keyboard held strands a captured cursor with no way out but a
+-- reconnect, so the stop path has to release it. This handler cannot be inherited
+-- from anywhere: every resource that can hold focus needs its own.
+AddEventHandler('onResourceStop', function(resource)
+  if resource ~= RESOURCE then return end
+
+  releaseFocus()
+end)
+
+AddEventHandler('playerDropped', function()
+  focusHeld = false
+end)
 
 -- ---------------------------------------------------------------- push helpers
 local function buildPayload()
@@ -101,39 +162,49 @@ local function buildPayload()
   }
 end
 
+-- ---------------------------------------------------------------- action names
+-- WHY EVERY `action` BELOW CARRIES THE `creator:` PREFIX.
+--
+-- Each ui_page is its own CEF browser, so two resources do not share a frame —
+-- but they DO share the `SendNUIMessage` channel, and every frame on the client
+-- sees every message. A bare `action = 'open'` was therefore heard by
+-- nifty-world as well, which unhides ITS `#creator` — a full character-creation
+-- form, left over from before the creator became its own resource. That frame
+-- composites ON TOP of this one, so the player saw a menu whose buttons did
+-- nothing: the buttons belonged to the panel underneath, and the clicks went to
+-- the one above.
+--
+-- The symptom points in three directions at once and none of them is where the
+-- fault is: focus reports held (`IsNuiFocused` = 1), the page is provably alive
+-- (a NUI callback round-trips), and the CSS has no overlay. `open`, `refresh`,
+-- `close` and `error` all collided with nifty-world or nifty-inventory; all
+-- creator actions are namespaced now so a frame only ever hears its own name.
+
 local function sendOpen()
-  if not acquireFocus() then
-    -- WHY THE LOCAL BINDING — this line used to be the whole expression:
-    --   tostring(Focus and type(Focus.holder) == 'function' and Focus.holder() or 'unknown')
-    --
-    -- `Focus.holder()` crosses a RESOURCE boundary, and an export that returns
-    -- nil comes back over that boundary as ZERO values, not as one nil. Lua only
-    -- collapses a multi-value call to a single value when it is NOT the direct
-    -- argument of another call — so the inline `tostring(Focus.holder())` became
-    -- `tostring()` with no argument at all and threw
-    --   bad argument #1 to 'tostring' (value expected)
-    -- on the very line that was supposed to EXPLAIN the failure.
-    --
-    -- Binding it first makes the arity explicit: no values becomes plain nil,
-    -- which then renders as "nil" like any other value. Verified against lua 5.4.
-    local holder
-    if Focus and type(Focus.holder) == 'function' then
-      holder = Focus.holder()
-    end
-    print(('[cl_nui] could not acquire focus (holder: %s)'):format(
-      tostring(holder or 'unknown')))
-    return
-  end
+  acquireFocus()
   local payload = buildPayload()
   if not payload then return end
-  SendNUIMessage({ action = 'open', data = payload })
+  SendNUIMessage({ action = 'creator:open', data = payload })
+
+  -- Put the cursor over the panel. The panel is the right-hand 460px of the
+  -- screen (style.css .cr-root: right: 0; width: 460px), and after
+  -- SetNuiFocus(true, true) the cursor keeps wherever the mouse last was —
+  -- which, having just come from the game world, is usually the middle of the
+  -- screen. The player then clicks on what they believe is a button and hits
+  -- the world behind the panel instead.
+  --
+  -- qb-clothing does the same thing (SetCursorLocation(0.9, 0.25) right after
+  -- SetNuiFocus) and the position is the screen centre in NORMALISED
+  -- coordinates: 0..1, 0 = top/left, 1 = bottom/right. 0.9/0.25 therefore lands
+  -- in the upper area of that right-hand strip.
+  SetCursorLocation(0.9, 0.25)
 end
 
 local function sendRefresh()
   if not focusHeld then return end
   local s = tryCall('getState')
   if type(s) ~= 'table' then return end
-  SendNUIMessage({ action = 'refresh', data = {
+  SendNUIMessage({ action = 'creator:refresh', data = {
     selection = s.selection,
     face      = s.face,
     skinCam   = s.skinCam,
@@ -145,11 +216,11 @@ end
 -- need a full state dump).
 local function sendPartialRefresh(t)
   if not focusHeld then return end
-  SendNUIMessage({ action = 'refresh', data = t })
+  SendNUIMessage({ action = 'creator:refresh', data = t })
 end
 
 local function sendClose()
-  SendNUIMessage({ action = 'close' })
+  SendNUIMessage({ action = 'creator:close' })
   releaseFocus()
 end
 
@@ -172,7 +243,7 @@ Citizen.CreateThread(function()
     if faceBonesActive and focusHeld then
       local bones = tryCall('projectFaceBones')
       if type(bones) == 'table' and #bones > 0 then
-        SendNUIMessage({ action = 'faceBones', data = { bones = bones } })
+        SendNUIMessage({ action = 'creator:faceBones', data = { bones = bones } })
       end
     end
     Citizen.Wait(FACE_BONE_PUSH_MS)
@@ -201,7 +272,7 @@ RegisterNUICallback('getItemNames', function(data, cb)
   local result = tryCall('getItemNames', data.kind, tonumber(data.id) or 0)
   if type(result) == 'table' then
     SendNUIMessage({
-      action = 'itemNames',
+      action = 'creator:itemNames',
       data = { kind = data.kind, id = data.id, names = result },
     })
   end
@@ -308,6 +379,23 @@ RegisterNUICallback('camYaw', function(data, cb)
   cb({ ok = true })
 end)
 
+-- Which close-up the skin cam should frame: 'face' for the panels that adjust
+-- features, 'body' for everything else. The NUI re-sends this on every panel
+-- change (app.js updateSkinCamState).
+--
+-- This callback was MISSING while the export below it existed since the NUI
+-- migration. The consequence was not a dead button but a dead PAGE: the NUI
+-- fired POST /showSkinCam on every panel switch, got a 404, and CEF treated the
+-- failed request as a navigation — so the whole panel reloaded itself. It looks
+-- exactly like "the menu is broken" from the outside and produces no Lua error,
+-- because the 404 is answered by the NUI server, not by the resource.
+RegisterNUICallback('showSkinCam', function(data, cb)
+  if type(data) == 'table' and data.kind then
+    tryCall('showSkinCam', tostring(data.kind))
+  end
+  cb({ ok = true })
+end)
+
 RegisterNUICallback('pickModel', function(data, cb)
   if type(data) == 'table' and data.model then
     tryCall('pickModel', data.model)
@@ -343,14 +431,14 @@ end)
 -- ---------------------------------------------------------------- lazy fetches
 RegisterNUICallback('getTattooZones', function(_, cb)
   local zones = tryCall('getTattooZones') or {}
-  SendNUIMessage({ action = 'tattooZones', data = { zones = zones } })
+  SendNUIMessage({ action = 'creator:tattooZones', data = { zones = zones } })
   cb({ ok = true })
 end)
 
 RegisterNUICallback('getTattoosByZone', function(data, cb)
   if type(data) == 'table' and data.zoneId then
     local t = tryCall('getTattoosByZone', tonumber(data.zoneId)) or {}
-    SendNUIMessage({ action = 'tattoosByZone', data = { zoneId = data.zoneId, tattoos = t } })
+    SendNUIMessage({ action = 'creator:tattoosByZone', data = { zoneId = data.zoneId, tattoos = t } })
   end
   cb({ ok = true })
 end)
@@ -359,7 +447,7 @@ RegisterNUICallback('requestParentPortraits', function(_, cb)
   -- Capture both parents in a hidden clone; reply with both base64 PNGs.
   local mother = tryCall('captureParentPortrait', 'mother')
   local father = tryCall('captureParentPortrait', 'father')
-  SendNUIMessage({ action = 'parentPortraits', data = {
+  SendNUIMessage({ action = 'creator:parentPortraits', data = {
     mother = type(mother) == 'string' and mother or '',
     father = type(father) == 'string' and father or '',
   }})
@@ -368,7 +456,7 @@ end)
 
 RegisterNUICallback('tickFaceBones', function(_, cb)
   local bones = tryCall('projectFaceBones') or {}
-  SendNUIMessage({ action = 'faceBones', data = { bones = bones } })
+  SendNUIMessage({ action = 'creator:faceBones', data = { bones = bones } })
   cb({ ok = true })
 end)
 
@@ -409,10 +497,9 @@ end)
 -- `nifty:client:creatorError` keeps the creator open so the player can
 -- retry. The error message is forwarded to the NUI as a toast.
 AddEventHandler('nifty:client:creatorError', function(message)
-  SendNUIMessage({ action = 'error', data = { message = message or '' } })
+  SendNUIMessage({ action = 'creator:error', data = { message = message or '' } })
 end)
 
--- Player dropped mid-creator: drop focus so the next client doesn't
--- inherit a captured mouse.
-AddEventHandler('playerDropped', function() releaseFocus() end)
-AddEventHandler('onResourceStop', function(res) if res == RESOURCE then releaseFocus() end end)
+-- Dropping focus on disconnect and on stop is handled by the focus block at the top
+-- of this file, which registers those handlers itself. Repeating them here would be
+-- a second source of truth for one flag.

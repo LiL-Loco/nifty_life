@@ -1,7 +1,7 @@
 // Nifty Life 2.0 — inventory panel (nifty-inventory/ui/).
 //
 // Lives in its own CEF (nifty-inventory's ui_page). cl_inventory.lua
-// sends `{action: 'open' | 'refresh' | 'close'}` updates; this file
+// sends `{action: 'inventory:open' | 'inventory:refresh' | 'inventory:close'}` updates; this file
 // renders the four-section grid (BACKPACK / OUTFIT / QUICK ACCESS /
 // ENVIRONMENT) and wires the right-click context menu on BACKPACK tiles.
 
@@ -544,13 +544,15 @@
   window.addEventListener('message', (e) => {
     const { action, data } = e.data || {};
     if (!action) return;
-    if (action === 'open' || action === 'refresh') {
+    // Prefixed: action names share one channel and every frame hears them.
+    // A bare 'open' also unhides the character creator's panel.
+    if (action === 'inventory:open' || action === 'inventory:refresh') {
       if (data) {
         hud.inventory = data.inventory || hud.inventory;
         hud.character  = data.character  !== undefined ? data.character : hud.character;
       }
       renderPanel();
-    } else if (action === 'close') {
+    } else if (action === 'inventory:close') {
       clearPanel();
     }
   });

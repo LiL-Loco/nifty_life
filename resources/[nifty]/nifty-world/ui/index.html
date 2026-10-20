@@ -8,99 +8,7 @@
 </head>
 <body>
 
- <div id="creator" class="creator hidden">
-
-    <header class="creator__header">
-      <h1>Character erstellen</h1>
-      <p class="creator__subtitle">Nifty Life 2.0</p>
-    </header>
-
-    <div class="creator__body">
-
-      <!-- Left: identity ------------------------------------------------ -->
-      <section class="panel panel--identity">
-        <h2 class="panel__title">Identität</h2>
-
-        <label class="field">
-          <span class="field__label">Vorname</span>
-          <input type="text" id="firstName" maxlength="32" autocomplete="off">
-        </label>
-
-        <label class="field">
-          <span class="field__label">Nachname <em>(optional)</em></span>
-          <input type="text" id="lastName" maxlength="32" autocomplete="off">
-        </label>
-
-        <label class="field">
-          <span class="field__label">Geburtsdatum</span>
-          <input type="date" id="dateOfBirth">
-          <span class="field__hint">Mindestens 18 Jahre alt.</span>
-        </label>
-
-        <label class="field">
-          <span class="field__label">Geschlecht</span>
-          <div class="segmented" id="gender">
-            <button type="button" class="segmented__btn" data-gender="male">Männlich</button>
-            <button type="button" class="segmented__btn" data-gender="female">Weiblich</button>
-            <button type="button" class="segmented__btn" data-gender="nonbinary">Divers</button>
-          </div>
-        </label>
-
-        <label class="field">
-          <span class="field__label">Modell</span>
-          <div class="segmented" id="model">
-            <button type="button" class="segmented__btn" data-model="mp_m_freemode_01">Männlich</button>
-            <button type="button" class="segmented__btn" data-model="mp_f_freemode_01">Weiblich</button>
-          </div>
-        </label>
-      </section>
-
-      <!-- Middle: slot list + variants ---------------------------------- -->
-      <section class="panel panel--slots">
-        <div class="slots__columns">
-
-          <div class="slots__list">
-            <h2 class="panel__title">Kleidung</h2>
-            <ul id="componentList" class="slotlist"></ul>
-
-            <h2 class="panel__title panel__title--spaced">Accessoires</h2>
-            <ul id="propList" class="slotlist"></ul>
-          </div>
-
-          <div class="slots__variants">
-            <h2 class="panel__title" id="variantsTitle">—</h2>
-            <div id="variantGrid" class="variantgrid"></div>
-
-            <h3 class="panel__subtitle">Farbe</h3>
-            <div id="colourGrid" class="colourgrid"></div>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- Right: actions ------------------------------------------------ -->
-      <section class="panel panel--actions">
-        <h2 class="panel__title">Aktionen</h2>
-
-        <button type="button" id="randomise" class="btn btn--ghost">Zufällig</button>
-        <button type="button" id="reset" class="btn btn--ghost">Zurücksetzen</button>
-
-        <div class="actions__spacer"></div>
-
-        <div id="error" class="error hidden"></div>
-
-        <button type="button" id="submit" class="btn btn--primary">Character erstellen</button>
-      </section>
-
-    </div>
-
-    <footer class="creator__footer">
-      <span class="hint"> Maus bewegen zum Umsehen · Scrollen zum Zoomen </span>
-    </footer>
-
-  </div>
-
-  <!-- HUD + panels (vertical slice) --------------------------------------- -->
+<!-- HUD + panels (vertical slice) --------------------------------------- -->
   <div id="hud" class="hud hidden">
     <div class="hud__money">
       <span class="hud__amount" id="hudCash">0,00 $</span>
@@ -113,31 +21,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-
-  <!-- Chat --------------------------------------------------------------- -->
-  <!--
-    Two parts that behave differently: the LOG is always present and passive, the
-    INPUT only exists while somebody is typing. Splitting them is what lets the
-    log fade on its own timer while the input stays until it is cancelled.
-
-    Deliberately NOT a panel: the chat is the only surface a player looks at
-    continuously, so it lives outside the panel shell and never takes focus except
-    while the input is open. Nothing here opens NUI focus on its own — see
-    client/cl_chat.lua, which owns that decision.
-  -->
- <div id="chatLog" class="chat-log"></div>
-
- <div id="chatInput" class="chat-input hidden">
-    <span class="chat-input__caret">/</span>
-    <input
-      type="text"
-      id="chatField"
-      class="chat-input__field"
-      maxlength="150"
-      autocomplete="off"
-      spellcheck="false"
-      placeholder="Nachricht — Enter zum Senden, Esc zum Abbrechen">
-  </div>
 
  <div id="panel" class="panel-shell hidden">
     <div class="panel-shell__inner">

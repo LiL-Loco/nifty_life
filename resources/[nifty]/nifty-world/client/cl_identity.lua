@@ -312,10 +312,15 @@ end
 -- Hand the ped to the player and drop them into the world.
 --
 -- Persistence contract: if the character row carries a `position` (saved on
--- every disconnect/autosave), the player resumes there directly and the
--- picker is skipped - that is the point of saving the column. If `position`
--- is null (first time after the creator finished) the picker opens, the
--- player picks, the choice becomes the new last position on the next save.
+-- every disconnect/autosave), the player resumes there directly. If `position`
+-- is null the server falls back to SpawnPoints.default, so the player still
+-- lands somewhere valid without being asked.
+--
+-- The spawn PICKER is gone. It needed a full-screen NUI panel in nifty-core,
+-- and a full-screen panel in the base resource composited ABOVE every other
+-- resource's CEF frame - it swallowed every click in the character creator.
+-- The server already set usePicker=false on this path (sv_main.lua), so the
+-- branch below it had no live caller anyway; only the export call survived.
 RegisterNetEvent('nifty:client:enterWorld', function(data)
   waitingForWorld = false
 
@@ -323,39 +328,14 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
   local firstName  = data.character.firstName
   local lastName   = data.character.lastName
 
-  if data.usePicker then
-    -- Build the picker's location list from the shared config. A row that
-    -- carries a spawn_point that no longer exists falls back to a single
-    -- entry built from data.spawn, so a misconfigured boot cannot hang.
-    local list = {}
-    for _, loc in ipairs(Spawn and Spawn.Locations or {}) do
-      list[#list + 1] = {
-        key = loc.key, label = loc.label,
-        x = loc.x, y = loc.y, z = loc.z, heading = loc.heading,
-      }
-    end
-    if #list == 0 then
-      list[#list + 1] = {
-        key = data.spawn and data.spawn.key or 'spawn',
-        label = 'Spawn',
-        x = data.spawn.x, y = data.spawn.y, z = data.spawn.z,
-        heading = data.spawn.heading or 0.0,
-      }
-    end
-
-    exports['nifty-core']:openSpawnPicker(list, function(px, py, pz, ph)
-      doEnterWorldSpawn(px, py, pz, ph, appearance, firstName, lastName)
-    end)
-  else
-    -- data.spawn IS the last known position (or the configured default for a
-    -- row whose position was null and then a save happened to fail). The
-    -- server decided usePicker=false, so resume there without a detour.
-    doEnterWorldSpawn(
-      data.spawn.x, data.spawn.y, data.spawn.z,
-      data.spawn.heading or 0.0,
-      appearance, firstName, lastName
-    )
-  end
+  -- data.spawn IS the last known position, or the configured default for a row
+  -- whose position was null. The server decides usePicker=false on this path
+  -- (sv_main.lua), so there is no branch to take here.
+  doEnterWorldSpawn(
+    data.spawn.x, data.spawn.y, data.spawn.z,
+    data.spawn.heading or 0.0,
+    appearance, firstName, lastName
+  )
 end)
 
 RegisterNetEvent('nifty:client:openCreator', function()
