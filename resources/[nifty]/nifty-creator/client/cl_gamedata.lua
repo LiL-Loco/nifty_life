@@ -146,39 +146,36 @@ local function mapCollection(ped, kind, id, collection, count)
 
   local map = {}
 
-  -- The slot is restored from OUR state, not read back from the ped: there is no
-  -- portable `GetPedComponentVariation` across builds, and the caller knows
-  -- exactly what it set. Without a restore the ped would be left wearing the last
-  -- item of the last collection we walked, and the player is looking at it.
-  -- GameData.savedSlot returns ONE value (the collection number); drawable and
-  -- texture are not part of "which collection was I in" and are reset to 0 here
-  -- for the same reason the loop above passes 0,0.
-  local savedCollection = GameData.savedSlot and GameData.savedSlot(kind, id)
+  -- What the ped is wearing in this slot, so it can be put back.
+  --
+  -- `GameData.savedSlot` returns the whole SLOT TABLE, not the collection
+  -- name. The restore used to hand that table to a native that wants a
+  -- string, which raised "invalid table argument" - and because the raise
+  -- happened BEFORE the map was cached, every name lookup for this slot
+  -- rebuilt the whole collection and threw again. So the collection name is
+  -- taken out of the table here, and the drawable and the texture with it.
+  local saved = GameData.savedSlot and GameData.savedSlot(kind, id)
+  local savedCollection = type(saved) == 'table' and saved.collection or nil
+  local savedDrawable = type(saved) == 'table' and tonumber(saved.drawable) or 0
+  local savedTexture = type(saved) == 'table' and tonumber(saved.texture) or 0
 
+  -- The local -> global mapping, asked of the engine WITHOUT touching the
+  -- ped. The collection index native answers with -1 when the drawable does
+  -- not exist, and it does not put a garment on the player to find out - the
+  -- read-back this used to do could not tell a refusal from a success, and
+  -- the player was left wearing the last drawable of the walk.
   for drawable = 0, count - 1 do
-    if kind == 'components' then
-      SetPedCollectionComponentVariation(ped, id, collection, drawable, 0, 0)
-      map[drawable] = GetPedDrawableVariation(ped, id)
-    else
-      -- The same read-back as for components, and for the same reason.
-      --
-      -- `GetPedPropGlobalIndexFromCollection` would answer the question in one
-      -- call, but it was called with the prop index MISSING - three arguments
-      -- where it wants four - so it answered about a different prop, and it is
-      -- not part of the documented native set either. Applying the prop with
-      -- texture 0 and reading back what the ped wears is the same answer, and
-      -- it needs nothing beyond the two natives the collection setter already
-      -- uses.
-      SetPedCollectionPropIndex(ped, id, collection, drawable, 0, false)
-      map[drawable] = GetPedPropIndex(ped, id)
-    end
+    local global = Variation.global(ped, kind, id, collection, drawable)
+    if global then map[drawable] = global end
   end
 
+  -- Put the ped back. With the index native the walk never touched it, but
+  -- the fallback does, and the player is looking at their own character.
   if savedCollection then
     if kind == 'components' then
-      SetPedCollectionComponentVariation(ped, id, savedCollection, 0, 0, 0)
+      SetPedCollectionComponentVariation(ped, id, savedCollection, savedDrawable, savedTexture, 0)
     else
-      SetPedCollectionPropIndex(ped, id, savedCollection, 0, 0, false)
+      SetPedCollectionPropIndex(ped, id, savedCollection, savedDrawable, savedTexture, false)
     end
   end
 

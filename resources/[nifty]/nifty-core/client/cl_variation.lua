@@ -1,61 +1,57 @@
 --[[
-  Clothing variations: the line between what this project STORES and what the
-  engine ACCEPTS.
+  Clothing variations: the line between what this project STORES and what
+  the engine ACCEPTS.
 
-  THE TWO INDEX SPACES
-  -------------------
-  This project stores clothing as `collection + local drawable + texture`
-  (ADR-0017), because the global indices shift with every Title Update and the
-  collection-local ones do not.
+  THE SPACE THIS PROJECT STORES IN
+  -------------------------------
+  `collection + local drawable + texture` (ADR-0017), because the global
+  indices shift with every Title Update and the collection-local ones do not.
 
-  The engine does not work in that space. `CPed::SetVariation` takes GLOBAL
-  indices: the number the wardrobe itself stores. The collection natives
-  (`SetPedCollectionComponentVariation` and friends) are a thin layer that
-  translates a collection-local pair into the global one - and then the engine
-  validates the global pair.
+  THE SPACE THE ENGINE VALIDATES IN
+  ---------------------------------
+  The engine's `CPed::SetVariation` takes GLOBAL indices. The collection
+  natives are the layer in between, and they are the ones that speak this
+  project's space. From the server's own source
+  (code/components/extra-natives-five/src/PedCollectionsNatives.cpp):
 
-  So there are two different numbers for the same jacket, and the texture count
-  a drawable has is a property of the GLOBAL drawable, not of the collection.
+      GET_PED_DRAWABLE_GLOBAL_INDEX_FROM_COLLECTION(ped, componentId, collection, drawableId)
+      GET_PED_PROP_GLOBAL_INDEX_FROM_COLLECTION(ped, anchorPoint, collection, propIndex)
+      GET_PED_COLLECTION_LOCAL_INDEX_FROM_DRAWABLE(ped, globalDrawableIdx, componentId)
+      GET_PED_COLLECTION_LOCAL_INDEX_FROM_PROP(ped, globalPropIdx, anchorPoint)
+      GET_NUMBER_OF_PED_COLLECTION_TEXTURE_VARIATIONS(ped, componentId, collection, drawableId)
+      GET_NUMBER_OF_PED_COLLECTION_PROP_TEXTURE_VARIATIONS(ped, anchorPoint, collection, propIndex)
+      IS_PED_COLLECTION_COMPONENT_VARIATION_VALID(ped, componentId, collection, drawableId, textureId)
 
-  WHY THIS FILE EXISTS
-  --------------------
-  Because getting this wrong is silent, and the silence is expensive. The
-  engine's answer to an invalid texture is not an error return - it is a refusal
-  that it prints once per frame, for as long as the appearance is on screen:
+  Every one of them answers in the COLLECTION space and returns -1 when the
+  thing does not exist. None of them touches the ped.
 
-      CPed::SetVariation: Invalid variation (slotId: 10, drawblId: 9, texId: 1)
+  WHY THAT MATTERS MORE THAN IT LOOKS
+  -----------------------------------
+  `SET_PED_COLLECTION_COMPONENT_VARIATION` is a redirect: it resolves the
+  local index to the global one and, if that fails, RETURNS WITHOUT CALLING
+  THE ENGINE. So a local index that does not exist is a SILENT NO-OP - the
+  ped keeps the garment it was wearing, and the engine never prints
+  "CPed::SetVariation: Invalid variation" because the engine was never
+  called.
 
-  The previous fix for that asked the engine two questions that the engine
-  cannot answer under those names:
+  Which means: reading the ped back is not a way to find out whether an
+  apply worked. The ped still wears the PREVIOUS item, and that item looks
+  exactly like a successful apply. The only thing that knows the truth is
+  the index native, and it answers -1.
 
-      GetNumberOfPedComponentTextures   -> does not exist
-      GetNumberOfPedPropTextures        -> does not exist
+  The previous version of this file resolved the local index by applying it
+  with texture 0 and reading the ped back. That could not tell a refused
+  apply from a successful one, so the texture count was asked for the WRONG
+  item and the clamp was computed against the wrong garment.
 
-  The real ones are `GetNumberOfPedTextureVariations` and
-  `GetNumberOfPedPropTextureVariations`. Both were called behind a
-  `type(...) == 'function'` guard, so the wrong name did not raise - it made the
-  guard fall through, the count came back nil, and the fix quietly did nothing
-  while the engine kept refusing the slot.
-
-  A silent fallback for a native that must be there is not robustness, it is a
-  way of not finding out. `reportNatives()` below turns that class of mistake
-  into a line in the log.
-
-  THE MAPPING
-  -----------
-  For a PROP there is `GetPedPropGlobalIndexFromCollection`, but it is not part
-  of the documented native set and it was being called with one argument
-  missing, so it answered about a different prop. For a COMPONENT there is no
-  such native at all.
-
-  So both are resolved the same way, by reading it back:
-
-      apply the local drawable with texture 0  ->  ask the ped what it wears
-
-  Texture 0 exists for every item in the game, so this apply never produces an
-  "Invalid variation" of its own. The ped is left wearing the resolved item,
-  which is what the caller wanted anyway - `Variation.apply` sets the final
-  texture straight afterwards.
+  THE NATIVES ARE NOT DOCUMENTED
+  -------------------------------
+  None of them is in the CFX native database, and the database is what the
+  documentation is generated from. They are REGISTERED all the same, and the
+  ones this project has used for years - the collection setters - demonstrably
+  work. Whether the index ones are exposed to Lua is therefore measured, not
+  assumed: `reportNatives()` says which path the file took, and the fallback
+  is the older read-back.
 ]]
 
 --- The clothing index helpers.
@@ -65,6 +61,16 @@
 Variation = {}
 
 local RESOURCE = GetCurrentResourceName()
+
+--- Whether a native is there.
+---
+--- The question is asked of the RUNTIME, never of the documentation: the
+--- documentation does not know these natives, and the runtime does. The
+--- answer decides which path the file takes, and it is reported so that the
+--- path is never a guess.
+local function has(name)
+  return type(_G[name]) == 'function'
+end
 
 -- ------------------------------------------------------- the natives report
 
@@ -96,11 +102,8 @@ function Variation.report(message)
   TriggerServerEvent('nifty:server:variationDiag', ('%s: %s'):format(RESOURCE, message))
 end
 
---- Say once, loudly, whether the natives this file depends on are there.
----
---- The point is not the report itself. The point is that a missing native used
---- to be indistinguishable from a native that answered "no", and the two look
---- identical at the call site: both end in a fallback.
+--- Say once, loudly, which natives this file depends on and which path it
+--- took.
 local function reportNatives()
   if reported then return end
   reported = true
@@ -116,7 +119,7 @@ local function reportNatives()
 
   local missing = {}
   for _, name in ipairs(required) do
-    if type(_G[name]) ~= 'function' then missing[#missing + 1] = name end
+    if not has(name) then missing[#missing + 1] = name end
   end
 
   local text
@@ -126,110 +129,184 @@ local function reportNatives()
     text = 'FEHLENDE NATIVES: ' .. table.concat(missing, ', ')
   end
 
-  print(('[%s] variation: %s'):format(RESOURCE, text))
+  -- WHICH PATH THE FILE TOOK.
+  --
+  -- The index natives are the whole point of this file: they answer without
+  -- touching the ped and they say -1 when the thing does not exist. Without
+  -- them the file falls back to applying the drawable and reading the ped
+  -- back, which cannot tell a refusal from a success.
+  local path = 'direkt (Collection-Index-Natives)'
+  if not (has('GetPedDrawableGlobalIndexFromCollection')
+      and has('GetNumberOfPedCollectionTextureVariations')
+      and has('IsPedCollectionComponentVariationValid')) then
+    path = 'RÜCKSCHLAG (Read-back, ohne Index-Natives)'
+  end
+
+  print(('[%s] variation: %s | Weg: %s'):format(RESOURCE, text, path))
 
   -- To the server once, not once per resource that includes this file: the
   -- natives are the same on every client, and nifty-core is the resource that
   -- owns the server side of this diagnostic.
   if RESOURCE == 'nifty-core' then
-    TriggerServerEvent('nifty:server:variationDiag', text)
+    TriggerServerEvent('nifty:server:variationDiag', ('%s | Weg: %s'):format(text, path))
   end
 end
 
--- --------------------------------------------------------------- the mapping
+-- ---------------------------------------------------------------- the indexes
 
---- The GLOBAL index the engine gave a collection-local drawable.
+--- The GLOBAL index of a collection-local drawable, or nil.
 ---
---- There is no native that maps a collection-local COMPONENT drawable to its
---- global index, so the mapping is read back: apply the local drawable with
---- texture 0 and ask the ped what it is wearing now.
----
---- @return number|nil global -- nil when the engine refused the drawable
-function Variation.global(ped, kind, slot, collection, localDrawable)
-  reportNatives()
-
-  local drawable = tonumber(localDrawable)
+--- nil means: this collection does not exist for this ped, or this local
+--- index is outside it. The native says so with -1, and the answer is
+--- meaningful because the native does not touch the ped.
+function Variation.global(ped, kind, slot, collection, drawable)
   local anchor = tonumber(slot)
-  if not drawable or not anchor then return nil end
+  local index = tonumber(drawable)
+  if not anchor or not index then return nil end
 
   if kind == 'props' then
-    SetPedCollectionPropIndex(ped, anchor, collection, drawable, 0, false)
+    if has('GetPedPropGlobalIndexFromCollection') then
+      local global = GetPedPropGlobalIndexFromCollection(ped, anchor, collection, index)
+      if global == -1 then return nil end
+      return global
+    end
+  elseif has('GetPedDrawableGlobalIndexFromCollection') then
+    local global = GetPedDrawableGlobalIndexFromCollection(ped, anchor, collection, index)
+    if global == -1 then return nil end
+    return global
+  end
+
+  -- THE FALLBACK: apply the drawable with texture 0 - which every item has -
+  -- and read back what the ped wears.
+  --
+  -- It cannot tell a refusal from a success, and the caller is told so by
+  -- getting the PREVIOUS item's index. That is why the index natives above
+  -- are worth having, and why their absence is reported.
+  if kind == 'props' then
+    SetPedCollectionPropIndex(ped, anchor, collection, index, 0, false)
     local global = GetPedPropIndex(ped, anchor)
     if global == -1 then return nil end
     return global
   end
 
-  SetPedCollectionComponentVariation(ped, anchor, collection, drawable, 0, 0)
+  SetPedCollectionComponentVariation(ped, anchor, collection, index, 0, 0)
   return GetPedDrawableVariation(ped, anchor)
 end
 
---- How many textures one drawable has.
+--- The collection-local drawable of a GLOBAL one, or nil.
 ---
---- The count belongs to the GLOBAL drawable. Asking for a collection-local one
---- asks about a different item and produces a plausible number for the wrong
---- jacket, which is how an invalid texture gets through.
+--- The shop's variant system speaks global indices; this project stores
+--- collection-local ones. The native answers the question directly and does
+--- not touch the ped - so the player is left wearing what they were wearing,
+--- which is the only acceptable answer for a lookup.
 ---
---- @return number|nil count -- nil when the runtime cannot answer
-function Variation.textureCount(ped, kind, slot, global)
+--- The collection name is not needed by the native: it searches the ped's own
+--- collection for the drawable. It IS needed by the fallback, which walks
+--- the collection.
+function Variation.localForGlobal(ped, kind, slot, collection, global, count)
   local anchor = tonumber(slot)
-  if not global or not anchor then return nil end
+  local wanted = tonumber(global)
+  if not anchor or not wanted then return nil end
+
+  if kind == 'props' then
+    if has('GetPedCollectionLocalIndexFromProp') then
+      local local_index = GetPedCollectionLocalIndexFromProp(ped, wanted, anchor)
+      if local_index == -1 then return nil end
+      return local_index
+    end
+  elseif has('GetPedCollectionLocalIndexFromDrawable') then
+    local local_index = GetPedCollectionLocalIndexFromDrawable(ped, wanted, anchor)
+    if local_index == -1 then return nil end
+    return local_index
+  end
+
+  -- THE FALLBACK: walk the collection.
+  --
+  -- This one DOES touch the ped - there is no other way to learn the mapping
+  -- by asking - so the caller has to put the ped back. The walk leaves it
+  -- wearing the last drawable of the collection, and the failure path leaves
+  -- it there too.
+  local total = tonumber(count) or 0
+  for drawable = 0, total - 1 do
+    local resolved = Variation.global(ped, kind, anchor, collection, drawable)
+    if resolved == wanted then return drawable end
+  end
+
+  return nil
+end
+
+-- -------------------------------------------------------------- the textures
+
+--- The texture count of ONE drawable of a collection.
+---
+--- FOUR arguments. The fourth is the local drawable index, and the native
+--- uses it: it resolves the local index to the global one and asks the engine
+--- for THAT item's texture count. Called with three arguments, the missing
+--- one arrives as 0 and the answer is about drawable 0 - a plausible number
+--- for the wrong jacket.
+function Variation.textureCount(ped, kind, slot, collection, drawable)
+  local anchor = tonumber(slot)
+  local index = tonumber(drawable)
+  if not anchor or not index then return nil end
+
+  if kind == 'props' then
+    if has('GetNumberOfPedCollectionPropTextureVariations') then
+      return GetNumberOfPedCollectionPropTextureVariations(ped, anchor, collection, index)
+    end
+  elseif has('GetNumberOfPedCollectionTextureVariations') then
+    return GetNumberOfPedCollectionTextureVariations(ped, anchor, collection, index)
+  end
+
+  -- THE FALLBACK: the same count, asked in the global space.
+  local global = Variation.global(ped, kind, anchor, collection, index)
+  if not global then return nil end
 
   if kind == 'props' then
     return GetNumberOfPedPropTextureVariations(ped, anchor, global)
   end
-
   return GetNumberOfPedTextureVariations(ped, anchor, global)
 end
 
---- Is this local drawable inside the collection at all?
+--- Is this (drawable, texture) real?
 ---
---- The engine refuses a drawable the collection does not have, and that
---- refusal is INVISIBLE in the read-back: the ped keeps the item it was
---- wearing, and that item reads back as a perfectly valid drawable with a
---- perfectly valid texture. So this is asked of the COLLECTION, which knows
---- how many drawables it has, and not of the ped.
+--- The engine's own predicate, asked in the collection space - which is the
+--- space the appearance is stored in, so nothing has to be translated.
 ---
---- @return boolean known -- false when the collection reports no drawables
---- @return boolean exists
-function Variation.hasDrawable(ped, kind, slot, collection, localDrawable)
-  local available = Variation.collectionDrawables(ped, kind, slot, collection)
-  if available <= 0 then return false, false end
+--- There is no `IsPedCollectionPropVariationValid`, so for props this is nil
+--- and the count is the whole answer.
+function Variation.isValid(ped, kind, slot, collection, drawable, texture)
+  if kind == 'props' then return nil end
+  if not has('IsPedCollectionComponentVariationValid') then return nil end
 
-  local drawable = tonumber(localDrawable)
-  if not drawable then return true, false end
-
-  return true, drawable < available
+  return IsPedCollectionComponentVariationValid(ped, tonumber(slot), collection,
+    tonumber(drawable), tonumber(texture)) == true
 end
 
 --- The texture index the engine will accept for this drawable.
 ---
---- The count bounds the search and the engine has the last word: a drawable can
---- have fewer textures than the count reports, and `IsPedComponentVariationValid`
---- asks about the exact pair the engine validates.
----
---- There is no `IsPedPropVariationValid`, so for props the count is the whole
---- answer.
+--- The count bounds the search and the engine has the last word: a drawable
+--- can have fewer textures than the count reports, and the validity check
+--- asks about the exact pair.
 ---
 --- @return number texture -- the index to use
---- @return number|nil global -- the drawable's global index
-function Variation.clampTexture(ped, kind, slot, collection, localDrawable, texture)
-  local global = Variation.global(ped, kind, slot, collection, localDrawable)
-  if not global then return 0, nil end
-
-  local count = Variation.textureCount(ped, kind, slot, global)
+function Variation.clampTexture(ped, kind, slot, collection, drawable, texture)
+  local count = Variation.textureCount(ped, kind, slot, collection, drawable)
   if type(count) ~= 'number' or count < 1 then count = 1 end
 
   local tex = tonumber(texture) or 0
   if tex < 0 then tex = 0 end
   if tex > count - 1 then tex = count - 1 end
 
-  if kind ~= 'props' and type(IsPedComponentVariationValid) == 'function' then
-    while tex > 0 and not IsPedComponentVariationValid(ped, tonumber(slot), global, tex) do
+  if Variation.isValid(ped, kind, slot, collection, drawable, tex) == false then
+    while tex > 0 do
       tex = tex - 1
+      if Variation.isValid(ped, kind, slot, collection, drawable, tex) ~= false then
+        break
+      end
     end
   end
 
-  return tex, global
+  return tex
 end
 
 --- Apply one slot, with a texture the engine accepts.
@@ -237,64 +314,29 @@ end
 --- This is the only place in the project that sets a clothing variation, so it
 --- is the only place that has to know about the texture count at all.
 ---
---- @return number texture -- the texture that was actually used
-function Variation.apply(ped, kind, slot, collection, localDrawable, texture)
+--- @return number texture -- the texture that was used
+function Variation.apply(ped, kind, slot, collection, drawable, texture)
   local anchor = tonumber(slot)
-  local drawable = tonumber(localDrawable)
-  if not anchor or not drawable then return 0 end
+  local index = tonumber(drawable)
+  if not anchor or not index then return 0 end
 
-  -- THE STATE BEFORE THE APPLY.
-  --
-  -- Without it, a refusal is invisible. An empty slot reads as drawable 0 and
-  -- texture 0 - which is exactly what a refused "drawable 0, texture 0" looks
-  -- like - so a read-back that compares only against the REQUEST cannot tell
-  -- "the engine refused it" from "the engine did exactly what I asked".
-  --
-  -- This is not a theoretical distinction: it is the difference between the
-  -- engine printing "CPed::SetVariation: Invalid variation" every frame and
-  -- the engine silently keeping the old jacket, and only one of them is
-  -- visible in a report.
-  local beforeGlobal, beforeTexture
-  if kind == 'props' then
-    beforeGlobal = GetPedPropIndex(ped, anchor)
-    beforeTexture = GetPedPropTextureIndex(ped, anchor)
-  else
-    beforeGlobal = GetPedDrawableVariation(ped, anchor)
-    beforeTexture = GetPedTextureVariation(ped, anchor)
-  end
+  local tex = Variation.clampTexture(ped, kind, slot, collection, index, texture)
 
-  -- DOES THE COLLECTION HAVE THIS DRAWABLE AT ALL?
-  --
-  -- This is checked BEFORE the apply, and it is the one refusal the read-back
-  -- cannot see: the ped keeps the item it was wearing, which reads back as a
-  -- perfectly valid drawable with a perfectly valid texture.
-  --
-  -- The apply is skipped when we know the engine would refuse it, because
-  -- refusing it is not silent - it prints, once per frame, for as long as the
-  -- appearance is on screen.
-  local known, exists = Variation.hasDrawable(ped, kind, anchor, collection, drawable)
-  if known and not exists then
-    Variation.report(('die Collection %q hat kein Drawable %s in Slot %s'):format(
-      tostring(collection), tostring(drawable), tostring(anchor)))
-    return 0
-  end
-  if not known then
-    Variation.report(('die Collection %q meldet keine Drawables fuer Slot %s'):format(
-      tostring(collection), tostring(anchor)))
-  end
-
-  local tex, global = Variation.clampTexture(ped, kind, slot, collection, localDrawable, texture)
+  -- The drawable this apply is ABOUT. The native says -1 when it does not
+  -- exist, and that is the only trustworthy answer - the engine's own
+  -- reaction to an unknown local index is to do nothing at all.
+  local wantedGlobal = Variation.global(ped, kind, anchor, collection, index)
 
   if kind == 'props' then
-    SetPedCollectionPropIndex(ped, anchor, collection, drawable, tex, false)
+    SetPedCollectionPropIndex(ped, anchor, collection, index, tex, false)
   else
-    SetPedCollectionComponentVariation(ped, anchor, collection, drawable, tex, 0)
+    SetPedCollectionComponentVariation(ped, anchor, collection, index, tex, 0)
   end
 
   -- THE ENGINE'S OWN ANSWER.
   --
-  -- The engine does not return an error when it refuses a variation. It prints
-  -- one - to the CLIENT's console, once per frame, for as long as the
+  -- The engine does not return an error when it refuses a variation. It
+  -- prints one - to the CLIENT's console, once per frame, for as long as the
   -- appearance is on screen - and leaves the slot as it was. So the only way
   -- to know whether the apply worked is to read the ped back and compare.
   local appliedGlobal, appliedTexture
@@ -306,48 +348,17 @@ function Variation.apply(ped, kind, slot, collection, localDrawable, texture)
     appliedTexture = GetPedTextureVariation(ped, anchor)
   end
 
-  local tookIt = (appliedGlobal == global and appliedTexture == tex)
+  local tookIt = (wantedGlobal ~= nil
+    and appliedGlobal == wantedGlobal
+    and appliedTexture == tex)
 
   if not tookIt then
-    -- If the ped was already showing exactly this, there is nothing to
-    -- report: the engine may have refused, or the item was already on, and
-    -- the outcome for the player is the same either way.
-    local alreadyThere = (beforeGlobal == global and beforeTexture == tex)
-    if not alreadyThere then
-      Variation.report(('engine nahm Drawable %s/Textur %s statt %s/%s (slot %s, collection %q, drawable %s)'):format(
-        tostring(appliedGlobal), tostring(appliedTexture), tostring(global), tostring(tex),
-        tostring(anchor), tostring(collection), tostring(drawable)))
-    end
+    Variation.report(('engine nahm Drawable %s/Textur %s statt %s/%s (slot %s, collection %q, drawable %s)'):format(
+      tostring(appliedGlobal), tostring(appliedTexture), tostring(wantedGlobal), tostring(tex),
+      tostring(anchor), tostring(collection), tostring(index)))
   end
 
   return tex
-end
-
---- The collection-local drawable that means `global`, or nil.
----
---- The reverse of `Variation.global`, and it is needed whenever something hands
---- us a global index: the shop's variant system speaks global indices, while
---- this project stores local ones, and applying a global index as a local one
---- is exactly the mistake that produces "Invalid variation".
----
---- The walk applies every drawable of the collection once, so the ped is left
---- wearing the LAST one. The caller has to apply what it actually wants
---- afterwards - `Variation.apply` does exactly that.
----
---- @return number|nil local -- nil when the collection has no such item
-function Variation.localForGlobal(ped, kind, slot, collection, global, count)
-  reportNatives()
-
-  local wanted = tonumber(global)
-  local total = tonumber(count)
-  if not wanted or not total then return nil end
-
-  for drawable = 0, total - 1 do
-    local resolved = Variation.global(ped, kind, slot, collection, drawable)
-    if resolved == wanted then return drawable end
-  end
-
-  return nil
 end
 
 --- How many drawables a collection has for this slot.

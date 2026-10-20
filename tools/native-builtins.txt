@@ -67,10 +67,26 @@ GetValue
 # was MEASURED working: the engine printed its own errors when it was handed
 # a bad texture, and the clothes appeared on the ped.
 #
-# `GetPedDrawableGlobalIndexFromCollection` and
-# `GetPedPropGlobalIndexFromCollection` are NOT here: the first was never
-# proven, the second was called with an argument missing and answered about
-# a different prop.
+# The whole family is registered by the server, in
+# code/components/extra-natives-five/src/PedCollectionsNatives.cpp - which is
+# where the SIGNATURES come from, and they are not the ones the names
+# suggest:
+#
+#   GET_PED_DRAWABLE_GLOBAL_INDEX_FROM_COLLECTION(ped, componentId, collection, drawableId)
+#   GET_PED_PROP_GLOBAL_INDEX_FROM_COLLECTION(ped, anchorPoint, collection, propIndex)
+#   GET_PED_COLLECTION_LOCAL_INDEX_FROM_DRAWABLE(ped, globalDrawableIdx, componentId)
+#   GET_PED_COLLECTION_LOCAL_INDEX_FROM_PROP(ped, globalPropIdx, anchorPoint)
+#   GET_NUMBER_OF_PED_COLLECTION_TEXTURE_VARIATIONS(ped, componentId, collection, drawableId)
+#   GET_NUMBER_OF_PED_COLLECTION_PROP_TEXTURE_VARIATIONS(ped, anchorPoint, collection, propIndex)
+#   IS_PED_COLLECTION_COMPONENT_VARIATION_VALID(ped, componentId, collection, drawableId, textureId)
+#
+# The index ones answer with -1 when the thing does not exist, and they do
+# NOT touch the ped - which is what makes them worth more than the
+# collection setters, whose failures are silent.
+#
+# Whether they are exposed to LUA is a question for the runtime, not for this
+# file: nifty-core/client/cl_variation.lua measures it and reports which path
+# it took. The ones below are here so the sweep's output stays short.
 # ---------------------------------------------------------------------------
 SetPedCollectionComponentVariation
 SetPedCollectionPropIndex
@@ -80,3 +96,8 @@ GetNumberOfPedCollectionDrawableVariations
 GetNumberOfPedCollectionTextureVariations
 GetNumberOfPedCollectionPropDrawableVariations
 GetNumberOfPedCollectionPropTextureVariations
+GetPedDrawableGlobalIndexFromCollection
+GetPedPropGlobalIndexFromCollection
+GetPedCollectionLocalIndexFromDrawable
+GetPedCollectionLocalIndexFromProp
+IsPedCollectionComponentVariationValid

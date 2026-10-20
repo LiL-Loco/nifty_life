@@ -881,14 +881,11 @@ local function texturesFor(kind, id, collection, drawable)
   local slot = tonumber(id)
   if not slot then return nil end
 
-  local global = Variation.global(ped, kind, slot, collection, drawable)
-  if not global then return nil end
-
-  if kind == 'props' then
-    return GetNumberOfPedPropTextureVariations(ped, slot, global)
-  end
-
-  return GetNumberOfPedTextureVariations(ped, slot, global)
+  -- The count of ONE drawable, asked in the collection space - the space the
+  -- appearance is stored in, so nothing has to be translated and the ped is
+  -- not touched. The native takes the local drawable index as its fourth
+  -- argument; without it the answer is about drawable 0.
+  return Variation.textureCount(ped, kind, slot, collection, drawable)
 end
 
 -- openRoot was the entry point for the legacy NativeUI root menu. The NUI
@@ -987,10 +984,19 @@ randomiseAll = function()
       if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
         local chosen = list[math.random(#list)]
         if chosen then
+          -- The texture is drawn from the DRAWABLE's own count, not from the
+          -- collection's. `chosen.textures` is the collection-wide number, and
+          -- an item with one texture in a collection that reports five is
+          -- exactly how the engine ends up refusing the slot.
+          local drawable = math.random(0, chosen.drawables - 1)
+          local count = texturesFor(kind, id, chosen.name, drawable)
+          if not count or count < 1 then count = chosen.textures end
+          if not count or count < 1 then count = 1 end
+
           selection[kind][tostring(id)] = {
             collection = chosen.name,
-            drawable   = math.random(0, chosen.drawables - 1),
-            texture    = math.random(0, chosen.textures - 1),
+            drawable   = drawable,
+            texture    = math.random(0, count - 1),
           }
         end
       end
@@ -1227,8 +1233,13 @@ local function applyBestTorsoNow()
   for _, option in ipairs(options) do
     local drawable = GameData.localForGlobal('components', 3, globalDrawable, option.name, option.drawables)
     if drawable then
+      -- The torso's OWN texture count, not the collection's. The collection
+      -- count is what the torso table was written against, and it can be
+      -- higher than the item really has.
+      local torsoTextures = texturesFor('components', 3, option.name, drawable) or option.textures
+      if not torsoTextures or torsoTextures < 1 then torsoTextures = 1 end
       local texture = tonumber(globalTexture) or 0
-      if texture >= option.textures then texture = option.textures - 1 end
+      if texture > torsoTextures - 1 then texture = torsoTextures - 1 end
       if texture < 0 then texture = 0 end
       selection.components['3'] = {
         collection = option.name,
@@ -1244,6 +1255,32 @@ end
 -- render. Returns the bare tables the NUI needs; engine internals
 -- (slots, hairOverlayState, etc.) are included.
 exports('getState', function()
+  -- The labels WITHOUT the functions.
+  --
+  -- `Labels` carries five of them: UNNAMED_STYLE, MOTHER, FATHER, HAIR and
+  -- overlayStyle. A function has no JSON representation, so they cannot
+  -- travel - the panel's own comments say they "never arrive" - and they are
+  -- left out on this side rather than left to the encoder to choke on.
+  --
+  -- The panel has transcribed fallbacks for the two that matter (the parent
+  -- names), and `parentNames` below carries the real arrays.
+  local labelData = {}
+  for key, value in pairs(Labels) do
+    if type(value) ~= 'function' then labelData[key] = value end
+  end
+
+  -- The overlay palettes as a STRING-KEYED record.
+  --
+  -- The Lua table has the integer keys 1, 2, 4, 5, 7, 8 and 10, and a table
+  -- with holes in it encodes as an ARRAY with nulls in the holes. The panel
+  -- reads it as a record - `palettes[String(id)]` - so on an array overlay 1
+  -- is handed the eyebrow palette, overlay 2 gets nothing, overlay 3 gets
+  -- overlay 4's, and overlay 10 falls off the end.
+  local overlayPalettes = {}
+  for id, palette in pairs(OVERLAY_PALETTES) do
+    overlayPalettes[tostring(id)] = palette
+  end
+
   return {
     currentModel     = currentModel,
     characterGender  = characterGender,
@@ -1251,11 +1288,11 @@ exports('getState', function()
     selection        = selection,
     face             = face,
     slots            = slots,
-    labels           = Labels,
+    labels           = labelData,
     palettes         = {
       HAIR_PALETTE     = HAIR_PALETTE,
       MAKEUP_PALETTE   = MAKEUP_PALETTE,
-      OVERLAY_PALETTES = OVERLAY_PALETTES,
+      OVERLAY_PALETTES = overlayPalettes,
     },
     faceGroups       = {
       FACE_1D = FACE_1D_GROUPS,
@@ -1471,7 +1508,12 @@ exports('getItemNames', function(kind, id)
   local out = { drawables = drawables, textures = textures, names = {} }
   for d = 0, drawables - 1 do
     out.names[d] = {}
-    for t = 0, textures - 1 do
+    -- How many textures THIS drawable has, not how many the collection
+    -- reports. The collection number is drawable 0's, and a drawable with
+    -- one texture would get five rows of nothing.
+    local count = texturesFor(kind, id, option.name, d) or textures
+    if not count or count < 1 then count = 1 end
+    for t = 0, count - 1 do
       local n = GameData.itemName(isProp, id, option.name, d, t, drawables)
       if n then out.names[d][t] = n end
     end
