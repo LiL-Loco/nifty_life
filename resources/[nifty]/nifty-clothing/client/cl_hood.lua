@@ -194,6 +194,21 @@ local function toggle()
   local appearance = World:getCurrentAppearance()
   if type(appearance) ~= 'table' or type(appearance.components) ~= 'table' then return end
 
+  -- A COPY, and that is the whole point.
+  --
+  -- `getCurrentAppearance` hands out nifty-world's LIVE table, and the
+  -- autosave and the disconnect save both send it. Writing the hood variant
+  -- into it therefore put a piece the character does not own into EVERY later
+  -- save - and the server refuses an appearance whose pieces it cannot
+  -- verify. A refused save returns before the position is written, so the
+  -- player's position stopped being persisted as well, and the reason was
+  -- four files away from the cause.
+  --
+  -- A copy keeps the live state the server can accept.
+  local ok, copied = pcall(function() return json.decode(json.encode(appearance)) end)
+  if not ok or type(copied) ~= 'table' then return end
+  appearance = copied
+
   local slot = appearance.components[tostring(Clothing.COMPONENT_TOP)]
   if type(slot) ~= 'table' then return end
 

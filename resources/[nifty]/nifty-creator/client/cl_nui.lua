@@ -179,6 +179,21 @@ local function buildPayload()
     slots             = s.slots,
     labels            = s.labels,
     palettes          = s.palettes,
+    -- THESE SEVEN WERE DROPPED, and the panel is written against them:
+    -- the 2D face-feature groups and the zone labels arrived as empty
+    -- arrays, the parent pickers had no names (the panel carries a
+    -- transcribed fallback for them), and the component, prop and overlay
+    -- labels never came over at all.
+    --
+    -- The panel's own comments name this as the missing half of two fixes it
+    -- was not allowed to make on the Lua side. This is that half.
+    faceGroups        = s.faceGroups,
+    parentNames       = s.parentNames,
+    componentLabels   = s.componentLabels,
+    propLabels        = s.propLabels,
+    overlayLabels     = s.overlayLabels,
+    zoneLabels        = s.zoneLabels,
+    maxTexture        = s.maxTexture,
     hairOverlayState  = s.hairOverlayState,
     modelIsUndecided  = s.modelIsUndecided,
     skinCam           = s.skinCam,
