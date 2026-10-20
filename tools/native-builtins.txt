@@ -1,0 +1,82 @@
+# Names that exist in the FiveM runtime but are NOT in the documented native
+# database (https://runtime.fivem.net/doc/natives.json).
+#
+# `native-sweep.js` subtracts this list from its output, so what it prints
+# afterwards is short enough to actually be read. Everything in here is a
+# name that would otherwise look like a defect.
+#
+# ---------------------------------------------------------------------------
+# SERVER-SIDE, MEASURED
+#
+# Measured on the server (Debian, FXServer) on 2026-10-21 with a probe that
+# printed `type(_G[name])` for every candidate. These are the CFX Lua
+# builtins the server runtime actually has.
+#
+# The measurement is the point. `GetPlayerLicense` reads exactly like one of
+# them and is not: it killed every "Fertig" in the character creator, and it
+# was classified as a builtin from memory before it was measured.
+# ---------------------------------------------------------------------------
+RegisterNetEvent
+CreateThread
+AddEventHandler
+RemoveEventHandler
+TriggerEvent
+TriggerClientEvent
+TriggerServerEvent
+RegisterCommand
+RegisterKeyMapping
+RegisterNUICallback
+SetNuiFocus
+SetNuiFocusKeepInput
+SendNUIMessage
+GetCurrentResourceName
+GetPlayerServerId
+GetPlayers
+GetPlayerIdentifiers
+GetPlayerIdentifiersByType
+GetSetting
+LoadSettings
+LoadResourceFile
+GetConvar
+IsDuplicityVersion
+SetTimeout
+ClearTimeout
+DropPlayer
+SetPedHairColor
+SetPedEyeColor
+SetCursorLocation
+GetGameplayCamCoords
+AddMarker
+DeleteMarker
+DrawText
+DrawText3D
+AddTextComponentString
+SetTextEntry
+World3dToScreen2d
+
+# The CitizenFX Lua API. Used through the `Citizen.` prefix in the code, but
+# the names are the same.
+PointerValueInt
+InvokeNative
+GetValue
+
+# ---------------------------------------------------------------------------
+# CLIENT-SIDE GAME NATIVES
+#
+# The collection family is real, works at runtime, and is not documented. It
+# was MEASURED working: the engine printed its own errors when it was handed
+# a bad texture, and the clothes appeared on the ped.
+#
+# `GetPedDrawableGlobalIndexFromCollection` and
+# `GetPedPropGlobalIndexFromCollection` are NOT here: the first was never
+# proven, the second was called with an argument missing and answered about
+# a different prop.
+# ---------------------------------------------------------------------------
+SetPedCollectionComponentVariation
+SetPedCollectionPropIndex
+SetPedCollectionPreloadVariationData
+SetPedCollectionPreloadPropData
+GetNumberOfPedCollectionDrawableVariations
+GetNumberOfPedCollectionTextureVariations
+GetNumberOfPedCollectionPropDrawableVariations
+GetNumberOfPedCollectionPropTextureVariations

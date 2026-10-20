@@ -57,6 +57,27 @@ const https = require('https');
 
 const DB_URL = 'https://runtime.fivem.net/doc/natives.json';
 const ROOT = path.resolve(__dirname, '..', 'resources', '[nifty]');
+const BUILTINS = path.join(__dirname, 'native-builtins.txt');
+
+/**
+ * The names that exist in the runtime but are not in the documented database.
+ *
+ * They are subtracted from the output, so what is left is short enough to be
+ * read. The list is a separate file because it is a MEASUREMENT of the
+ * runtime, not a fact about the game: `GetPlayerLicense` reads exactly like
+ * one of these and is not one, and it killed every "Fertig" in the character
+ * creator.
+ */
+function loadBuiltins() {
+  if (!fs.existsSync(BUILTINS)) return new Set();
+  const out = new Set();
+  for (const line of fs.readFileSync(BUILTINS, 'utf8').split(/\r?\n/)) {
+    const name = line.trim();
+    if (!name || name.startsWith('#')) continue;
+    out.add(name);
+  }
+  return out;
+}
 
 function toSnake(name) {
   return name
@@ -139,24 +160,28 @@ async function loadDb() {
     }
   }
 
+  const known = loadBuiltins();
+
   const unknown = [];
   for (const [name, where] of calls) {
     const snake = toSnake(name);
     if (snake === name) continue;          // SCREAMING_CASE is a constant
     if (db.has(snake)) continue;           // it is documented, so it exists
+    if (known.has(name)) continue;         // measured to exist in the runtime
     unknown.push({ name, snake, files: [...where] });
   }
 
   console.log(`Aufgerufene PascalCase-Funktionen: ${calls.size}`);
-  console.log(`davon nicht in der dokumentierten DB: ${unknown.length}`);
+  console.log(`davon weder dokumentiert noch gemessen vorhanden: ${unknown.length}`);
   console.log('');
   for (const u of unknown) {
     console.log(`  ${u.name.padEnd(44)} -> ${u.snake}`);
     for (const f of u.files) console.log(`      ${f}`);
   }
   console.log('');
-  console.log('Das ist eine Prüfliste, kein Urteil: CFX-Lua-Builtins und');
-  console.log('undokumentierte Game-Natives stehen ebenfalls hier.');
+  console.log('Jeder Name hier ist eine FRAGE, kein Urteil: undocumented Game-Natives');
+  console.log('existieren zur Laufzeit. Wer einen davon weiss, kommt in');
+  console.log('tools/native-builtins.txt - gemessen, nicht gemerkt.');
 
   fs.writeFileSync(
     path.join(os.tmpdir(), 'nifty-native-sweep.json'),
