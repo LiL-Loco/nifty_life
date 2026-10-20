@@ -1,0 +1,52 @@
+-- ============================================================================
+-- Nifty Life 2.0 — server configuration TEMPLATE.
+--
+-- `server.cfg` itself is git-ignored because it carries a Cfx.re license key
+-- and a live database password. This file is the tracked counterpart: copy it,
+-- fill in the two CHANGE_ME values, and keep the result out of git.
+--
+--   cp server.cfg.example server.cfg
+--
+-- The two values that must be replaced before the server will start:
+--   sv_licenseKey                 — Cfx.re key, keymaster.nitrous.plus
+--   mysql_connection_string       — the GAME account, not the website account
+--
+-- Note `ensure nifty-loadscreen` below: it replaces Cfx's `example-loadscreen`.
+-- The loading screen is a real resource in this repo because it is the first
+-- thing a player sees and it carries the site's mark — see
+-- resources/[nifty]/nifty-loadscreen/loadscreen.css for why those values are
+-- duplicated rather than shared with website/src/app/globals.css.
+-- ============================================================================
+
+sv_hostname "Nifty Life 2.0"
+sets sv_projectName "Nifty Life 2.0"
+sets sv_projectDesc "A whitelisted weekend roleplay server."
+sv_enforceGameBuild "3095"
+sv_licenseKey "CHANGE_ME_LICENSE_KEY"
+sv_maxclients 48
+endpoint_add_tcp "0.0.0.0:30120"
+endpoint_add_udp "0.0.0.0:30120"
+set steam_webApiKey "none"
+set resources_useSystemChat true
+
+set mysql_connection_string "mysql://CHANGE_ME_DB_USER:CHANGE_ME_DB_PASSWORD@localhost:3306/nifty_life?charset=utf8mb4"
+setr sv_stateBagStrictMode true
+set sv_entityLockdown "relaxed"
+ensure oxmysql
+ensure mapmanager
+ensure sessionmanager
+ensure spawnmanager
+ensure basic-gamemode
+ensure hardcap
+ensure nifty-loadscreen
+ensure bob74_ipl
+ensure nifty-core
+ensure nifty-inventory
+ensure nifty-peeper
+ensure nifty-shop
+ensure nifty-housing
+ensure nifty-creator
+ensure nifty-chat
+ensure nifty-world
+ensure nifty-clothing
+ensure nifty-armwrestling

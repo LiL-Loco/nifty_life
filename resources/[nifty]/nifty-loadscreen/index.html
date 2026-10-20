@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Nifty Life 2.0</title>
+    <link href="loadscreen.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <!--
+      Structure mirrors the website hero: mark, then the thing that moves, then
+      the status, then the fixed foot. `<noscript>` is not decoration - without
+      JS the player still has to see WHICH server they are connecting to, and the
+      mark alone would look like a crash.
+    -->
+    <main class="hero">
+      <div class="hero-mark">
+        <span class="hero-mark-top">Nifty</span>
+        <span class="hero-mark-bottom">Life</span>
+        <span class="hero-mark-version">2.0</span>
+      </div>
+
+      <div class="stage">
+        <div
+          class="pill"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          aria-label="Ladefortschritt"
+        >
+          <div class="pill-fill" id="fill"></div>
+        </div>
+
+        <p class="stage-status" id="status" role="status" aria-live="polite">
+          Verbindung wird aufgebaut
+        </p>
+      </div>
+
+      <p class="hero-foot">Freitag 19:00 bis Sonntag 22:00 · Ein Charakter pro Person</p>
+    </main>
+
+    <noscript>
+      <div class="nojs">
+        Nifty Life 2.0 — Verbindung zum Server wird aufgebaut. Falls dieser Bildschirm
+        nicht verschwindet, ist im Browser JavaScript deaktiviert.
+      </div>
+    </noscript>
+
+    <script src="loadscreen.js"></script>
+  </body>
+</html>

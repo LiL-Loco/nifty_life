@@ -84,6 +84,22 @@ desktop.ini
 /resources/chat/
 /resources/[map]/
 
+# Downloaded phone implementations. Two of them, for the same reason as the
+# resources above: not ours, not vendored, thousands of files each. `myphone`
+# declares "author: myphone team" and says its code is original to THAT project
+# — which still makes it someone else's work, and it is 2 489 files.
+/resources/lb-phone/
+/resources/myphone/
+
+# ---- Local operator scripts (tools) ----
+# Written ad hoc against a running database while tracking down a grant or a
+# schema drift. They are NOT migrations and NOT fixtures: they carry whatever
+# the operator happened to be holding at the time. `update-hash.sql` held a live
+# scrypt hash+salt pair for a real account, which is exactly the sort of thing
+# that must never be written to history. The migrations under
+# `database/migrations/` are the tracked, reviewed path.
+/tools/*.sql
+
 # ---- Local test artefacts ----
 *.sql.bak
 /tmp/

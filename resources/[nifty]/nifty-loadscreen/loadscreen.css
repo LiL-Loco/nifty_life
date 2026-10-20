@@ -1,0 +1,254 @@
+/* ==========================================================================
+   MIRRORED FROM website/src/app/globals.css — read this before editing.
+
+   Everything under "MIRRORED" is a verbatim copy of the website's `.hero`
+   rules. It is duplicated rather than imported because the website is built by
+   Tailwind through Next's pipeline, and this file is served to CEF as one
+   plain stylesheet with no build step at all (ADR-0002). There is no shared
+   file that could serve both without dragging Tailwind into the loading
+   screen.
+
+   The consequence, stated once so nobody discovers it by accident: A BRAND
+   CHANGE HAS TO BE MADE IN BOTH FILES. Changing the amber, the gradients or
+   the mark typography on the website and not here leaves the two visibly
+   out of sync, and the loading screen is the last thing a player sees before
+   the site - so the mismatch is exactly where it is most noticed.
+
+   The one deliberate difference is noted inline where it occurs (100svh ->
+   100vh, and the absence of hover/transition rules that would be inert here).
+   ========================================================================== */
+
+/* MIRRORED: globals.css :root */
+html {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* MIRRORED: globals.css body base styles */
+body {
+  min-height: 100vh;
+  /* DIFFERENT FROM THE WEBSITE ON PURPOSE. The site uses `100svh` so the hero
+     never hides behind mobile browser chrome. CEF has no such chrome, and
+     `svh` is not reliably supported in the Chromium build FiveM ships. */
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+  background-color: #0a0b0d;
+  color: #fafafa;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* MIRRORED: globals.css .hero */
+.hero {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5rem;
+  padding: 4rem 1.5rem;
+  overflow: hidden;
+  background: #0a0b0d;
+}
+
+/* MIRRORED: globals.css .hero::before — the atmosphere. Four stacked layers:
+   a warm glow rising from the bottom, a cool one from the top, a vignette that
+   pushes both to the edges, and the base gradient underneath them. */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    radial-gradient(120% 80% at 50% 115%, rgba(214, 138, 60, 0.5) 0%, transparent 62%),
+    radial-gradient(90% 60% at 50% 0%, rgba(40, 62, 96, 0.45) 0%, transparent 70%),
+    radial-gradient(140% 120% at 50% 50%, transparent 30%, rgba(0, 0, 0, 0.92) 100%),
+    linear-gradient(180deg, #0f1218 0%, #16110d 55%, #0a0b0d 100%);
+}
+
+/* MIRRORED: globals.css .hero::after — the halftone dot texture, built from two
+   offset radial gradients on a 5px grid and masked out radially so the centre
+   stays clean. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.3;
+  background-image:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.5) 0.9px, transparent 1.1px),
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.22) 0.7px, transparent 0.9px);
+  background-size: 5px 5px, 5px 5px;
+  background-position: 0 0, 2.5px 2.5px;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
+  mask-image: radial-gradient(120% 90% at 50% 45%, #000 20%, transparent 85%);
+}
+
+.hero > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* MIRRORED: globals.css .hero-mark */
+.hero-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.86;
+  text-align: center;
+}
+
+/* MIRRORED: globals.css .hero-mark-top / .hero-mark-bottom */
+.hero-mark-top,
+.hero-mark-bottom {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  -webkit-text-stroke: 2px #0b0c0e;
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 rgba(0, 0, 0, 0.55), 0 0 44px rgba(0, 0, 0, 0.7);
+}
+
+.hero-mark-top {
+  font-size: clamp(2.6rem, 9vw, 5.2rem);
+  color: #f0a53a;
+}
+
+.hero-mark-bottom {
+  font-size: clamp(4.4rem, 17vw, 10rem);
+  color: #fff;
+  margin-top: -0.08em;
+}
+
+/* MIRRORED: globals.css .hero-mark-version.
+   The `text-indent` is not a typo: it cancels the trailing letter-spacing that
+   uppercase tracking adds, so the letterspaced "2.0" reads as centred rather
+   than pushed right. Drop it and the version number drifts off-axis. */
+.hero-mark-version {
+  margin-top: 0.9rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  text-transform: uppercase;
+  color: #b4b4b4;
+}
+
+/* MIRRORED: globals.css .hero-foot */
+.hero-foot {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #b4b4b4;
+  text-align: center;
+}
+
+/* ==========================================================================
+   NOT ON THE WEBSITE — the loading stage.
+
+   The `.pill` is the website's `.door`: same amber, same pill radius, same
+   heavy black outline, because that button is the loudest single element the
+   site has and a loading bar is the same kind of object. The one addition is
+   the inset shadow at the bottom, which gives the fill depth the way the
+   website gets it from `filter: brightness()` on hover — a hover that can
+   never happen here, because the loading screen has no cursor.
+   ========================================================================== */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.15rem;
+  width: min(26rem, 100%);
+}
+
+.pill {
+  position: relative;
+  width: 100%;
+  height: 1.6rem;
+  border-radius: 999px;
+  border: 3px solid #07080a;
+  background: #23262b;
+  overflow: hidden;
+}
+
+/* The fill is a child rather than a width transition on ::after so the border
+   never scales with it — scaling a pseudo-element distorts the radius. */
+.pill-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: #f0a53a;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
+  transition: width 90ms linear;
+}
+
+/* The leading edge is drawn on the pill, not the fill, so it stays put at 0%
+   and at 100% instead of leaving a bright sliver at the far side. */
+.pill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1.6rem;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 70%,
+    rgba(255, 255, 255, 0.55) 100%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  transition: opacity 90ms linear;
+  pointer-events: none;
+}
+
+.pill[data-running='1']::after {
+  opacity: 1;
+}
+
+.stage-status {
+  margin: 0;
+  min-height: 1.6em;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #b4b4b4;
+  text-align: center;
+  /* A swap between two phases must not reflow the layout around it. */
+  font-variant-numeric: tabular-nums;
+}
+
+.nojs {
+  position: absolute;
+  inset: auto 0 0 0;
+  z-index: 3;
+  padding: 1.25rem;
+  background: #16161a;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f2f2f4;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* The loading screen has no cursor and no interaction, so the website's
+   `prefers-reduced-motion` guard is the only motion rule that matters here:
+   a player who asked for less motion gets a bar that jumps instead of one that
+   eases. Everything else on this page is already still. */
+@media (prefers-reduced-motion: reduce) {
+  .pill-fill,
+  .pill::after {
+    transition: none;
+  }
+}
