@@ -71,26 +71,60 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # The entrypoint applies init scripts to a TEMPORARY server, then restarts.
-# Polling `SELECT 1` is not enough — it succeeds mid-init. Wait for the expected
-# table count instead. (Getting this wrong hides half the schema.)
-$expectedTables = 27
-$expectedJobDefs = 8
+# Polling `SELECT 1` is not enough — it succeeds mid-init, because the
+# in-container client can still reach that temporary server. Wait for the
+# schema itself instead.
+#
+# THE TABLES ARE NAMED, NOT COUNTED.
+#
+# A count was used here, and it was the wrong shape: every migration added a
+# table, so the number had to be edited by hand with every schema change, and
+# a stale number failed the whole verification for a schema that was fine. It
+# had already gone stale twice (27, then 8 jobs, against 37 tables and 7
+# jobs in reality).
+#
+# Naming the tables is stable in both directions: a MISSING table fails, and
+# an EXTRA one does not. The list is the tables the application reads or
+# writes, plus the migration bookkeeping table.
+$requiredTables = @(
+    'accounts', 'applications', 'bans', 'character_clothing', 'character_jobs',
+    'character_outfit_pieces', 'character_outfits', 'characters', 'clothing_prices',
+    'inventory_items', 'item_defs', 'job_defs', 'ledger', 'peeper_follows',
+    'peeper_likes', 'peeper_posts', 'peeper_reports', 'phone_accounts', 'phone_calls',
+    'phone_contacts', 'phone_messages', 'portal_email_tokens', 'portal_users',
+    'properties', 'property_owners', 'schema_migrations', 'sessions', 'settings',
+    'staff', 'stuetze_payouts', 'vehicles', 'wallets', 'web_link_requests',
+    'web_links', 'web_pairing_codes'
+)
+
+# SEVEN, and that is measured rather than remembered: migration 005 seeds
+# police, ems, taxi, mechanic, trucker, tow and fire — and those seven are the
+# only job codes anywhere in the code. An eighth was never there.
+$expectedJobDefs = 7
+
 $ready = $false
+$tableList = ($requiredTables -join "','")
 for ($i = 0; $i -lt 100; $i++) {
     Start-Sleep -Seconds 3
-    $probe = docker exec $ContainerName mariadb -uroot -ptest nifty_life -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nifty_life';" 2>&1
-    if ($LASTEXITCODE -eq 0 -and ($probe -join '').Trim() -match [regex]::Escape("$expectedTables")) {
-        $ready = $true
-        break
+    $probe = docker exec $ContainerName mariadb -uroot -ptest nifty_life -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nifty_life' AND table_name IN ('$tableList');" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        # `SELECT COUNT(*)` prints the header and the value; the value is the
+        # last line. Comparing the string with -match would match a substring
+        # and turn "35" into a pass for "135".
+        $found = (($probe -join "`n") -split "`n" | Select-Object -Last 1).Trim()
+        if ($found -eq "$($requiredTables.Count)") {
+            $ready = $true
+            break
+        }
     }
 }
 
 if (-not $ready) {
-    Write-Host "  FAIL  migrations never completed ($expectedTables tables expected)" -ForegroundColor Red
+    Write-Host "  FAIL  migrations never completed ($($requiredTables.Count) required tables expected)" -ForegroundColor Red
     docker logs $ContainerName 2>&1 | Select-Object -Last 30
     exit 1
 }
-Write-Host "  PASS  all $expectedTables tables created" -ForegroundColor Green
+Write-Host "  PASS  all $($requiredTables.Count) required tables created" -ForegroundColor Green
 
 $jobs = Invoke-Sql -Sql "SELECT COUNT(*) FROM job_defs"
 $script:Checks++
