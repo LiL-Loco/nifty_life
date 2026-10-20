@@ -117,14 +117,15 @@ local openRoot
 local creatorOpen = false
 local currentModel = 'mp_m_freemode_01'
 
---- Reverse map of AppearanceConfig.PED_MODELS, which is keyed by model name and
---- valued by gender ('male' / 'female' / 'nonbinary'). The openCreator lookup
---- wants gender -> model, so we flip the table once at load. Any other code that
---- needs model -> gender still reads AppearanceConfig.PED_MODELS directly.
-local PED_MODEL_FOR_GENDER = {}
-for model, gender in pairs(AppearanceConfig.PED_MODELS) do
-  PED_MODEL_FOR_GENDER[gender] = model
-end
+--- The model a gender may wear.
+---
+--- `AppearanceConfig.PED_MODELS` is keyed by MODEL and valued by gender
+--- ('male' / 'female' / 'nonbinary'). The openCreator lookup wants
+--- gender -> model, so the shared config derives that direction once, and
+--- this file reads it from there. The server reads the SAME table - which is
+--- the point: it read the other direction for a long time and refused every
+--- character save with "unsupported ped model".
+local PED_MODEL_FOR_GENDER = AppearanceConfig.PED_MODEL_BY_GENDER or {}
 
 --- True when the stored gender has no single freemode model attached to it
 --- (`nonbinary`). Then the player picks, because there is nothing to derive.

@@ -263,10 +263,16 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- the first one. Then the player chooses in the creator - and the choice is
   -- checked against the SAME allowlist everything else is checked against, so
   -- "nonbinary" never becomes a way to spawn any ped in the game.
-  local model = AppearanceConfig.PED_MODELS[character.gender]
+  local model = AppearanceConfig.PED_MODEL_BY_GENDER[character.gender]
 
   if not model then
-    local offered = type(appearance.model) == 'string' and AppearanceConfig.PED_MODELS[appearance.model] or nil
+    -- The model the client OFFERED, not the gender that model belongs to.
+    -- `PED_MODELS` answers "is this a known model"; the value handed on is
+    -- the model itself. Reading the table the other way round put the
+    -- GENDER into `appearance.model`, and the validation refused every save
+    -- with "unsupported ped model".
+    local offered = type(appearance.model) == 'string'
+      and AppearanceConfig.PED_MODELS[appearance.model] and appearance.model or nil
     if not offered then
       print(('[%s] character %s: gender "%s" has no model and none was offered'):format(
         RESOURCE, character.id, tostring(character.gender)))
@@ -283,7 +289,12 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- quiet refusal here looks exactly like a creator that ignores the Fertig button.
   Identity.beginSession(src, character.id)
 
-  if not Identity.saveCharacter(src, { appearance = appearance }) then
+  -- `fromCreator`: the ownership check does not apply to the creator's own
+  -- save. The character is CHOOSING this loadout, and the pieces are granted
+  -- as owned right below - so the check would ask whether the character owns
+  -- the clothes it is being handed, which is a question with the answer "no"
+  -- for every character that has never finished the creator once.
+  if not Identity.saveCharacter(src, { appearance = appearance }, { fromCreator = true }) then
     Identity.endSession(src)
     return TriggerClientEvent('nifty:client:creatorError', src,
       'Das Aussehen konnte nicht gespeichert werden. Bitte erneut versuchen.')

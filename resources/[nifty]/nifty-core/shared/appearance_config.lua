@@ -208,3 +208,22 @@ CreatorScene = {
   camInterp = 1500,       -- ms each stage-to-stage blend lasts
   camSettle = 400,        -- ms between stage 2 finishing and stage 3 starting
 }
+--- The model a GENDER may wear.
+---
+--- `PED_MODELS` above is keyed by MODEL and answers "which gender does this
+--- model belong to" - which is what the validation needs, because a client
+--- SENDS a model. This one is keyed by GENDER and answers "which model may
+--- this character wear" - which is what the server needs, because the gender
+--- is a fact about the character and the model is derived from it.
+---
+--- Both directions are needed and they are NOT interchangeable. Reading
+--- `PED_MODELS[gender]` answers nil for every gender in the game, and the code
+--- that did that took the GENDER where it expected a model: the creator
+--- refused every save with "unsupported ped model", and no character had ever
+--- been able to keep an appearance.
+---
+--- DERIVED, not written down: a new model in PED_MODELS follows on its own.
+AppearanceConfig.PED_MODEL_BY_GENDER = {}
+for model, gender in pairs(AppearanceConfig.PED_MODELS) do
+  AppearanceConfig.PED_MODEL_BY_GENDER[gender] = model
+end
