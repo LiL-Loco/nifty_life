@@ -181,6 +181,26 @@ function Variation.textureCount(ped, kind, slot, global)
   return GetNumberOfPedTextureVariations(ped, anchor, global)
 end
 
+--- Is this local drawable inside the collection at all?
+---
+--- The engine refuses a drawable the collection does not have, and that
+--- refusal is INVISIBLE in the read-back: the ped keeps the item it was
+--- wearing, and that item reads back as a perfectly valid drawable with a
+--- perfectly valid texture. So this is asked of the COLLECTION, which knows
+--- how many drawables it has, and not of the ped.
+---
+--- @return boolean known -- false when the collection reports no drawables
+--- @return boolean exists
+function Variation.hasDrawable(ped, kind, slot, collection, localDrawable)
+  local available = Variation.collectionDrawables(ped, kind, slot, collection)
+  if available <= 0 then return false, false end
+
+  local drawable = tonumber(localDrawable)
+  if not drawable then return true, false end
+
+  return true, drawable < available
+end
+
 --- The texture index the engine will accept for this drawable.
 ---
 --- The count bounds the search and the engine has the last word: a drawable can
@@ -219,11 +239,51 @@ end
 ---
 --- @return number texture -- the texture that was actually used
 function Variation.apply(ped, kind, slot, collection, localDrawable, texture)
-  local tex = Variation.clampTexture(ped, kind, slot, collection, localDrawable, texture)
-
   local anchor = tonumber(slot)
   local drawable = tonumber(localDrawable)
-  if not anchor or not drawable then return tex end
+  if not anchor or not drawable then return 0 end
+
+  -- THE STATE BEFORE THE APPLY.
+  --
+  -- Without it, a refusal is invisible. An empty slot reads as drawable 0 and
+  -- texture 0 - which is exactly what a refused "drawable 0, texture 0" looks
+  -- like - so a read-back that compares only against the REQUEST cannot tell
+  -- "the engine refused it" from "the engine did exactly what I asked".
+  --
+  -- This is not a theoretical distinction: it is the difference between the
+  -- engine printing "CPed::SetVariation: Invalid variation" every frame and
+  -- the engine silently keeping the old jacket, and only one of them is
+  -- visible in a report.
+  local beforeGlobal, beforeTexture
+  if kind == 'props' then
+    beforeGlobal = GetPedPropIndex(ped, anchor)
+    beforeTexture = GetPedPropTextureIndex(ped, anchor)
+  else
+    beforeGlobal = GetPedDrawableVariation(ped, anchor)
+    beforeTexture = GetPedTextureVariation(ped, anchor)
+  end
+
+  -- DOES THE COLLECTION HAVE THIS DRAWABLE AT ALL?
+  --
+  -- This is checked BEFORE the apply, and it is the one refusal the read-back
+  -- cannot see: the ped keeps the item it was wearing, which reads back as a
+  -- perfectly valid drawable with a perfectly valid texture.
+  --
+  -- The apply is skipped when we know the engine would refuse it, because
+  -- refusing it is not silent - it prints, once per frame, for as long as the
+  -- appearance is on screen.
+  local known, exists = Variation.hasDrawable(ped, kind, anchor, collection, drawable)
+  if known and not exists then
+    Variation.report(('die Collection %q hat kein Drawable %s in Slot %s'):format(
+      tostring(collection), tostring(drawable), tostring(anchor)))
+    return 0
+  end
+  if not known then
+    Variation.report(('die Collection %q meldet keine Drawables fuer Slot %s'):format(
+      tostring(collection), tostring(anchor)))
+  end
+
+  local tex, global = Variation.clampTexture(ped, kind, slot, collection, localDrawable, texture)
 
   if kind == 'props' then
     SetPedCollectionPropIndex(ped, anchor, collection, drawable, tex, false)
@@ -237,21 +297,27 @@ function Variation.apply(ped, kind, slot, collection, localDrawable, texture)
   -- one - to the CLIENT's console, once per frame, for as long as the
   -- appearance is on screen - and leaves the slot as it was. So the only way
   -- to know whether the apply worked is to read the ped back and compare.
-  --
-  -- A mismatch here means the engine refused a variation that this very code
-  -- produced. That is the one report worth having, because it says the fix
-  -- did not fix it.
-  local applied
+  local appliedGlobal, appliedTexture
   if kind == 'props' then
-    applied = GetPedPropTextureIndex(ped, anchor)
+    appliedGlobal = GetPedPropIndex(ped, anchor)
+    appliedTexture = GetPedPropTextureIndex(ped, anchor)
   else
-    applied = GetPedTextureVariation(ped, anchor)
+    appliedGlobal = GetPedDrawableVariation(ped, anchor)
+    appliedTexture = GetPedTextureVariation(ped, anchor)
   end
 
-  if applied ~= tex then
-    Variation.report(('engine nahm Textur %s statt %s (slot %s, collection %q, drawable %s)'):format(
-      tostring(applied), tostring(tex), tostring(anchor),
-      tostring(collection), tostring(drawable)))
+  local tookIt = (appliedGlobal == global and appliedTexture == tex)
+
+  if not tookIt then
+    -- If the ped was already showing exactly this, there is nothing to
+    -- report: the engine may have refused, or the item was already on, and
+    -- the outcome for the player is the same either way.
+    local alreadyThere = (beforeGlobal == global and beforeTexture == tex)
+    if not alreadyThere then
+      Variation.report(('engine nahm Drawable %s/Textur %s statt %s/%s (slot %s, collection %q, drawable %s)'):format(
+        tostring(appliedGlobal), tostring(appliedTexture), tostring(global), tostring(tex),
+        tostring(anchor), tostring(collection), tostring(drawable)))
+    end
   end
 
   return tex
