@@ -49,4 +49,7 @@ ensure nifty-creator
 ensure nifty-chat
 ensure nifty-world
 ensure nifty-clothing
+# Haengt an nifty-inventory (das Geraet) und nifty-core (die Fassade) — beide
+# stehen weiter oben, deshalb hier und nicht weiter vorn.
+ensure nifty-phone
 ensure nifty-armwrestling

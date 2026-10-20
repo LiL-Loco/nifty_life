@@ -89,7 +89,11 @@ client_scripts {
   'client/cl_nui.lua',
 }
 
--- NUI page. The CEF renders ui/index.html. The page is hidden until
+-- NUI page. The CEF renders ui/dist/index.html — the React build, produced
+-- by ui-monorepo/packages/creator and copied by ui-monorepo/deploy.sh. The
+-- hand-written ui/index.html, ui/app.js and ui/style.css this used to load are
+-- gone; keeping them would have meant two UIs for one resource. The page is
+-- hidden until
 -- openCreator sends an `open` message.
 ui_page 'ui/dist/index.html'
 

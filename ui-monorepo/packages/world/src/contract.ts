@@ -225,11 +225,20 @@ export interface ResultPayload {
   message: string;
 }
 
-/** The two actions this panel accepts. Nothing else is legal. */
-interface WorldActions {
+/**
+ * The two actions this panel accepts. Nothing else is legal.
+ *
+ * A `type` and not an `interface`, and this is not a style preference: an
+ * INTERFACE gets no implicit index signature from TypeScript, so this map could
+ * not satisfy `ActionMap = Record<string, unknown>` and every `bun run typecheck`
+ * in this package failed with "Index signature for type 'string' is missing" —
+ * pointing at the constraint rather than at the one keyword that differs. It has
+ * been failing since the panel was written.
+ */
+type WorldActions = {
   render: RenderPayload;
   result: ResultPayload;
-}
+};
 
 const bridge = createBridge<WorldActions>({ received: ['render', 'result'] });
 

@@ -61,6 +61,7 @@ copy_one clothing     nifty-clothing/ui/dist
 copy_one inventory    nifty-inventory/ui/dist
 copy_one world        nifty-world/ui/dist
 copy_one armwrestling nifty-armwrestling/ui/dist
+copy_one phone        nifty-phone/ui/dist
 copy_one loadscreen   nifty-loadscreen/dist
 
 echo

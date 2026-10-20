@@ -164,7 +164,7 @@ end)
 ---
 --- The input closes on the SAME event whether or not the server accepts the
 --- message. Holding the box open until the server answers would tie the UI to a
---- round trip, and the local echo in ui/app.js covers the gap — so what the player
+--- round trip, and the panel's local echo covers the gap — so what the player
 --- sees is instant while the broadcast remains the server's decision.
 RegisterNUICallback('chatSend', function(data, cb)
   local body = type(data) == 'table' and data.text or ''

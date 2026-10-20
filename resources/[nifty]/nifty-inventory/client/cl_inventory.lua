@@ -154,7 +154,7 @@ RegisterKeyMapping('+niftyinventory', 'Nifty Life — Inventar', 'keyboard', 'F1
 
 -- ESC zum Schliessen: RegisterKeyMapping akzeptiert "ESC" nicht als
 -- gueltigen Key-Namen (FiveM-Liste: nur A-Z, 0-9, F1-F12, Tab, Space,
--- Arrow, Numpad, Modifier). Der NUI-Keydown-Handler in ui/index.html
+-- Arrow, Numpad, Modifier). Der NUI-Keydown-Handler im Panel
 -- faengt die Taste selbst ab und ruft ueber das bestehende
 -- closePanel-Callback closePanel() auf.
 

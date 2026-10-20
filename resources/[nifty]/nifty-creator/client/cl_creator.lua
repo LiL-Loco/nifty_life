@@ -6,7 +6,7 @@
   already exists by the time this opens. `appearance IS NULL` is what said the
   creator was needed.
 
-  THE INTERFACE IS THE NUI PAGE. This resource owns `ui/index.html` (rendered
+  THE INTERFACE IS THE NUI PAGE. This resource owns `ui/dist/index.html` (rendered
   through cl_nui.lua) and docks to the RIGHT of the screen so the player's
   face stays visible. The NUI driver acquires focus through the broker
   in nifty-core so the chat, the phone and the creator never collide.
@@ -1404,7 +1404,7 @@ CAM_FOV_STEP  = 12.0  -- FOV delta per menu press
 -- nifty-creator" — the panel shows that as a silent no-op, so the button simply
 -- does nothing and nothing says why.
 --
--- `submit` is the panel's "Fertig" button (ui/app.js:641 -> fetchNui('submit')),
+-- `submit` is the panel's "Fertig" button (the React panel's submit handler),
 -- so it is not optional either: without the export, a finished character can
 -- never be submitted.
 --

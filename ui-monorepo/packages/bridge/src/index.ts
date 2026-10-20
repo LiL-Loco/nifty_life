@@ -40,8 +40,32 @@ export interface NuiCallOptions {
 /** A callback registered on the Lua side with `RegisterNUICallback`. */
 export type CallbackName = string;
 
-/** Shape of the map a panel passes to `createBridge`. */
-export type ActionMap = Record<string, (body: any) => void>;
+/**
+ * Shape of the map a panel passes to `createBridge`.
+ *
+ * It maps an ACTION NAME to the TYPE OF ITS PAYLOAD, not to a handler. The old
+ * constraint was `Record<string, (body: any) => void>`, which was simply the
+ * wrong shape and produced two different failures depending on how a panel
+ * declared its map:
+ *
+ *   - as an `interface`: "Index signature for type 'string' is missing" —
+ *     TypeScript gives an object-literal type ALIAS an implicit index signature
+ *     and an INTERFACE none. nifty-world failed this way and had been failing
+ *     since it was written; the local `bun run typecheck` output was swallowed by
+ *     a `|| echo` and nobody noticed.
+ *   - as a `type` alias: "Property ''phone:open'' is incompatible with index
+ *     signature" — the constraint demanded a FUNCTION where the map has a
+ *     payload type.
+ *
+ * nifty-chat passed only by accident: it declares
+ * `Record<string, () => void>` and handlers its payloads inline, which happens to
+ * satisfy a function-shaped constraint while meaning something else entirely.
+ *
+ * `unknown` is the honest constraint. A panel still gets full checking of each
+ * payload where it is USED, because `on<K extends keyof T>` indexes into T; this
+ * only stops the constraint itself from making a claim about the values.
+ */
+export type ActionMap = Record<string, unknown>;
 
 export type Result<T> =
   | { ok: true; value: T }

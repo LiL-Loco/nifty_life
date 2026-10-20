@@ -75,7 +75,9 @@ client_script 'client/cl_wardrobe.lua'
 client_script 'client/cl_store.lua'
 client_script 'client/cl_nui.lua'
 
--- NUI page. The CEF renders ui/index.html. The page is hidden until
+-- NUI page. The CEF renders ui/dist/index.html — the React build. The
+-- hand-written ui/index.html, ui/store.js, ui/wardrobe.js and ui/style.css are
+-- gone. The page is hidden until
 -- the wardrobe NUI driver sends an `open` message.
 ui_page 'ui/dist/index.html'
 
