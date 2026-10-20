@@ -571,6 +571,77 @@ local HAIR_PALETTE = {
   { 162, 80,  47,  255 },  { 170, 78,  43,  255 },  { 98,  98,  98,  255 },
 }
 
+-- ------------------------------------------------------------------
+-- MAKEUP_PALETTE, OVERLAY_PALETTES und die Gesicht-Gruppen.
+--
+-- Diese drei Tabellen und die beiden ZAEHLER wurden mit den Legacy-NativeUI-
+-- Menuebauern entfernt, weil die Menues die einzigen Verwendungen waren. Das
+-- war eine Fehlannahme: `randomiseAll` braucht sie ebenfalls (ein Zufalls-
+-- gesetztes Overlay ohne Palette ergibt eine Farbe aus dem Nichts), und
+-- `getState` liefert sie an das NUI-Panel, das seine Overlays, Make-up und
+-- Zonen daraus zeichnet. Ohne sie bekam das Panel nil und lief auf leere
+-- Vorgaben zurueck.
+--
+-- Die Werte sind unveraendert aus der Historie uebernommen, nicht neu erfunden.
+local MAKEUP_PALETTE = {
+  { 240, 200, 195, 255 },  { 220, 170, 165, 255 },  { 200, 140, 130, 255 },
+  { 180, 110, 100, 255 },  { 255, 220, 210, 255 },  { 255, 180, 175, 255 },
+  { 250, 150, 145, 255 },  { 240, 120, 115, 255 },  { 230, 100, 95,  255 },
+  { 220, 80,  75,  255 },  { 200, 60,  55,  255 },  { 180, 40,  35,  255 },
+  { 255, 200, 50,  255 },  { 240, 170, 30,  255 },  { 220, 140, 20,  255 },
+  { 190, 110, 15,  255 },  { 150, 80,  10,  255 },  { 100, 200, 100, 255 },
+  { 60,  160, 60,  255 },  { 30,  120, 30,  255 },  { 100, 180, 220, 255 },
+  { 60,  140, 200, 255 },  { 30,  100, 180, 255 },  { 150, 100, 200, 255 },
+  { 120, 60,  170, 255 },  { 80,  20,  140, 255 },  { 240, 240, 240, 255 },
+}
+
+local OVERLAY_PALETTES = {
+  [1]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Bart
+  [2]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Augenbrauen
+  [4]  = {                                       -- Makeup
+    { 1, 'Haarfarbe',     HAIR_PALETTE   },
+    { 2, 'Make-up-Farbe', MAKEUP_PALETTE },
+  },
+  [5]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Rouge
+  [7]  = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Sonnenbrand
+  [8]  = { { 2, 'Make-up-Farbe', MAKEUP_PALETTE } },  -- Lippenstift
+  [10] = { { 1, 'Haarfarbe',     HAIR_PALETTE   } },  -- Brustbehaarung
+}
+
+local FACE_2D_GROUPS = {
+  { title = 'Nasenspitze', top = 'Spitz',  bottom = 'Flach',  left = 'Kurz',  right = 'Lang',  xId = 2, yId = 1 },
+  { title = 'Augenbrauen', top = 'Hoch',   bottom = 'Tief',   left = 'Flach', right = 'Tief',  xId = 7, yId = 6 },
+  { title = 'Wangen',      top = 'Hoch',   bottom = 'Tief',   left = 'Schmal', right = 'Breit', xId = 9, yId = 8 },
+  { title = 'Kiefer',      top = 'Tief',   bottom = 'Hervor', left = 'Schmal', right = 'Breit', xId = 13, yId = 14 },
+  { title = 'Kinn',        top = 'Hervor', bottom = 'Flach',  left = 'Schmal', right = 'Breit', xId = 17, yId = 15 },
+}
+
+local FACE_1D_GROUPS = {
+  { id = 0,  title = 'Nasenbreite',      left = 'Schmal', right = 'Breit' },
+  { id = 3,  title = 'Nasenbeinhöhe',   left = 'Tief',   right = 'Hoch'  },
+  { id = 4,  title = 'Nasenspitze-Tiefe', left = 'Stumpf', right = 'Spitz' },
+  { id = 5,  title = 'Nasenbein-Drehung', left = 'Links', right = 'Rechts' },
+  { id = 10, title = 'Wangenspalt',      left = 'Breit',  right = 'Schmal' },
+  { id = 11, title = 'Augenöffnung',    left = 'Weit',   right = 'Eng'   },
+  { id = 12, title = 'Lippendicke',      left = 'Dick',   right = 'Dünn'   },
+  { id = 16, title = 'Kinn-Tiefe',       left = 'Flach',  right = 'Hervor' },
+  { id = 18, title = 'Kinn-Loch',        left = 'Klein',  right = 'Gross' },
+  { id = 19, title = 'Hals-Dicke',       left = 'Dünn',  right = 'Dick'  },
+}
+
+local ZONE_LABELS = {
+  [0] = 'Torso',
+  [1] = 'Kopf und Hals',
+  [2] = 'Linker Arm',
+  [3] = 'Rechter Arm',
+  [4] = 'Linkes Bein',
+  [5] = 'Rechtes Bein',
+}
+
+local REALISTIC_EYE_COLOUR_MAX = 8
+local MOTHER_COUNT = 22
+local FATHER_COUNT = 21
+
 --- Shared colour-channel builder for hair colour panels.
 --- The whole appearance as the creator currently sees it.
 local function appearanceNow()
@@ -771,18 +842,49 @@ end
 
 -- ------------------------------------------------------------------ menus
 
---- Removed: colourCount() / overlayStyleCount(). The NUI uses
---- AppearanceConfig.MAX_OVERLAY_STYLE directly.
-
---- Removed: colourCount(). buildOverlayMenu and buildHairColourMenu
---- now use #HAIR_PALETTE / #MAKEUP_PALETTE directly, and OVERLAY_PALETTES
---- for the per-overlay palette list. No engine lookup needed.
-
---- colourCount() definition removed in favour of the static palette
---- sizes baked into HAIR_PALETTE / MAKEUP_PALETTE at the top of the file.
+--- Removed: colourCount(). The menu builders are gone; the palettes are static
+--- tables at the top of the file and their SIZES are used directly.
+---
+--- overlayStyleCount() was removed here too and RESTORED, because the comment's
+--- reasoning only covered the menu: the menu draws a slider and can live with
+--- the static bound, but the randomiser picks a style for a ped and needs the
+--- real per-overlay count. It lives with randomiseAll now.
 
 
 -- ---------------------------------------------------------------- actions
+
+--- How many textures does THIS drawable have?
+---
+--- `option.textures` is the count for the whole COLLECTION, and that is not
+--- enough. Drawable 9 of a collection can have a single texture while the
+--- collection as a whole has five, so picking a texture index from the
+--- collection count produces a variation the engine rejects — and it rejects it
+--- loudly, once per frame, for as long as the panel is open:
+---
+---     CPed::SetVariation: Invalid variation (slotId: 10, drawblId: 9, texId: 1)
+---
+--- The two natives below answer per drawable. They are read defensively rather
+--- than called directly, because a native that is missing on some runtime must
+--- degrade to the collection count rather than take the whole randomiser down.
+---
+--- @return number|nil count -- nil when the runtime cannot answer
+local function texturesFor(kind, id, drawable)
+  local ped = PlayerPedId()
+  local slot = tonumber(id)
+  if not slot then return nil end
+
+  if kind == 'props' then
+    if type(GetNumberOfPedPropTextures) == 'function' then
+      return GetNumberOfPedPropTextures(ped, slot, drawable)
+    end
+    return nil
+  end
+
+  if type(GetNumberOfPedComponentTextures) == 'function' then
+    return GetNumberOfPedComponentTextures(ped, slot, drawable)
+  end
+  return nil
+end
 
 -- openRoot was the entry point for the legacy NativeUI root menu. The NUI
 -- driver (cl_nui.lua) now opens the root panel directly via `action: 'open'`,
@@ -807,10 +909,22 @@ randomise = function()
       if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
         local chosen = list[math.random(#list)]
         if chosen then
+          local drawable = math.random(0, chosen.drawables - 1)
+
+          -- The texture is chosen from the DRAWABLE's own count, not from the
+          -- collection's. See texturesFor for why the difference is not
+          -- academic: it is the difference between a character wearing a hat and
+          -- the engine refusing the slot every frame.
+          local count = texturesFor(kind, id, drawable)
+          if not count or count < 1 then
+            count = chosen.textures
+          end
+          if not count or count < 1 then count = 1 end
+
           local slot = {
             collection = chosen.name,
-            drawable   = math.random(0, chosen.drawables - 1),
-            texture    = math.random(0, chosen.textures - 1),
+            drawable   = drawable,
+            texture    = math.random(0, count - 1),
           }
           selection[kind][tostring(id)] = slot
         end
@@ -823,6 +937,28 @@ end
 --- Roll every choice the creator exposes: outfit, face features, overlays,
 --- hair colour, eye colour, parents and weights, skin tone. Tattoos are
 --- left alone - the player has usually picked them by hand.
+-- ------------------------------------------------------------------
+-- How many styles overlay `id` actually has.
+--
+-- Removed together with the legacy menu builders, on the grounds that the NUI
+-- uses AppearanceConfig.MAX_OVERLAY_STYLE directly. That is true for the MENU,
+-- which draws a slider. It is NOT true for the randomiser: it picks a style
+-- for a ped, and a style the overlay does not have is a broken overlay on the
+-- character rather than a slider that is slightly too long.
+--
+-- The engine count is per-ped and the stored value is validated against the
+-- bound on the server, so offering a value the engine does not have is worse
+-- than offering a slightly shorter one.
+local function overlayStyleCount(id)
+  local n = natives()
+  if type(n.numHeadOverlayValues) ~= 'function' then return 1 end
+
+  local ok, count = pcall(n.numHeadOverlayValues, id)
+  if not ok or type(count) ~= 'number' or count <= 0 then return 1 end
+
+  return math.min(count - 1, AppearanceConfig.MAX_OVERLAY_STYLE)
+end
+
 randomiseAll = function()
   -- Outfit
   selection = { components = {}, props = {} }
