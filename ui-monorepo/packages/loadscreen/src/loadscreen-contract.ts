@@ -45,6 +45,31 @@ export const PHASE_EMOJI: Record<PhaseKey, string> = {
 };
 
 /**
+ * How many init phases there are.
+ *
+ * Derived from the emoji table rather than written down twice, because the
+ * weighting of the bar depends on it: each phase is worth a quarter of the
+ * init segment, and a phase that does not exist would make the bar jump.
+ */
+export const INIT_PHASE_COUNT = Object.keys(PHASE_EMOJI).length;
+
+/**
+ * WHICH PART OF THE BAR THE MAP LOAD GETS.
+ *
+ * The load has two parts that do not measure the same thing and do not add up
+ * to one: the init functions (the game starting up) and the data files (the
+ * map streaming in). The engine reports each of them as its own 0..1 counter,
+ * and the naive reading — one counter, one bar — fills the bar completely
+ * during the init phase and then leaves it at 100% for the whole map load,
+ * which is the part that actually takes the time.
+ *
+ * So the bar has two segments. The split is a judgement call and it is stated
+ * here so it can be argued with: the init functions are the game's own startup
+ * and take a fraction of the wall clock, the map load is the wait.
+ */
+export const INIT_SEGMENT = 0.25;
+
+/**
  * The five host-state transitions, verbatim from `printLog` in
  * LoadingScreens.cpp. English in, German out — the site is German and a panel
  * that blinks English lines through is a different product.
