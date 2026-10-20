@@ -44,13 +44,17 @@ import {
  * state here, side effects through the bridge — except neither can drift from
  * the other without the type system objecting.
  *
- * WHY THERE IS NO BACK BUTTON IN THE PANELS
+ * WHY THE PANELS HAVE NO BACK BUTTON OF THEIR OWN
  *
- * `PanelNav` has `popPanel(): boolean` and `pushPanel(...)` and nothing else.
- * `popPanel` returns false at depth 1 precisely so the ESC handler can tell
- * "go back" from "close everything". The shell owns that. A panel that could
- * pop itself would need to know the depth, which is the one thing it must not
- * decide.
+ * `PanelNav` has `popPanel()` and `pushPanel(...)` and nothing else. The shell
+ * owns the header, and the header owns the back button — one place, always in
+ * the same spot, always with the same meaning. A panel that could pop itself
+ * would need to know the depth, which is the one thing it must not decide.
+ *
+ * Escape does not navigate here. It closes every other panel in this project,
+ * and in the creator it must do nothing at all: the creator is not a window
+ * that can be dismissed, it is the thing a character is being built in, and
+ * closing it throws the character away.
  *
  * WHY THE WHOLE SHELL IS ONE FILE
  *
@@ -116,15 +120,15 @@ export function App() {
         ]);
       },
       popPanel: () => {
-        // Returning a boolean is the contract; the ESC handler reads it to
-        // decide close-on-false / pop-on-true.
-        let did = false;
-        setStack((prev) => {
-          if (prev.length <= 1) return prev;
-          did = true;
-          return prev.slice(0, -1);
-        });
-        return did;
+        // At depth 1 this does NOTHING. It used to return false there and the
+        // ESC handler read that as "close the creator" — one stray keypress
+        // could throw away a character. The creator is closed by the explicit
+        // button in the header and by nothing else.
+        //
+        // The depth test is inside the updater, not outside it: `stack` in the
+        // closure is the value at the time the nav object was built, and a
+        // handler that reads it would act on a stale depth.
+        setStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
       },
     }),
     [],
@@ -206,19 +210,31 @@ export function App() {
     return () => offs.forEach((off) => off());
   }, []);
 
-  /* ---- ESC + camera orbit (Q/E) -------------------------------------- */
+  /* ---- camera orbit (Q/E) ----------------------------------------------- */
 
+  /**
+   * THERE IS NO ESCAPE HANDLER HERE, AND THAT IS DELIBERATE.
+   *
+   * Escape closes the chat, the inventory, the wardrobe, the phone and the shop.
+   * In the creator it must do NOTHING, because the creator is not a window that
+   * can be dismissed — it is the thing a character is being BUILT in, and
+   * closing it throws away ten minutes of work with no undo.
+   *
+   * It used to be handled: Escape popped one panel, and at the root it closed
+   * the whole creator. A player who reflexively hit Escape — which is what
+   * every other panel in this project teaches them to do — lost their character.
+   *
+   * The way out is a BUTTON now, in two places: the back button in the header
+   * leaves a sub-panel, and the X beside it closes the creator deliberately.
+   * A key that appears in every other surface of this project must not be the
+   * one that destroys a character.
+   */
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName || '';
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
 
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        if (!nav.popPanel()) void send('closePanel', {});
-        return;
-      }
       if (e.key === 'q' || e.key === 'Q' || e.code === 'KeyQ') {
         e.preventDefault();
         void send('camYaw', { delta: -1 });
@@ -232,7 +248,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, nav]);
+  }, [open]);
 
   /* ---- showSkinCam: re-fire on every active-panel change --------------- */
 
@@ -282,14 +298,35 @@ export function App() {
               {subtitle}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Schliessen"
-            onClick={() => void send('closePanel', {})}
-          >
-            &times;
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/*
+              THE BACK BUTTON.
+              Shown only when there is somewhere to go back TO. At the root it
+              is absent rather than disabled: a button that is greyed out and
+              does nothing is worse than no button, because a player clicks it
+              anyway and concludes the panel is broken.
+            */}
+            {stack.length > 1 ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Zurueck"
+                title="Zurueck"
+                onClick={() => nav.popPanel()}
+              >
+                &#8249;
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Schliessen"
+              title="Schliessen"
+              onClick={() => void send('closePanel', {})}
+            >
+              &times;
+            </Button>
+          </div>
         </header>
 
         {error ? (

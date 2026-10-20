@@ -296,10 +296,25 @@ export type CreatorPanelKind =
   | 'tattooZone';
 
 export interface PanelNav {
-  /** The only way to LEAVE a panel. There is no back button; ESC pops. */
+  /**
+   * The only way to LEAVE a panel.
+   *
+   * There is a back button in the shell's header, and it is the ONLY way out of
+   * a sub-panel. Escape does nothing here at all — a key that appears in every
+   * other NUI in this project must not close the character creator, because
+   * closing it throws away the character and there is no undo for that.
+   */
   pushPanel: (kind: CreatorPanelKind, payload?: Record<string, unknown>) => void;
-  /** Returns false at depth 1, which is the ESC handler's cue to closeAll. */
-  popPanel: () => boolean;
+  /**
+   * Leave the current panel and return to the one below it.
+   *
+   * AT DEPTH 1 IT DOES NOTHING. It used to return false there, and the ESC
+   * handler read that as "close the whole creator" — which is how a stray key
+   * could throw away a character somebody had spent ten minutes building. The
+   * creator is now closed by the explicit button in the header, and by nothing
+   * else, so this has no way out at the root.
+   */
+  popPanel: () => void;
 }
 
 /* ------------------------------------------------------------------ widgets */
