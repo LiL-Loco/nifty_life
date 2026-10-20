@@ -10,8 +10,8 @@ version '0.2.0'
 -- This is the BASE resource, not a system. It owns the database, the settings
 -- cache, identity and the session guard, and it owns NO gameplay system.
 --
--- The HUD lives in nifty-world, the creator in nifty-creator, the phone in
--- nifty-phone, the chat in nifty-chat, the wardrobe+store in nifty-clothing
+-- The HUD lives in nifty-world, the creator in nifty-creator, the chat in
+-- nifty-chat, the wardrobe+store in nifty-clothing
 -- and the inventory in nifty-inventory - each with its own `ui_page`. This
 -- resource keeps its own `ui_page 'ui/spawn.html'` for the spawn-location
 -- picker, which the 2026-10-12 NUI migration brought back into nifty-core
@@ -32,6 +32,10 @@ shared_scripts {
 
 server_script '@oxmysql/lib/MySQL.lua'
 server_script 'server/db.lua'
+-- Bootstraps sql/init.sql on first start. MUST load before any module that
+-- reads from the database, so the queue order in `Db.ready` makes the schema
+-- up before settings.lua reads its cache.
+server_script 'server/sql_bootstrap.lua'
 server_script 'server/settings.lua'
 server_script 'server/validate.lua'
 
@@ -81,6 +85,7 @@ files {
   'ui/spawn.html',
   'ui/spawn.css',
   'ui/spawn.js',
+  'sql/init.sql',
 }
 
 -- Default spawnpoints for the gamemode (was nifty-map/map.lua). The picker

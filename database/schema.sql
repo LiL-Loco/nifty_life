@@ -1,14 +1,15 @@
 -- ============================================================================
 -- schema.sql — Nifty Life 2.0 — komplettes DB-Schema in einer Datei
 --
--- Diese Datei kombiniert alle 30 Migrations aus database/migrations/ in der
+-- Diese Datei kombiniert alle 29 Migrations aus database/migrations/ in der
 -- Reihenfolge, in der sie angewendet werden müssen. Sie ist die 'from-scratch'
 -- Variante für eine frische MariaDB-Instanz.
 --
 -- Erstellt:
 --   - Datenbank 'nifty_life' (utf8mb4 / utf8mb4_unicode_ci)
 --   - schema_migrations Tabelle (für Migrations-Tracking)
---   - Alle 30 Migrationen zusammengeführt
+--   - Alle 29 Migrationen zusammengeführt (024 wurde gelöscht — "drop the
+--     bounty hunter job"; die Sektion ist hier ebenfalls entfernt)
 --   - ~80 Tabellen, Views, Procedures, Functions, Triggers
 --
 -- Verwendung:
@@ -17,7 +18,7 @@
 -- Benutzer-Accounts (nifty, nifty_website, nifty_admin) werden NICHT hier
 -- angelegt. Dafür database/grants.sql nach dem Schema-Lauf ausführen.
 --
--- Stand: 2026-10-13 — Stand der Migrations: 030
+-- Stand: 2026-10-14 — Stand der Migrations: 030
 -- ============================================================================
 
 CREATE DATABASE IF NOT EXISTS nifty_life
@@ -1222,8 +1223,8 @@ CREATE TABLE IF NOT EXISTS peeper_reports (
 
 -- Only one application per Discord ID may ever exist.
 ALTER TABLE applications
-  DROP INDEX ix_applications_discord,
-  ADD UNIQUE KEY uq_applications_discord (discord_id);
+  DROP INDEX IF EXISTS ix_applications_discord,
+  ADD UNIQUE KEY IF NOT EXISTS uq_applications_discord (discord_id);
 
 -- ---------------------------------------------------------------------------
 -- Verify (all four should return exactly the rows described):
@@ -1299,8 +1300,19 @@ CREATE TABLE IF NOT EXISTS staff (
 -- The data is empty for this rename to be lossy: no application has ever been
 -- decided, because no client has ever connected.
 -- ---------------------------------------------------------------------------
+-- 011: rename reviewed_by -> reviewed_by_discord_id, idempotently.
+-- `CHANGE COLUMN old new` is not idempotent (fails on a re-run with `Unknown
+-- column 'old'`). The rename is split into ADD + DROP. The intermediate copy
+-- step that would carry data across the rename is intentionally skipped: this
+-- column is the reviewer of a whitelist application, a column the server
+-- authorises only at first use. On a fresh database there are no rows yet; on
+-- a half-migrated database the `reviewed_by` column is gone, so there is
+-- nothing to carry. The end state is identical either way.
 ALTER TABLE applications
-  CHANGE COLUMN reviewed_by reviewed_by_discord_id VARCHAR(32) NULL;
+  ADD COLUMN IF NOT EXISTS reviewed_by_discord_id VARCHAR(32) NULL;
+
+ALTER TABLE applications
+  DROP COLUMN IF EXISTS reviewed_by;
 -- --------------------------------------------------------------------------
 -- 012_staff_peeper_authorship.sql
 -- --------------------------------------------------------------------------
@@ -1384,14 +1396,27 @@ ALTER TABLE peeper_posts
 -- ---------------------------------------------------------------------------
 -- peeper_likes — the PK becomes a surrogate, the uniqueness moves to `actor`.
 -- ---------------------------------------------------------------------------
+-- peeper_likes — the PK becomes a surrogate, the uniqueness moves to `actor`.
+-- MariaDB has no `DROP PRIMARY KEY IF EXISTS`. This statement expects a
+-- fresh database (run `tools/db-reset.sql` first if the bootstrap is
+-- re-running on a half-migrated one).
+--
+-- The original was a single ALTER with `ADD COLUMN id ... PRIMARY KEY FIRST`
+-- inside it; MariaDB rejects that combination with error 1075 ("there can be
+-- only one auto column and it must be defined as a key") because the new
+-- PRIMARY KEY declaration on the AUTO_INCREMENT column inside a multi-clause
+-- ALTER is not parsed the way it is in CREATE TABLE. Splitting the surrogate
+-- into a plain `ADD COLUMN` (no inline PK) and a separate `ADD PRIMARY KEY`
+-- makes the intent explicit and avoids the rejection.
 ALTER TABLE peeper_likes
   DROP PRIMARY KEY,
-  ADD COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST,
-  MODIFY character_id CHAR(36) NULL,
-  ADD COLUMN author_discord_id VARCHAR(32) NULL AFTER character_id,
-  ADD COLUMN actor VARCHAR(32) NULL,
-  ADD UNIQUE KEY uq_peeper_likes_actor (post_id, actor),
-  ADD KEY ix_peeper_likes_discord (author_discord_id);
+  ADD COLUMN IF NOT EXISTS id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT FIRST,
+  MODIFY COLUMN character_id CHAR(36) NULL,
+  ADD COLUMN IF NOT EXISTS author_discord_id VARCHAR(32) NULL AFTER character_id,
+  ADD COLUMN IF NOT EXISTS actor VARCHAR(32) NULL,
+  ADD PRIMARY KEY (id),
+  ADD UNIQUE KEY IF NOT EXISTS uq_peeper_likes_actor (post_id, actor),
+  ADD KEY IF NOT EXISTS ix_peeper_likes_discord (author_discord_id);
 -- `ix_peeper_likes_character` already exists from migration 009 and stays: a
 -- nullable column still uses that index for player likes.
 
@@ -1419,10 +1444,10 @@ DELIMITER ;
 -- is enough to keep it honest.
 -- ---------------------------------------------------------------------------
 ALTER TABLE peeper_reports
-  MODIFY reporter CHAR(36) NULL,
-  ADD COLUMN reporter_discord_id VARCHAR(32) NULL AFTER reporter,
-  ADD KEY ix_peeper_reports_reporter_discord (reporter_discord_id),
-  ADD CONSTRAINT chk_peeper_reporter CHECK (
+  MODIFY COLUMN reporter CHAR(36) NULL,
+  ADD COLUMN IF NOT EXISTS reporter_discord_id VARCHAR(32) NULL AFTER reporter,
+  ADD KEY IF NOT EXISTS ix_peeper_reports_reporter_discord (reporter_discord_id),
+  ADD CONSTRAINT IF NOT EXISTS chk_peeper_reporter CHECK (
     (reporter IS NULL) <> (reporter_discord_id IS NULL)
   );
 -- --------------------------------------------------------------------------
@@ -1457,7 +1482,7 @@ ALTER TABLE peeper_reports
 --    cannot supply, so it cannot produce a staff post at all.
 
 ALTER TABLE peeper_posts
-  ADD CONSTRAINT chk_peeper_staff_authorship CHECK (
+  ADD CONSTRAINT IF NOT EXISTS chk_peeper_staff_authorship CHECK (
     source <> 'staff'
     OR (author_discord_id IS NOT NULL AND author_character IS NULL)
   );
@@ -1469,7 +1494,7 @@ ALTER TABLE peeper_posts
 -- true. `actor` on `peeper_likes` is filled by the trigger and stays unwritable
 -- on every account.
 ALTER TABLE peeper_likes
-  ADD CONSTRAINT chk_peeper_likes_staff_author CHECK (
+  ADD CONSTRAINT IF NOT EXISTS chk_peeper_likes_staff_author CHECK (
     author_discord_id IS NULL OR character_id IS NULL
   );
 -- --------------------------------------------------------------------------
@@ -1600,10 +1625,10 @@ CREATE TABLE IF NOT EXISTS portal_user_discord (
 -- POST lose that race and the constraint does not.
 -- ---------------------------------------------------------------------------
 ALTER TABLE applications
-  ADD COLUMN user_id CHAR(36) NULL AFTER id;
+  ADD COLUMN IF NOT EXISTS user_id CHAR(36) NULL AFTER id;
 
 ALTER TABLE applications
-  ADD UNIQUE KEY uq_applications_user (user_id);
+  ADD UNIQUE KEY IF NOT EXISTS uq_applications_user (user_id);
 
 -- Staff is read from `staff`, which is keyed by Discord ID. That still works
 -- unchanged: isStaff() resolves the session's linked Discord ID first and asks
@@ -1677,16 +1702,16 @@ BEGIN
   SELECT v_user_id AS confirmed_user_id;
 END//
 
+GRANT EXECUTE ON PROCEDURE nifty_life.confirm_portal_email TO 'nifty_website'@'localhost';
+
 DELIMITER ;
 
 -- EXECUTE only. No SELECT on portal_users' UPDATE, no INSERT, nothing that lets
 -- the web account write the column directly.
-GRANT EXECUTE ON PROCEDURE nifty_life.confirm_portal_email TO 'nifty_website'@'localhost';
 
 -- Procedure bodies run as their DEFINER, so the web account gets exactly the
 -- two UPDATEs above and nothing else — no UPDATE privilege on either table is
 -- created by this grant.
-FLUSH PRIVILEGES;
 -- --------------------------------------------------------------------------
 -- 017_confirm_portal_email_single_use.sql
 -- --------------------------------------------------------------------------
@@ -1760,6 +1785,8 @@ BEGIN
   END IF;
 END//
 
+GRANT EXECUTE ON PROCEDURE nifty_life.confirm_portal_email TO 'nifty_website'@'localhost';
+
 DELIMITER ;
 
 -- CORRECTION: the grant from migration 016 does NOT survive this DROP/CREATE.
@@ -1791,9 +1818,7 @@ DELIMITER ;
 -- GRANT is idempotent, so running this on a fresh install where 016's grant is
 -- still intact does nothing.
 
-GRANT EXECUTE ON PROCEDURE nifty_life.confirm_portal_email TO 'nifty_website'@'localhost';
 
-FLUSH PRIVILEGES;
 -- --------------------------------------------------------------------------
 -- 019_chat_settings.sql
 -- --------------------------------------------------------------------------
@@ -1899,16 +1924,16 @@ INSERT INTO settings (`key`, value, value_type, category, description) VALUES
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE characters
-  ADD COLUMN birthplace VARCHAR(96) NULL AFTER gender;
+  ADD COLUMN IF NOT EXISTS birthplace VARCHAR(96) NULL AFTER gender;
 
 -- Dropped and replaced by uq_characters_name below. Keeping both would cost a
 -- second index over the same two columns for no query that the unique one does not
 -- already serve.
 ALTER TABLE characters
-  DROP INDEX ix_characters_name;
+  DROP INDEX IF EXISTS ix_characters_name;
 
 ALTER TABLE characters
-  ADD COLUMN name_key VARCHAR(161)
+  ADD COLUMN IF NOT EXISTS name_key VARCHAR(161)
     GENERATED ALWAYS AS (
       CONCAT(TRIM(first_name), '|', TRIM(COALESCE(last_name, '')))
     ) STORED
@@ -1921,7 +1946,7 @@ ALTER TABLE characters
 -- 161 = 64 + 1 + 64, plus slack. utf8mb4 counts characters, not bytes, so this is
 -- the character budget and not an overflow risk.
 ALTER TABLE characters
-  ADD UNIQUE KEY uq_characters_name (name_key);
+  ADD UNIQUE KEY IF NOT EXISTS uq_characters_name (name_key);
 
 -- ---------------------------------------------------------------------------
 -- 3. The "created on the web, not finished in game" state
@@ -2289,6 +2314,8 @@ proc_main: BEGIN
          'Charakter angelegt.' AS message;
 END//
 
+GRANT EXECUTE ON PROCEDURE nifty_life.create_character_from_web TO 'nifty_website'@'localhost';
+
 DELIMITER ;
 
 -- ---------------------------------------------------------------------------
@@ -2329,7 +2356,7 @@ DELIMITER ;
 -- registration form.
 
 ALTER TABLE portal_users
-  ADD COLUMN username VARCHAR(32) NULL AFTER email;
+  ADD COLUMN IF NOT EXISTS username VARCHAR(32) NULL AFTER email;
 
 -- --------------------------------------------------------------------------
 -- 023_add_character_position.sql
@@ -2340,39 +2367,7 @@ ALTER TABLE portal_users
 -- resumes there and the picker is skipped. Null means "first time after the
 -- creator" and the picker opens.
 ALTER TABLE characters
-  ADD COLUMN position JSON NULL AFTER appearance;
--- --------------------------------------------------------------------------
--- 024_remove_bounty_hunter.sql
--- --------------------------------------------------------------------------
--- ============================================================================
--- 024_remove_bounty_hunter.sql
--- Nifty Life 2.0 — drop the bounty hunter job
---
--- Bounty hunter was added in migration 005 (jobs_and_property_seed) as a
--- placeholder civilian job. It is not part of the roster the owner wanted
--- to ship - the roster is police, ems, taxi, mechanic, trucker, tow, fire -
--- and the only reason it existed was that 005 inserted the four jobs 003 had
--- already seeded (police/ems/taxi/mechanic) plus a handful of extras, and
--- bounty was one of those extras.
---
--- 005 has been edited to drop the INSERT lines for 'bounty' and for the
--- 'job.wage_per_hour.bounty' setting, so a FRESH install (where 005 is run
--- for the first time) will never have a bounty hunter. This migration handles
--- the EXISTING install case: any database that already ran 005 has the
--- bounty row and the wage setting, and we want them gone.
---
--- character_jobs entries pointing at 'bounty' are deleted too. A character
--- who joined bounty before this migration simply falls back to having no
--- job, which is the same outcome as if the job had never existed - the
--- character_jobs table is a list of which jobs a character has signed up
--- for, not a list of which jobs exist, so a row pointing at a non-existent
--- job is meaningless and harmless to remove.
--- ============================================================================
-
-DELETE FROM job_defs         WHERE code = 'bounty';
-DELETE FROM settings         WHERE `key` = 'job.wage_per_hour.bounty';
-DELETE FROM character_jobs   WHERE job_code = 'bounty';
-
+  ADD COLUMN IF NOT EXISTS position JSON NULL AFTER appearance;
 -- --------------------------------------------------------------------------
 -- 025_character_clothing.sql
 -- --------------------------------------------------------------------------
@@ -2695,7 +2690,7 @@ ON DUPLICATE KEY UPDATE
 -- ============================================================================
 
 ALTER TABLE character_clothing
-  ADD COLUMN acquired_from VARCHAR(128) NULL AFTER source;
+  ADD COLUMN IF NOT EXISTS acquired_from VARCHAR(128) NULL AFTER source;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
