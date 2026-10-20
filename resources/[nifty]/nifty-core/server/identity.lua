@@ -66,6 +66,25 @@ local function discordIdOf(src)
   return id
 end
 
+--- The player's Rockstar license, or nil.
+---
+--- There is no `GetPlayerLicense` in the server runtime. The name reads exactly
+--- right and does not exist, so calling it took the whole character creation
+--- flow down with it: `Identity.beginSession` runs immediately before the
+--- appearance is saved, so every "Fertig" in the creator died on the line
+--- after the session insert - and the player was left with a character that
+--- was never written.
+---
+--- The license is in the IDENTIFIERS, behind the `license:` prefix, and that
+--- is where every other identifier-based lookup in this file reads it from.
+local function licenseOf(src)
+  for _, entry in ipairs(GetPlayerIdentifiers(src) or {}) do
+    local kind, value = string.match(entry, '^(%w+):(.+)$')
+    if kind == 'license' then return value end
+  end
+  return nil
+end
+
 -- Public because sv_main.lua's connection gate needs the same answer, and two
 -- copies of this logic are two places for them to disagree.
 Identity.discordIdOf = discordIdOf
@@ -106,7 +125,7 @@ function Identity.beginSession(src, characterId)
   local sessionId = Db.insert([[
     INSERT INTO sessions (character_id, fivem_slot_id, fivem_license)
     VALUES (?, ?, ?)
-  ]], { characterId, src, GetPlayerLicense(src) }, 'identity:beginSession')
+  ]], { characterId, src, licenseOf(src) }, 'identity:beginSession')
 
   ActiveSessions[src] = { characterId = characterId, sessionId = sessionId }
   return sessionId
