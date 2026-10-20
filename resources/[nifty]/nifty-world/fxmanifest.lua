@@ -55,6 +55,7 @@ server_script 'server/sv_actions.lua'
 -- dependency on a spawn resource of our own.
 -- The shared focus API is deliberately NOT included here — see nifty-chat's
 -- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
+client_script '@nifty-core/client/cl_variation.lua'
 client_script 'client/cl_identity.lua'
 client_script 'client/cl_world.lua'
 

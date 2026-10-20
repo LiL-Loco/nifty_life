@@ -61,6 +61,7 @@ server_script 'server/clothing.lua'
 -- LAST. It captures Db, GetSetting, Identity and the rest as they are at this
 -- moment, so loading it earlier would publish a facade containing nil.
 server_script 'server/sv_facade.lua'
+server_script 'server/sv_diag.lua'
 
 -- client/cl_spawn.lua is GONE, deliberately, and it was not only dead weight.
 --
@@ -107,6 +108,7 @@ server_script 'server/sv_facade.lua'
 -- The measurement from point 1 is written out at the focus block of every resource
 -- that now owns its own: nifty-creator/client/cl_nui.lua and its four siblings.
 client_script 'client/cl_welcome.lua'
+client_script 'client/cl_variation.lua'
 
 -- Only the schema is served from here now. The colour tokens and the NUI
 -- helper were moved out: nifty-chat vendored its own copy, and no other

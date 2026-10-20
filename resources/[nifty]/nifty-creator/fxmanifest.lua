@@ -83,6 +83,7 @@ files {
 -- The shared focus API is deliberately NOT included here — see nifty-chat's
 -- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
 client_scripts {
+  '@nifty-core/client/cl_variation.lua',
   'client/cl_labels.lua',
   'client/cl_gamedata.lua',
   'client/cl_creator.lua',

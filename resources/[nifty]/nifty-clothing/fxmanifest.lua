@@ -68,6 +68,7 @@ files {
 -- cl_nui.lua (driver), because cl_nui.lua references the same state.
 -- The shared focus API is deliberately NOT included here — see nifty-chat's
 -- fxmanifest.lua for why a manifest `@` include is the wrong mechanism.
+client_script '@nifty-core/client/cl_variation.lua'
 client_script 'client/cl_hood.lua'
 client_script 'client/cl_targets.lua'
 client_script 'client/cl_drops.lua'

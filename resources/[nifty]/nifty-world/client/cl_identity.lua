@@ -210,45 +210,23 @@ local function applyFace(ped, appearance)
   applyDecorations(ped, appearance)
 end
 
---- The texture index a drawable actually accepts.
----
---- A texture index is only valid within the DRAWABLE it was chosen for, not
---- within the collection. Drawable 9 of a collection can have one texture while
---- the collection has five, and the engine does not quietly ignore the extra
---- one — it refuses the whole slot and says so, once per frame, for as long as
---- the appearance is on screen:
----
----     CPed::SetVariation: Invalid variation (slotId: 10, drawblId: 9, texId: 1)
----
---- The count is asked of the engine per drawable. The two natives are read
---- defensively, because a runtime without them must degrade to "use the index
---- as given" rather than take the whole appearance down.
----
---- @return number texture -- the index to use
-local function safeTexture(ped, isProp, id, drawable, texture)
-  local slot = tonumber(id)
-  local draw = tonumber(drawable)
-  local tex = tonumber(texture)
-  if not slot or not draw then return 0 end
-  if not tex or tex < 0 then return 0 end
-
-  local count
-  if isProp then
-    if type(GetNumberOfPedPropTextures) == 'function' then
-      count = GetNumberOfPedPropTextures(ped, slot, draw)
-    end
-  else
-    if type(GetNumberOfPedComponentTextures) == 'function' then
-      count = GetNumberOfPedComponentTextures(ped, slot, draw)
-    end
-  end
-
-  -- No answer from the engine: keep what we were given. It is no worse than
-  -- before, and guessing a smaller index would silently change the outfit.
-  if not count or count < 1 then return tex end
-  if tex >= count then return count - 1 end
-  return tex
-end
+-- The texture a drawable actually accepts is NOT asked for here any more.
+--
+-- It used to be, and the attempt was a no-op: the two natives it used
+-- (`GetNumberOfPedComponentTextures`, `GetNumberOfPedPropTextures`) do not
+-- exist - the engine's names are `GetNumberOfPedTextureVariations` and
+-- `GetNumberOfPedPropTextureVariations` - and both were called behind a
+-- `type(...) == 'function'` guard. The guard did its job perfectly: it
+-- swallowed the wrong name, the count came back nil, and the texture was
+-- passed through unchanged. The engine kept refusing the slot and kept
+-- printing, once per frame:
+--
+--     CPed::SetVariation: Invalid variation (slotId: 10, drawblId: 9, texId: 1)
+--
+-- `Variation.apply` does the whole job now: it resolves the collection-local
+-- drawable to the global one the engine validates, asks for THAT drawable's
+-- texture count, and clamps to it. The result is that the texture a slot gets
+-- is one the engine accepts.
 
 -- Apply everything EXCEPT the model.
 local function applyAppearanceParts(ped, appearance)
@@ -271,16 +249,14 @@ local function applyAppearanceParts(ped, appearance)
 
   if type(appearance.components) == 'table' then
     for id, slot in pairs(appearance.components) do
-      SetPedCollectionComponentVariation(ped, tonumber(id),
-        slot.collection, slot.drawable,
-        safeTexture(ped, false, id, slot.drawable, slot.texture), 0)
+      Variation.apply(ped, 'components', tonumber(id),
+        slot.collection, slot.drawable, slot.texture)
     end
   end
   if type(appearance.props) == 'table' then
     for id, slot in pairs(appearance.props) do
-      SetPedCollectionPropIndex(ped, tonumber(id),
-        slot.collection, slot.drawable,
-        safeTexture(ped, true, id, slot.drawable, slot.texture), false)
+      Variation.apply(ped, 'props', tonumber(id),
+        slot.collection, slot.drawable, slot.texture)
     end
   end
 

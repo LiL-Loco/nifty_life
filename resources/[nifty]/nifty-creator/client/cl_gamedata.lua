@@ -122,14 +122,14 @@ end
 
 --- The global index for a (slot, collection, local drawable) triple.
 ---
---- PROPS FIRST, because it is cheap and exact:
---- `GetPedPropGlobalIndexFromCollection` answers the question directly, for one
---- prop at a time, without touching the ped.
+--- There is no native for this. `GetPedPropGlobalIndexFromCollection` sounds
+--- like one, but it was called with the prop index missing and it is not part
+--- of the documented native set, so it cannot be trusted to answer at all.
 ---
---- COMPONENTS HAVE NO SUCH NATIVE. There is `GetPedPropGlobalIndexFromCollection`
---- for props and nothing equivalent for components, so the only way to learn what
---- global index the engine assigned to a component drawable is to apply it and
---- read the result back with `GetPedDrawableVariation`.
+--- So both kinds are resolved the same way: apply the local drawable with
+--- texture 0 - which every item in the game has - and read back what the ped
+--- is wearing now. `GetPedDrawableVariation` for a component, `GetPedPropIndex`
+--- for a prop.
 ---
 --- That is why `mapCollection` exists and why it builds a whole collection at a
 --- time: applying one drawable to read one index is two native calls, and doing it
@@ -160,7 +160,17 @@ local function mapCollection(ped, kind, id, collection, count)
       SetPedCollectionComponentVariation(ped, id, collection, drawable, 0, 0)
       map[drawable] = GetPedDrawableVariation(ped, id)
     else
-      map[drawable] = GetPedPropGlobalIndexFromCollection(ped, id, collection)
+      -- The same read-back as for components, and for the same reason.
+      --
+      -- `GetPedPropGlobalIndexFromCollection` would answer the question in one
+      -- call, but it was called with the prop index MISSING - three arguments
+      -- where it wants four - so it answered about a different prop, and it is
+      -- not part of the documented native set either. Applying the prop with
+      -- texture 0 and reading back what the ped wears is the same answer, and
+      -- it needs nothing beyond the two natives the collection setter already
+      -- uses.
+      SetPedCollectionPropIndex(ped, id, collection, drawable, 0, false)
+      map[drawable] = GetPedPropIndex(ped, id)
     end
   end
 

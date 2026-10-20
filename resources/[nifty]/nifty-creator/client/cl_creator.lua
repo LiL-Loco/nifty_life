@@ -863,27 +863,31 @@ end
 ---
 ---     CPed::SetVariation: Invalid variation (slotId: 10, drawblId: 9, texId: 1)
 ---
---- The two natives below answer per drawable. They are read defensively rather
---- than called directly, because a native that is missing on some runtime must
---- degrade to the collection count rather than take the whole randomiser down.
+--- THE COUNT BELONGS TO THE GLOBAL DRAWABLE, and this project stores the
+--- collection-local one. The two are different numbers for the same jacket, so
+--- the local index has to be resolved first — `Variation.global` does that by
+--- applying the drawable with texture 0 and reading back what the ped wears.
+---
+--- The natives are the real ones this time. The previous attempt used
+--- `GetNumberOfPedComponentTextures` and `GetNumberOfPedPropTextures`, which do
+--- not exist; the engine calls them `GetNumberOfPedTextureVariations` and
+--- `GetNumberOfPedPropTextureVariations`. Both were behind a `type()` guard,
+--- which swallowed the wrong name and made the whole thing a no-op.
 ---
 --- @return number|nil count -- nil when the runtime cannot answer
-local function texturesFor(kind, id, drawable)
+local function texturesFor(kind, id, collection, drawable)
   local ped = PlayerPedId()
   local slot = tonumber(id)
   if not slot then return nil end
 
+  local global = Variation.global(ped, kind, slot, collection, drawable)
+  if not global then return nil end
+
   if kind == 'props' then
-    if type(GetNumberOfPedPropTextures) == 'function' then
-      return GetNumberOfPedPropTextures(ped, slot, drawable)
-    end
-    return nil
+    return GetNumberOfPedPropTextureVariations(ped, slot, global)
   end
 
-  if type(GetNumberOfPedComponentTextures) == 'function' then
-    return GetNumberOfPedComponentTextures(ped, slot, drawable)
-  end
-  return nil
+  return GetNumberOfPedTextureVariations(ped, slot, global)
 end
 
 -- openRoot was the entry point for the legacy NativeUI root menu. The NUI
@@ -915,7 +919,7 @@ randomise = function()
           -- collection's. See texturesFor for why the difference is not
           -- academic: it is the difference between a character wearing a hat and
           -- the engine refusing the slot every frame.
-          local count = texturesFor(kind, id, drawable)
+          local count = texturesFor(kind, id, chosen.name, drawable)
           if not count or count < 1 then
             count = chosen.textures
           end

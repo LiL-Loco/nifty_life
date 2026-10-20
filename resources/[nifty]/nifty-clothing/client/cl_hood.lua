@@ -231,8 +231,29 @@ local function toggle()
   local collection = slot.collection or ''
   local texture = slot.texture or 0
 
-  SetPedCollectionComponentVariation(ped, Clothing.COMPONENT_TOP,
-    collection, drawable, texture, 0)
+  -- THE VARIANT INDEX IS A GLOBAL ONE, and this project stores the
+  -- collection-local one (ADR-0017). The collection setter reads a LOCAL
+  -- index, so applying the global one is what produced
+  --
+  --     CPed::SetVariation: Invalid variation (slotId: 11, drawblId: 300, ...)
+  --
+  -- The reverse lookup walks the collection once and finds the local index
+  -- that means this global one.
+  local count = Variation.collectionDrawables(ped, 'components',
+    Clothing.COMPONENT_TOP, collection)
+  local localDrawable = Variation.localForGlobal(ped, 'components',
+    Clothing.COMPONENT_TOP, collection, drawable, count)
+  if not localDrawable then
+    TriggerServerEvent('nifty:server:diag',
+      ('hood: %s | coll=%q hat kein lokales Drawable fuer global %d'):format(
+        isHoodDown and 'up' or 'down', tostring(collection), drawable))
+    return
+  end
+
+  -- The texture goes through the same clamp as every other slot: the variant
+  -- can have fewer textures than the top the player was wearing.
+  local usedTexture = Variation.apply(ped, 'components',
+    Clothing.COMPONENT_TOP, collection, localDrawable, texture)
 
   -- Report what the engine actually did, not what we asked for. This is the
   -- difference between "it worked" and "it looked like it worked".
@@ -242,13 +263,19 @@ local function toggle()
   TriggerServerEvent('nifty:server:diag',
     ('hood: %s | coll=%q drawable=%d->%d texture=%d->%d (asked %s)'):format(
       isHoodDown and 'up' or 'down',
-      tostring(collection), drawable, gotDrawable, texture, gotTexture,
+      tostring(collection), localDrawable, gotDrawable, usedTexture, gotTexture,
       tostring(why)))
 
   -- Persist. The saved path validates against nifty-core before it writes, so
   -- this cannot smuggle a drawable past the allowlist.
-  slot.drawable = gotDrawable
-  slot.texture  = gotTexture
+  --
+  -- THE LOCAL INDEX GOES IN, not the global one. The global used to be stored
+  -- here, and since the appearance is applied as a local index every time
+  -- after that, this wrote a number into the database that means something
+  -- else entirely - and the engine refused the slot on every login from then
+  -- on, long after the hoodie was forgotten.
+  slot.drawable = localDrawable
+  slot.texture  = usedTexture
   appearance.components[tostring(Clothing.COMPONENT_TOP)] = slot
 
   TriggerServerEvent('nifty:server:saveCharacter', { appearance = appearance })
