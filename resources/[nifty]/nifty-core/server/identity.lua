@@ -157,11 +157,27 @@ function Identity.getActiveSessionId(src)
 end
 
 -- Persist a character's mutable state. Always keyed by character UUID.
-function Identity.saveCharacter(src, patch)
+--
+-- `opts.fromCreator` is the ONE case where the ownership check does not
+-- apply: the character creator, where the loadout IS the character's own
+-- choice and the ownership is granted immediately afterwards.
+--
+-- Without it, a character could never keep a first appearance. The check asks
+-- "does this character own these pieces?" and for a new character the answer
+-- is always no - because the pieces are granted AFTER the save. The creator
+-- was therefore a deadlock: save first, be the owner later, and the check
+-- refuses the save because the character is not yet the owner.
+--
+-- EVERY OTHER CHECK STILL APPLIES THERE. The allowlist, the model and the
+-- bounds are what stop a client from writing something the server would not
+-- accept. The ownership check is what stops a client from claiming a piece it
+-- did not pick - and the creator is the place where picking happens.
+function Identity.saveCharacter(src, patch, opts)
   local characterId = Identity.getActiveCharacter(src)
   if not characterId then return false end
 
   local sets, params = {}, {}
+  local fromCreator = opts and opts.fromCreator
 
   if patch.appearance ~= nil then
     local appearance, err = Validate.appearance(patch.appearance)
@@ -173,11 +189,13 @@ function Identity.saveCharacter(src, patch)
     -- checkEquipped is what stops a forged saveCharacter from sneaking
     -- a drawable past - a client cannot claim they own a piece they did
     -- not buy or pick in the creator.
-    local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
-    if not owned then
-      print(('[%s] refused to save appearance for %s: not owned (%s)'):format(
-        RESOURCE, characterId, tostring(ownedErr)))
-      return false
+    if not fromCreator then
+      local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
+      if not owned then
+        print(('[%s] refused to save appearance for %s: not owned (%s)'):format(
+          RESOURCE, characterId, tostring(ownedErr)))
+        return false
+      end
     end
     sets[#sets + 1] = 'appearance = ?'
     params[#params + 1] = json.encode(appearance)
