@@ -65,7 +65,7 @@ export function LoginForm({
             </Alert>
           ) : null}
 
-          <form action={formAction}>
+          <form action="/api/login" method="post">
             <FieldGroup>
               {isRegister ? (
                 <Field>

@@ -96,7 +96,7 @@ export async function signInAction(
     cookieOptions(),
   );
 
-  return { ok: 'Angemeldet.' };
+  redirect('/account');
 }
 
 /**

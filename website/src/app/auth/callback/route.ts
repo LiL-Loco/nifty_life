@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { exchangeCode } from '@/lib/discord';
 import { linkDiscord, findUserByDiscordId } from '@/lib/users';
-import { decodeSession, encodeSession, cookieOptions, SESSION_COOKIE } from '@/lib/session';
+import { cookieOptions, decodeSession, encodeSession, publicOrigin, SESSION_COOKIE } from '@/lib/session';
 
 /**
  * Discord sends the person back here after they approved the round trip.
@@ -20,6 +20,11 @@ import { decodeSession, encodeSession, cookieOptions, SESSION_COOKIE } from '@/l
  * Both paths require a valid code, a state that matches the cookie, and an
  * identity that is actually a Discord ID. Anything else is a refused round
  * trip — no partial links, no partial sessions.
+ *
+ * The redirect targets use `publicOrigin(request)` rather than `request.url`
+ * so they point at the host the visitor actually came in on (colortastic.de),
+ * not at the Next.js-internal `http://localhost:3000` that the reverse proxy
+ * passes downstream.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -29,15 +34,17 @@ export async function GET(request: Request) {
   const store = await cookies();
   const expectedState = store.get('nifty_oauth_state')?.value;
 
+  const origin = publicOrigin(request);
+
   // A missing or mismatched state means the round trip did not start here.
   if (!code || !state || !expectedState || state !== expectedState) {
-    return NextResponse.redirect(new URL('/account?error=link-failed', request.url));
+    return NextResponse.redirect(new URL('/account?error=link-failed', origin));
   }
 
   const identity = await exchangeCode(code);
   if (!identity) {
     return NextResponse.redirect(
-      new URL(`/${state === '/auth/discord/login' ? 'login' : 'account'}?error=link-failed`, request.url),
+      new URL(`/${state === '/auth/discord/login' ? 'login' : 'account'}?error=link-failed`, origin),
     );
   }
 
@@ -53,16 +60,16 @@ export async function GET(request: Request) {
       // where it can be found. The retry is genuine advice: the database
       // usually comes back on its own.
       console.error('Discord login: account lookup failed', error);
-      return NextResponse.redirect(new URL('/login?error=link-failed', request.url));
+      return NextResponse.redirect(new URL('/login?error=link-failed', origin));
     }
 
     if (!account) {
       return NextResponse.redirect(
-        new URL('/login?error=no-account-for-discord', request.url),
+        new URL('/login?error=no-account-for-discord', origin),
       );
     }
 
-    const response = NextResponse.redirect(new URL('/account', request.url));
+    const response = NextResponse.redirect(new URL('/account', origin));
     response.cookies.set(
       SESSION_COOKIE,
       encodeSession({ userId: account.userId, email: account.email }),
@@ -75,7 +82,7 @@ export async function GET(request: Request) {
   // ---- ATTACH -----------------------------------------------------------
   const session = decodeSession(store.get(SESSION_COOKIE)?.value);
   if (!session) {
-    return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
+    return NextResponse.redirect(new URL('/login?error=link-needs-account', origin));
   }
 
   let result;
@@ -85,14 +92,14 @@ export async function GET(request: Request) {
     // Same reasoning as the login branch above: an unreachable database is a
     // failed round trip, not a bug in the page the visitor is looking at.
     console.error('Discord attach: link failed', error);
-    return NextResponse.redirect(new URL('/account?error=link-failed', request.url));
+    return NextResponse.redirect(new URL('/account?error=link-failed', origin));
   }
 
   // Only same-site paths, and only from the state cookie this server wrote.
   const destination = state.startsWith('/') && !state.startsWith('//') ? state : '/account';
 
   const suffix = result.ok ? '?linked=1' : `?error=${result.code}`;
-  const response = NextResponse.redirect(new URL(`${destination}${suffix}`, request.url));
+  const response = NextResponse.redirect(new URL(`${destination}${suffix}`, origin));
   response.cookies.delete('nifty_oauth_state');
 
   return response;

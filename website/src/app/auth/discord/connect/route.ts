@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 
 import { authorizeUrl } from '@/lib/discord';
 import { discordConfigured } from '@/lib/config';
-import { decodeSession } from '@/lib/session';
-import { cookieOptions, SESSION_COOKIE } from '@/lib/session';
+import { cookieOptions, decodeSession, publicOrigin, SESSION_COOKIE } from '@/lib/session';
 
 /**
  * Start ATTACHING a Discord account.
@@ -18,16 +17,21 @@ import { cookieOptions, SESSION_COOKIE } from '@/lib/session';
  *
  * The state cookie carries the return path and is compared byte for byte in the
  * callback, so it doubles as the CSRF token. Only this route writes it.
+ *
+ * The redirect targets use `publicOrigin(request)` rather than `request.url` so
+ * they point at the host the visitor actually came in on (colortastic.de),
+ * not at the Next.js-internal `http://localhost:3000` that the reverse proxy
+ * passes downstream.
  */
 export async function GET(request: Request) {
   const store = await cookies();
 
   if (!decodeSession(store.get(SESSION_COOKIE)?.value)) {
-    return NextResponse.redirect(new URL('/login?error=link-needs-account', request.url));
+    return NextResponse.redirect(new URL('/login?error=link-needs-account', publicOrigin(request)));
   }
 
   if (!discordConfigured) {
-    return NextResponse.redirect(new URL('/account?error=discord-not-configured', request.url));
+    return NextResponse.redirect(new URL('/account?error=discord-not-configured', publicOrigin(request)));
   }
 
   const url = new URL(request.url);

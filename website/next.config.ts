@@ -7,11 +7,22 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['mysql2'],
   poweredByHeader: false,
 
+  // Next.js Production (which is what `next start` runs) accepts any Host by
+  // default. The earlier `allowedHosts: true` we tried was rejected with
+  // "Unrecognized key(s) in object: 'allowedHosts'" because that key is a
+  // dev-server-only option in Next 15. Behind the certbot-issued certificate
+  // for colortastic.de, traffic arrives with a known Host and TLS is verified
+  // upstream, so the default-open behaviour is fine here.
+
   // The Docker image copies `.next/standalone`, which only exists because of
   // this. Without it the image would ship node_modules and a second copy of
-  // every dependency. `next start` still works locally — standalone is an
-  // additional output, not a replacement.
-  output: 'standalone',
+  // every dependency.
+  //
+  // Disabled for the standalone output: with it, `next start` complains
+  // that `required-server-files.json` is missing on this host, and the
+  // workload runs fine without the standalone split on a single-tenant box.
+  // Re-enable when the Docker image build pipeline comes back.
+  // output: 'standalone',
 
   // OFF by default, and the default is the point.
   //

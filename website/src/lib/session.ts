@@ -30,12 +30,25 @@ import { config } from './config';
  * was six edits with no compiler help — and a missed one silently logs nobody
  * out. The OAuth state cookie keeps its literal; it is set and cleared on
  * adjacent lines and is not read outside the two routes that write it.
+ *
+ * The `__Host-` prefix is load-bearing: it makes the cookie browser-side unforgeable.
+ * Browsers refuse to accept a `__Host-` cookie that is missing `Secure`, has a
+ * `Domain` attribute, or has a `Path` other than `/`. Without it, browsers in
+ * certain configurations (third-party-cookie blocking, sandboxed iframes, some
+ * privacy extensions) silently drop the cookie between the Set-Cookie on the
+ * login response and the next same-origin GET, and the visitor gets logged out
+ * between page loads. The prefix is the standard answer for this.
  */
-export const SESSION_COOKIE = 'nifty_session';
+export const SESSION_COOKIE = '__Host-nifty_session';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 14; // 14 days
 
-/** A v4 UUID. Same shape `crypto.randomUUID()` produces and `newUuid()` stores. */
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Any RFC-4122 UUID (v1/v3/v4/v5/v7). The version nibble is the first char of
+ *  the third group and may be 1/3/4/5/7; the variant nibble is the first char
+ *  of the fourth group and must be 8/9/a/b (RFC 4122). MariaDB's `UUID()`
+ *  produces v1 (time-based), `crypto.randomUUID()` produces v4 — both must
+ *  pass, otherwise signed cookies minted by one side silently fail on the other.
+ */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface Session {
   /** `portal_users.id`. The only thing in here that grants anything. */
@@ -114,4 +127,42 @@ export function cookieOptions() {
     path: '/',
     maxAge: MAX_AGE_SECONDS,
   };
+}
+
+/**
+ * The public origin for redirects, given the inbound request.
+ *
+ * Behind nginx, `request.url` is `http://localhost:3000` — Next.js only sees the
+ * hop it received, not the visitor's browser. Any `new URL('/x', request.url)`
+ * therefore redirects the visitor to `localhost`, which their browser then
+ * resolves to "this site" only when they're already on it (and otherwise
+ * bounces them back to a host that serves nothing).
+ *
+ * Preference order matches the one in /api/login/route.ts:
+ *   1. x-forwarded-host (nginx / Cloudflare / reverse proxies set this)
+ *   2. origin header (the browser sends it on cross-origin POSTs; same-origin
+ *      GETs include it too on modern browsers)
+ *   3. NEXT_PUBLIC_BASE_URL / PUBLIC_URL env vars (operator-set fallback)
+ *   4. request.url's origin — last resort, will be `http://localhost:3000`
+ *      behind a reverse proxy, which is still better than throwing
+ *
+ * Returns just the origin (`https://colortastic.de`), without trailing slash,
+ * so callers can compose `${origin}${path}` safely.
+ */
+export function publicOrigin(request: Request): string {
+  const xfHost = request.headers.get('x-forwarded-host');
+  const originHdr = request.headers.get('origin');
+  const fromEnv = config.publicUrl;
+  const fromXf = xfHost ? `https://${xfHost}` : null;
+  const fromOrigin = originHdr ?? null;
+  try {
+    const fromNext = new URL(request.url).origin;
+    // `http://localhost:3000` is the dev default; skip it so the env fallback wins.
+    const looksLikeLoopback = fromNext.startsWith('http://localhost') || fromNext.startsWith('http://127.');
+    const candidate = fromXf ?? fromOrigin ?? fromEnv ?? (looksLikeLoopback ? null : fromNext);
+    if (candidate) return candidate.replace(/\/+$/, '');
+  } catch {
+    // fall through to env fallback
+  }
+  return fromEnv.replace(/\/+$/, '');
 }
