@@ -44,6 +44,14 @@ local api = {
   getTattooZones   = function(...) return exports[RESOURCE]:getTattooZones(...) end,
   getTattoosByZone = function(...) return exports[RESOURCE]:getTattoosByZone(...) end,
   projectFaceBones = function(...) return exports[RESOURCE]:projectFaceBones(...) end,
+  -- The engine's own German name for a drawable and its textures.
+  --
+  -- This wrapper was missing, and the export it points at HAS been there all
+  -- along (cl_creator.lua). So the callback resolved to nil, printed
+  -- "tried to call missing export" into the client console, and the panel
+  -- fell back to "Modell N" / "Ausfuehrung N" for every row - which is
+  -- exactly what the export was written to prevent.
+  getItemNames     = function(...) return exports[RESOURCE]:getItemNames(...) end,
 }
 
 -- Resolve any nil forward declarations (export not yet wired by the engine)
