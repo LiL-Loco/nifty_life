@@ -29,28 +29,57 @@ local characterSpawnIndex = nil
 -- The head-overlay natives, resolved ONCE at load.
 --
 -- Cfx registers several of these under an underscored name in the Lua runtime
--- (`_SetPedHeadOverlayColor`, `_SetPedHairColor`, `_GetNumHairColors`,
--- `_ClearPedFacialDecorations`) and the plain name in others. Which is which
--- varies by build, and there is no documentation that states it. Reading an
--- undefined global in Lua yields nil rather than raising, so this is a probe and
--- not a try/catch - and the result is logged, because "the beard did not change"
--- and "the native does not exist" must not look the same from the outside.
+-- (`_SetPedHeadOverlayColor`, `_GetNumHairColors`, `_SetPedEyeColor`) and the
+-- plain name in others. Which is which varies by build, and there is no
+-- documentation that states it. Reading an undefined global in Lua yields nil
+-- rather than raising, so this is a probe and not a try/catch - and the result
+-- is logged, because "the beard did not change" and "the native does not
+-- exist" must not look the same from the outside.
+--
+-- FIVE OF THESE NAMES WERE WRONG, and every one of them was wrong in the same
+-- way: they were read from memory, and a name that does not exist is nil, and
+-- a nil behind a `if n.x then` guard is not an error - it is a feature that
+-- quietly does not exist.
+--
+-- Checked against the runtime's own native list (6416 entries, the same file
+-- the documentation is generated from):
+--
+--   SetPedHeadOverlayNum        YES   (it was GetNumHeadOverlayValues)
+--   SetPedHairTint              YES   (there is NO SetPedHairColor at all)
+--   AddPedDecorationFromHashes  YES   (there is NO SetPedFacialDecoration)
+--   ClearPedDecorations         YES   (there is NO RemovePedDecorations)
+--   SetPedHeadOverlayOpacity    NO    - the runtime has no such native. The
+--                                         hair overlay's opacity is part of
+--                                         the decal, not something that is
+--                                         set separately. It is applied at
+--                                         full opacity, and the slider that
+--                                         pretends otherwise has nothing to
+--                                         talk to.
+--
+-- The consequence of the other four: the hair colour never changed, the head
+-- overlay styles were counted as 1, and NEITHER the hair overlay NOR a single
+-- tattoo was ever drawn - because the clear and the add were both nil.
 local Natives = {
   setHeadBlendData  = SetPedHeadBlendData,
   setEyeColor       = _SetPedEyeColor or SetPedEyeColor,
   setFaceFeature     = SetPedFaceFeature,
   setHeadOverlay     = SetPedHeadOverlay,
-  numHeadOverlayValues = GetNumHeadOverlayValues,
+  numHeadOverlayValues = GetPedHeadOverlayNum,
   setHeadOverlayColor = _SetPedHeadOverlayColor or SetPedHeadOverlayColor,
   setHeadOverlayOpacity = SetPedHeadOverlayOpacity,
-  setHairColor       = _SetPedHairColor or SetPedHairColor,
+  setHairColor       = SetPedHairTint,
   numHairColors      = _GetNumHairColors or GetNumHairColors,
   numMakeupColors    = _GetNumMakeupColors or GetNumMakeupColors,
-  setFacialDecoration = _SetPedFacialDecoration or SetPedFacialDecoration,
-  clearFacialDecorations = _ClearPedFacialDecorations or ClearPedFacialDecorations,
-  clearPedDecorations = RemovePedDecorations,
+  -- The hair overlay and the tattoos are FACIAL DECORATIONS: a decal, added
+  -- by its collection and its overlay hash. That is what the hair metadata
+  -- carries ("HairTattooCollection", "HairTattooOverlay"), and it is why
+  -- `AddPedDecorationFromHashes` is the native and not a "set" of anything.
+  addPedDecoration = AddPedDecorationFromHashes,
+  clearPedDecorations = ClearPedDecorations,
+  -- The variant that leaves the scars behind. The ped wears its tattoos as
+  -- scars when they are cleared, and the hair overlay is not one of them.
+  clearFacialDecorations = ClearPedDecorationsLeaveScars,
   numTattooShopDlcItems = GetNumTattooShopDlcItems,
-  tattooCollectionData = GetTattooCollectionData,
   hashNameForComponent = GetHashNameForComponent,
   forcedComponentCount = GetShopPedApparelForcedComponentCount,
   getForcedComponent = GetForcedComponent,
@@ -79,10 +108,10 @@ end)
 --
 -- THEY SHARE ONE CHANNEL, and that is the whole reason this is one function
 -- rather than two. `ClearPedDecorations` removes ALL decorations - hair overlay,
--- tattoos, everything - and `SetPedFacialDecoration` adds one without touching
--- the others. So applying a second tattoo without clearing would stack it on top
--- of the first, and clearing on every change would erase the hair overlay the
--- player has been wearing since they picked a hairstyle.
+-- tattoos, everything - and `AddPedDecorationFromHashes` adds one without
+-- touching the others. So applying a second tattoo without clearing would stack
+-- it on top of the first, and clearing on every change would erase the hair
+-- overlay the player has been wearing since they picked a hairstyle.
 --
 -- Therefore: clear ONCE, then add everything, every time. There is no partial
 -- update and there cannot be one.
@@ -97,14 +126,18 @@ local function applyDecorations(ped, appearance)
     n.clearPedDecorations(ped)
   end
 
-  if not n.setFacialDecoration then return end
+  if not n.addPedDecoration then return end
 
   if type(appearance.hairOverlay) == 'table'
     and appearance.hairOverlay.collection
     and appearance.hairOverlay.preset
   then
-    n.setFacialDecoration(ped, appearance.hairOverlay.collection, appearance.hairOverlay.preset)
-    -- Opacity for the hair overlay (overlay type 10). The native takes 0.0-1.0.
+    n.addPedDecoration(ped, appearance.hairOverlay.collection, appearance.hairOverlay.preset)
+    -- The opacity of the hair overlay. The runtime has no native for it: the
+    -- hair overlay is a DECAL, and a decal's opacity belongs to the decal. So
+    -- it is drawn at full opacity, and the slider in the panel has no native to
+    -- talk to. The value is still stored - a build that grows the native will
+    -- use it.
     if n.setHeadOverlayOpacity then
       local opacity = appearance.hairOverlay.opacity
       if type(opacity) ~= 'number' then opacity = 1.0 end
@@ -115,7 +148,15 @@ local function applyDecorations(ped, appearance)
   if type(appearance.tattoos) == 'table' then
     for _, tattoo in ipairs(appearance.tattoos) do
       if tattoo.collection and tattoo.preset then
-        n.setFacialDecoration(ped, tattoo.collection, tattoo.preset)
+        -- The collection is a HASH, because the native wants one. Older
+        -- appearances stored the collection NAME, and a name handed to a
+        -- native that wants a number is a zero - which is not a crash but a
+        -- tattoo that silently does not appear.
+        local collection = tattoo.collection
+        if type(collection) == 'string' then
+          collection = joaat(collection)
+        end
+        n.addPedDecoration(ped, collection, tattoo.preset)
       end
     end
   end
