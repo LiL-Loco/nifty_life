@@ -24,7 +24,27 @@ local function grantOne(characterId, kind, slotId, collection, drawable, texture
   if type(characterId) ~= 'string' or characterId == '' then return end
   if kind ~= 'component' and kind ~= 'prop' then return end
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return end
-  if type(collection) ~= 'string' or collection == '' then return end
+  -- THE EMPTY STRING IS A COLLECTION NAME, NOT A MISSING ONE.
+  --
+  -- The base game collection is called ''. `AppearanceConfig.ALLOWED_COLLECTIONS`
+  -- lists it as `[''] = true`, and `Validate.appearance` accepts it - so a base
+  -- game garment is a legal piece of an appearance, and the server says so
+  -- twice before this function is reached.
+  --
+  -- Refusing it here had a consequence that was invisible in this file: the
+  -- piece was never granted, so `Owned.checkEquipped` then failed for the
+  -- character's WHOLE appearance, and every save that did not come from the
+  -- creator (the autosave, the wardrobe) was refused. The position write died
+  -- with it, because the appearance branch returns before the position branch
+  -- is even looked at.
+  --
+  -- Measured on the live server: the character wore a base game watch (prop 6,
+  -- collection ''), the watch was missing from `character_clothing`, and every
+  -- save was refused with "not owned".
+  --
+  -- What still has to be refused is a collection that is not a string AT ALL.
+  -- A missing name is a different thing from the base game.
+  if type(collection) ~= 'string' then return end
   if type(drawable) ~= 'number' or drawable < 0 then return end
   if type(texture) ~= 'number' or texture < 0 then return end
 
@@ -523,17 +543,27 @@ end
 Price = Price or {}
 
 --- Look up a per-(drawable, texture) override. Three answers:
----   * nil      - no row exists in clothing_prices for this piece. Caller
----                can fall back to the Lua defaults.
----   * 0        - the row exists but the price column is NULL. Caller
----                should refuse the sale: staff has not priced this piece.
+---   * nil      - the pricebook has no price for this piece: either no row
+---                exists, or the row's price column is still NULL. Caller
+---                falls back to the Lua defaults (shared/prices.lua says the
+---                same thing: "the Lua file only sees the query when nothing
+---                was set").
+---   * 0        - the row exists and is priced 0. Staff marked this piece
+---                unsellable, so the caller should refuse the sale.
 ---   * number>0 - the row exists and is priced at this number.
+---
+--- The empty collection is the BASE GAME collection, not a missing one. The
+--- catalogue scan (see `Price.scanCatalogue`) writes every row it reads from
+--- nifty-creator/data with '' as the collection, because those files describe
+--- the base game garments - so refusing '' here made the whole pricebook
+--- unreachable: every lookup returned nil, every price came from the Lua
+--- fallback, and `Price.set` could not even store an override.
 function Price.fromDb(kind, slotId, collection, drawable, texture)
   if kind ~= 'component' and kind ~= 'prop' then return nil end
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return nil end
   if type(drawable) ~= 'number' or drawable < 0 then return nil end
   if type(texture) ~= 'number' or texture < 0 then return nil end
-  if type(collection) ~= 'string' or collection == '' then return nil end
+  if type(collection) ~= 'string' then return nil end
 
   local row = Db.one([[
     SELECT price
@@ -546,7 +576,10 @@ function Price.fromDb(kind, slotId, collection, drawable, texture)
   }, 'price:lookup')
 
   if row == nil then return nil end
-  if row.price == nil or row.price == '' then return 0 end
+  -- A NULL price means "staff has not set a price for this one yet" - the
+  -- Lua fallback answers it. An explicit 0 means "not for sale", and that is
+  -- a different thing and has to stay different.
+  if row.price == nil or row.price == '' then return nil end
   return tonumber(row.price) or 0
 end
 
@@ -558,7 +591,8 @@ function Price.set(kind, slotId, collection, drawable, texture, price)
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return false, 'bad slot' end
   if type(drawable) ~= 'number' or drawable < 0 then return false, 'bad drawable' end
   if type(texture) ~= 'number' or texture < 0 then return false, 'bad texture' end
-  if type(collection) ~= 'string' or collection == '' then return false, 'bad collection' end
+  -- The empty string is the base game collection - see `Price.fromDb`.
+  if type(collection) ~= 'string' then return false, 'bad collection' end
 
   price = math.floor(tonumber(price) or -1)
   if price < 0 then return false, 'bad price' end
@@ -584,7 +618,8 @@ function Price.clear(kind, slotId, collection, drawable, texture)
   if type(slotId) ~= 'number' or slotId < 0 or slotId > 255 then return false end
   if type(drawable) ~= 'number' or drawable < 0 then return false end
   if type(texture) ~= 'number' or texture < 0 then return false end
-  if type(collection) ~= 'string' or collection == '' then return false end
+  -- The empty string is the base game collection - see `Price.fromDb`.
+  if type(collection) ~= 'string' then return false end
 
   Db.update([[
     DELETE FROM clothing_prices

@@ -1257,10 +1257,59 @@ end)
 
 exports('setSlot', function(kind, id, slot)
   if type(kind) ~= 'string' or type(id) ~= 'number' or type(slot) ~= 'table' then return end
+  if kind ~= 'components' and kind ~= 'props' then return end
+  if id < AppearanceConfig.MIN_COMPONENT_ID or id > AppearanceConfig.MAX_COMPONENT_ID then return end
+
+  -- THE SELECTION IS NOT ALLOWED TO CONTAIN A SLOT THE SERVER WOULD REFUSE.
+  --
+  -- The appearance is validated as a WHOLE: one slot with a bad collection
+  -- makes the entire loadout unacceptable, and the server refuses all of it -
+  -- the eleven good pieces go down with the twelfth. So the checks happen
+  -- here, where a wrong slot can still be dropped, and not only on the
+  -- server, where the whole appearance is already the thing that gets refused.
+  --
+  -- The empty string is ALLOWED: it is the base game collection, and
+  -- `AppearanceConfig.ALLOWED_COLLECTIONS` lists it as `[''] = true`. A
+  -- collection that is not a string at all is a different thing.
+  local collection = slot.collection
+  if type(collection) ~= 'string' or not AppearanceConfig.ALLOWED_COLLECTIONS[collection] then
+    print(('[%s] setSlot: collection %q is not permitted - the slot is ignored'):format(
+      RESOURCE, tostring(collection)))
+    return
+  end
+
+  local ped = PlayerPedId()
+
+  -- THE DRAWABLE IS CLAMPED TO WHAT THE COLLECTION HAS FOR THIS PED.
+  --
+  -- The count is asked of the engine, not of the panel: the panel's number
+  -- was measured on a model that may have been replaced since.
+  local count = Variation.collectionDrawables(ped, kind, id, collection)
+  if count < 1 then
+    print(('[%s] setSlot: collection %q has no drawable for %s %d - the slot is ignored'):format(
+      RESOURCE, collection, kind, id))
+    return
+  end
+
+  local drawable = tonumber(slot.drawable) or 0
+  if drawable < 0 then drawable = 0 end
+  if drawable > count - 1 then drawable = count - 1 end
+
+  -- THE TEXTURE IS CLAMPED TO THE DRAWABLE'S OWN COUNT.
+  --
+  -- The panel clamps the texture against the COLLECTION's texture count,
+  -- because that is what the slot list carries. The engine, on the other
+  -- hand, wants a texture the DRAWABLE has: a shirt with two variants in a
+  -- collection of shirts with ten variants refuses the ninth - silently,
+  -- leaving the ped in the previous garment, and the change simply does not
+  -- appear. `Variation.clampTexture` asks the drawable itself.
+  local texture = Variation.clampTexture(ped, kind, id, collection, drawable,
+                                         tonumber(slot.texture) or 0)
+
   selection[kind][tostring(id)] = {
-    collection = slot.collection,
-    drawable   = tonumber(slot.drawable) or 0,
-    texture    = tonumber(slot.texture) or 0,
+    collection = collection,
+    drawable   = drawable,
+    texture    = texture,
   }
   -- A top (slot 11) drags its torso (slot 3) along with it.
   if kind == 'components' and id == 11 then

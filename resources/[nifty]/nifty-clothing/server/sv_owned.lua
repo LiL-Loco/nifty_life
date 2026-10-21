@@ -408,7 +408,10 @@ RegisterNetEvent('nifty:server:clothingPurchase', function(payload)
   if type(slot_id) ~= 'number' or slot_id < 0 or slot_id > 255 then return end
   if type(drawable) ~= 'number' or drawable < 0 then return end
   if type(texture) ~= 'number' or texture < 0 then return end
-  if type(collection) ~= 'string' or collection == '' then return end
+  -- The empty string is the BASE GAME collection, not a missing one - the
+  -- catalogue in `clothing_prices` is keyed by it, so refusing it here made
+  -- every base game piece unpurchasable. See `Price.fromDb` in nifty-core.
+  if type(collection) ~= 'string' then return end
 
   local cid = characterOf(src)
   if not cid then return end

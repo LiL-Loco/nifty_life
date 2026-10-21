@@ -16,11 +16,16 @@
 
       GET_PED_DRAWABLE_GLOBAL_INDEX_FROM_COLLECTION(ped, componentId, collection, drawableId)
       GET_PED_PROP_GLOBAL_INDEX_FROM_COLLECTION(ped, anchorPoint, collection, propIndex)
-      GET_PED_COLLECTION_LOCAL_INDEX_FROM_DRAWABLE(ped, globalDrawableIdx, componentId)
-      GET_PED_COLLECTION_LOCAL_INDEX_FROM_PROP(ped, globalPropIdx, anchorPoint)
+      GET_PED_COLLECTION_LOCAL_INDEX_FROM_DRAWABLE(ped, componentId, globalDrawableIdx)
+      GET_PED_COLLECTION_LOCAL_INDEX_FROM_PROP(ped, anchorPoint, globalPropIdx)
       GET_NUMBER_OF_PED_COLLECTION_TEXTURE_VARIATIONS(ped, componentId, collection, drawableId)
       GET_NUMBER_OF_PED_COLLECTION_PROP_TEXTURE_VARIATIONS(ped, anchorPoint, collection, propIndex)
       IS_PED_COLLECTION_COMPONENT_VARIATION_VALID(ped, componentId, collection, drawableId, textureId)
+
+  The two LOCAL_INDEX natives take the SLOT FIRST and the global index THIRD.
+  They were written down the other way round here, and the implementation was
+  wrong in the same way - which is why the comment and the code have to be
+  corrected together, or the next reader trusts the wrong one.
 
   Every one of them answers in the COLLECTION space and returns -1 when the
   thing does not exist. None of them touches the ped.
