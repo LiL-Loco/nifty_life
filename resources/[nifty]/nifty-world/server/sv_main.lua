@@ -55,6 +55,22 @@ local Owned     = Nifty.Owned
 
 -- How many times a client may ask for bootstrap before we treat it as hostile.
 local BootstrapAttempts = {}
+
+-- The world payload of a player whose world entry is still pending.
+--
+-- The welcome cutscene ends the world entry on the CLIENT, so the server
+-- cannot know whether it happened - until the client says so. Until then the
+-- payload waits here, and a watchdog sends it if the cutscene path did not
+-- run. Keyed by slot, because that is the key everything else here uses.
+local WorldWatchdogs = {}
+
+-- How long the client gets to end the world entry by itself.
+--
+-- The cutscene runs about 26 seconds and its assets can take a few seconds to
+-- load, so a minute is generous. It is also the time a player would sit in a
+-- black screen before the watchdog rescues them - which is why it is not
+-- longer, and not shorter.
+local WORLD_WATCHDOG_MS = 60000
 local MAX_BOOTSTRAP_ATTEMPTS = 10
 
 -- Identity.discordIdOf owns the identifier read (identity.lua). This file only
@@ -381,10 +397,43 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- cutscene that fires the world entry without them leaves the player on a
   -- black screen with no error anywhere.
   prepareWorld(src, saved, true)
+  -- NOT named `payload`: that is the client's own appearance payload, which
+  -- arrived as an argument of this handler.
+  local worldEntry = worldPayload(saved)
   TriggerClientEvent('nifty:client:welcomeCutscene', src, {
     gender = saved.gender,
-    world = worldPayload(saved),
+    world = worldEntry,
   })
+
+  -- THE WATCHDOG.
+  --
+  -- The world entry now depends on the CLIENT: the cutscene ends it. If the
+  -- cutscene event never arrives - the handler died, the event was dropped,
+  -- the client hiccuped - the player sits in a black screen with no way out,
+  -- because the screen was faded to black when they spawned and nobody fades
+  -- it back in.
+  --
+  -- So: if nobody reports the world entry within a minute, the server sends
+  -- it. The cutscene path is the good path; this one only ever runs when the
+  -- good path did not happen.
+  WorldWatchdogs[src] = worldEntry
+  CreateThread(function()
+    Wait(WORLD_WATCHDOG_MS)
+    local pending = WorldWatchdogs[src]
+    if not pending then return end
+    WorldWatchdogs[src] = nil
+    print(('[%s] slot %d: the world entry never came - the watchdog sends it'):format(
+      RESOURCE, src))
+    TriggerClientEvent('nifty:client:enterWorld', src, pending)
+  end)
+end)
+
+-- The client reports that the world entry happened.
+--
+-- It cancels the watchdog. A player who is standing in the world does not
+-- need a second world entry a minute later - that would move them again.
+RegisterNetEvent('nifty:server:worldEntered', function()
+  WorldWatchdogs[source] = nil
 end)
 
 -- Leaving the creator on purpose.

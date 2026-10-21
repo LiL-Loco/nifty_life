@@ -387,6 +387,12 @@ RegisterNetEvent('nifty:client:enterWorld', function(data)
   local firstName  = data.character.firstName
   local lastName   = data.character.lastName
 
+  -- The server's watchdog is waiting for exactly this: it sent the world
+  -- entry through the welcome cutscene and does not know whether it arrived.
+  -- Saying so cancels the watchdog - otherwise the player would be moved a
+  -- second time a minute later.
+  TriggerServerEvent('nifty:server:worldEntered')
+
   -- data.spawn IS the last known position, or the configured default for a row
   -- whose position was null. The server decides usePicker=false on this path
   -- (sv_main.lua), so there is no branch to take here.
