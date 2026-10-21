@@ -118,9 +118,16 @@ function Stuetze.pay(src, characterId)
   -- `NULLIF(?, '')` for the same reason as in Economy.apply: the session id is
   -- nil outside a connection, and a nil in the middle of a Lua table ends the
   -- table, which would leave this INSERT with fewer values than placeholders.
+  --
+  -- The CAST is there for the same reason as in Economy.apply: a parameter
+  -- whose type MySQL cannot pin down inherits the type of an earlier parameter
+  -- in the same statement, and the amount is a DECIMAL. Without the CAST the
+  -- session id inherits DECIMAL, and the empty string cannot be converted to
+  -- a number. The statement works today because the session id comes FIRST
+  -- and the amount SECOND - that is luck, not design.
   local recorded = Db.insert(
     [[INSERT INTO stuetze_payouts (character_id, session_id, amount)
-      VALUES (?, NULLIF(?, ''), ?)]],
+      VALUES (?, NULLIF(CAST(? AS CHAR), ''), ?)]],
     { characterId, Identity.getActiveSessionId(src) or '', tostring(amount) },
     'stuetze:record')
 

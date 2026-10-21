@@ -216,10 +216,31 @@ function Economy.apply(characterId, account, delta, reason, refType, refId)
   -- at all, so depositing and withdrawing money could never write a ledger row -
   -- and a balance that moved without a record is precisely what the ledger
   -- exists to prevent.
+  --
+  -- THE CAST IS NOT COSMETIC, IT IS THE FIX.
+  --
+  -- MySQL infers the type of a prepared-statement parameter from its
+  -- surroundings, and when the surroundings do not pin it down, it inherits the
+  -- type of an EARLIER parameter in the same statement. The `delta` is a
+  -- DECIMAL and it stands BEFORE the two reference parameters - so those two
+  -- inherited DECIMAL, and the comparison against the empty string became
+  -- "convert '' to a number":
+  --
+  --     Truncated incorrect DECIMAL value: ''
+  --
+  -- Every ledger row failed. Every single one: the ledger table was EMPTY
+  -- while the wallets filled up, because the money moved and the record of
+  -- the movement did not. `CAST(? AS CHAR)` pins the parameter to a string,
+  -- and then '' is compared to '' and becomes NULL - which is what it was
+  -- supposed to be.
+  --
+  -- Measured on the server, with the exact statement and the exact parameters:
+  -- without the CAST the statement fails with error 1292, with it the row
+  -- lands and an empty reference becomes NULL.
   local recorded = Db.insert(
     ([[INSERT INTO ledger
          (character_id, account, delta, balance_after, reason, reference_type, reference_id)
-       SELECT character_id, ?, ?, %s, ?, NULLIF(?, ''), NULLIF(?, '')
+       SELECT character_id, ?, ?, %s, ?, NULLIF(CAST(? AS CHAR), ''), NULLIF(CAST(? AS CHAR), '')
          FROM wallets WHERE character_id = ?]]):format(account),
     { account, tostring(amount), reason, refType or '', refId or '', characterId },
     'economy:ledger')
