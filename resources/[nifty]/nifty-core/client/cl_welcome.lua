@@ -51,7 +51,72 @@ AddEventHandler('playerSpawned', function()
   end
 end)
 
-local cutsceneName = 'mp_intro_concat'
+-- ---------------------------------------------------------------------------
+-- The cutscene, and what is actually in it.
+--
+-- Everything below was taken from ROCKSTAR'S OWN SCRIPT for this cutscene -
+-- the decompiled `fm_intro_cut.c` from the GTA-V-Decompiled-Scripts project -
+-- and cross-checked against four independent community ports of the same
+-- cutscene (not-a-script/ns-online-introduction, hhfw1/cs_firstspawn,
+-- BX-DEV-FIVEM/BX-Intro, ragemp-pro/streetrp). Nothing here is a guess.
+--
+-- THE CUTSCENE NAME IS UPPERCASE: `MP_INTRO_CONCAT`. The lowercase spelling
+-- in the old code was never the name of anything.
+local cutsceneName = 'MP_INTRO_CONCAT'
+
+-- THE GENDER IS A PLAYBACK LIST, not a flag.
+--
+-- The cutscene has a list of playback flags, and Rockstar picks ONE of them
+-- depending on the player's gender: 31 for male, 103 for female. Both with
+-- the playback flags 8. The old code called `RequestCutscene(name, 8)` - no
+-- list at all - so the game played its DEFAULT list, and the default list
+-- contains BOTH: first the male montage, then the female one. That is
+-- exactly what the player reported: a video whose end plays the male
+-- character and then the female character, no matter who logged in.
+--
+-- With the list, only the half that belongs to the character is played.
+local SECTION_MALE = 31
+local SECTION_FEMALE = 103
+local PLAYBACK_FLAGS = 8
+
+-- Rockstar starts the cutscene with the flag 4. The old code used 0.
+local START_FLAGS = 4
+
+-- The seven passenger seats in the plane.
+--
+-- These are the real slot names of the cutscene, from Rockstar's script
+-- (func_88 / func_87). The old code registered NONE of them, which is why
+-- the passengers were whatever the engine made of the baked cutscene
+-- entities - and why they looked like the player's own character.
+local PASSENGER_SLOTS = {
+  'MP_Plane_Passenger_1',
+  'MP_Plane_Passenger_2',
+  'MP_Plane_Passenger_3',
+  'MP_Plane_Passenger_4',
+  'MP_Plane_Passenger_5',
+  'MP_Plane_Passenger_6',
+  'MP_Plane_Passenger_7',
+}
+
+-- WHO SITS IN WHICH SEAT.
+--
+-- An ordinary person in a suit, not a copy of the player: that is what the
+-- player asked for, and it is also what the plane is for. The seats keep the
+-- original casting - the first three are male, the last four female - so the
+-- cabin does not look lopsided.
+--
+-- If a model cannot be created, the seat stays empty and the log says so.
+-- An empty seat is honest; a seat with a copy of the player in it is not.
+local PASSENGER_MODELS = {
+  'a_m_m_business_01', 'a_m_m_business_01', 'a_m_m_business_01',
+  'a_f_m_business_01', 'a_f_m_business_01', 'a_f_m_business_01',
+  'a_f_m_business_01',
+}
+
+-- The two character slots of the cutscene.
+local MALE_SLOT = 'MP_Male_Character'
+local FEMALE_SLOT = 'MP_Female_Character'
+
 local JET_HASH = `p_cs_mp_jet_01_s`
 local JET_POS = vector3(-1200.0, -1490.0, 142.385)
 local PRE_POS = vector3(-1117.778, -1557.625, 3.3819)
@@ -92,31 +157,67 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- its own scripts decide.
   SetEntityCoords(ped, PRE_POS.x, PRE_POS.y, PRE_POS.z, false, false, false, false)
 
-  -- A clone of the player is what the cutscene's "MP_Male_Character" /
-  -- "MP_Female_Character" entity slot expects.
-  local clone = ClonePed(ped, GetEntityHeading(ped), false, false)
+  -- THE PASSENGERS.
+  --
+  -- Seven ordinary people in the cabin, one per seat, each in its own slot.
+  -- They are created here and registered BEFORE the cutscene starts, so the
+  -- cutscene animates THEM and not the baked entities.
+  --
+  -- `CreatePed` returns 0 when the model is not available. The seat then
+  -- stays empty - and the log says so, because an empty seat and a seat with
+  -- a copy of the player in it are not the same thing.
+  local passengers = {}
+  for index, model in ipairs(PASSENGER_MODELS) do
+    local hash = joaat(model)
+    local created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+    if created and created ~= 0 then
+      SetModelAsNoLongerNeeded(hash)
+      passengers[#passengers + 1] = created
+    else
+      print(('[nifty-core] the model "%s" for seat %d is not available - the seat stays empty'):format(
+        model, index))
+    end
+  end
 
   -- The jet object the cutscene attaches to the plane. CreateObject
   -- streams the model in if it is not already loaded.
+  --
+  -- It starts INVISIBLE and is made visible when it is registered: at its
+  -- spawn point, 142 metres up, it would otherwise hang in the sky while the
+  -- cutscene loads.
   local jet = CreateObject(JET_HASH, JET_POS.x, JET_POS.y, JET_POS.z, false, true, false)
   SetModelAsNoLongerNeeded(JET_HASH)
+  SetEntityVisible(jet, false, false)
+  SetEntityLodDist(jet, 3000)
 
   -- Fade out, request the cutscene, wait for it to load, register the
   -- entities in their cutscene slots, then start it.
   DoScreenFadeOut(500)
   Wait(600)
 
-  RequestCutscene(cutsceneName, 8)
+  -- THE PLAYBACK LIST IS THE GENDER.
+  --
+  -- `RequestCutsceneWithPlaybackList(name, playbackFlags, flags)`: the middle
+  -- argument is the section to play (31 = male, 103 = female), the last one
+  -- is the playback flags (8).
+  --
+  -- The old code called `RequestCutscene(name, 8)` - without a list - and the
+  -- game then played its default list, which contains BOTH sections. That is
+  -- why the video ended with the male character and then the female one.
+  local section = isMale and SECTION_MALE or SECTION_FEMALE
+  RequestCutsceneWithPlaybackList(cutsceneName, section, PLAYBACK_FLAGS)
 
   local deadline = GetGameTimer() + 15000
-  while not HasThisCutsceneLoaded(cutsceneName) do
+  while not HasCutsceneLoaded() do
     if GetGameTimer() > deadline then
       -- Cutscene didn't load in 15s (asset missing or build-different).
       -- Fall through to the standard world entry; the picker is still
       -- available, just without the cinematic lead-in.
       print(('[nifty-core] cutscene "%s" failed to load, falling back to plain world entry'):format(cutsceneName))
       if DoesEntityExist(jet) then DeleteEntity(jet) end
-      if DoesEntityExist(clone) then DeleteEntity(clone) end
+      for _, p in ipairs(passengers) do
+        if DoesEntityExist(p) then DeleteEntity(p) end
+      end
       SetPlayerInvincible(PlayerId(), false)
       enterTheWorld()
       return
@@ -124,19 +225,45 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     Wait(0)
   end
 
+  SetEntityVisible(jet, true, false)
   RegisterEntityForCutscene(jet, 'MP_Plane', 0, 0, 0)
+  SetCutsceneEntityStreamingFlags('MP_Plane', 0, 1)
 
-  -- The cutscene has a default male and a default female NPC in its
-  -- bank. Put the player's clone in the gender slot; the other side
-  -- is unused.
-  if isMale then
-    RegisterEntityForCutscene(clone, 'MP_Male_Character', 0, 0, 0)
-  else
-    RegisterEntityForCutscene(clone, 'MP_Female_Character', 0, 0, 0)
+  -- THE PLAYER THEMSELVES.
+  --
+  -- Rockstar registers the player's OWN ped, not a copy of it. The old code
+  -- cloned - and cloned it wrong: `ClonePed(ped, isNetwork, bScriptHostPed,
+  -- copyHeadBlendFlag)`, so the heading ended up in the `isNetwork` slot and
+  -- the clone was created as a NETWORK ped. Registering the real ped removes
+  -- the clone altogether.
+  local ownSlot = isMale and MALE_SLOT or FEMALE_SLOT
+  local otherSlot = isMale and FEMALE_SLOT or MALE_SLOT
+  local otherModel = isMale and 'mp_f_freemode_01' or 'mp_m_freemode_01'
+
+  RegisterEntityForCutscene(ped, ownSlot, 0, 0, 0)
+  SetCutsceneEntityStreamingFlags(ownSlot, 0, 1)
+
+  -- The slot of the OTHER gender: entity 0 with the model of the other
+  -- freemode ped. Rockstar does exactly this, so the cutscene's animation
+  -- for that slot fits the model it finds there.
+  RegisterEntityForCutscene(0, otherSlot, 3, joaat(otherModel), 0)
+
+  -- The passengers, one per seat.
+  --
+  -- The last argument of `RegisterEntityForCutscene` is 64 for the
+  -- passenger slots - "ignore the model" - and 0 for the player and the
+  -- plane. The old code used 0 everywhere.
+  for index, passenger in ipairs(passengers) do
+    local slot = PASSENGER_SLOTS[index]
+    if slot then
+      RegisterEntityForCutscene(passenger, slot, 0, 0, 64)
+      SetCutsceneEntityStreamingFlags(slot, 0, 1)
+    end
   end
+
   SetEntityAsMissionEntity(jet, true, true)
 
-  StartCutscene(0)
+  StartCutscene(START_FLAGS)
   DoScreenFadeIn(500)
 
   -- Cutscene runs to its end. Watch for IsCutsceneActive to flip
@@ -148,7 +275,9 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     DoScreenFadeOut(500)
     Wait(600)
     if DoesEntityExist(jet) then DeleteEntity(jet) end
-    if DoesEntityExist(clone) then DeleteEntity(clone) end
+    for _, p in ipairs(passengers) do
+      if DoesEntityExist(p) then DeleteEntity(p) end
+    end
     SetPlayerInvincible(PlayerId(), false)
     enterTheWorld()
   end)
