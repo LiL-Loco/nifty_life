@@ -169,13 +169,32 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   local passengers = {}
   for index, model in ipairs(PASSENGER_MODELS) do
     local hash = joaat(model)
-    local created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
-    if created and created ~= 0 then
-      SetModelAsNoLongerNeeded(hash)
-      passengers[#passengers + 1] = created
-    else
-      print(('[nifty-core] the model "%s" for seat %d is not available - the seat stays empty'):format(
+
+    -- THE MODEL HAS TO BE LOADED BEFORE THE PED IS CREATED.
+    --
+    -- `CreatePed` with a model that is not streamed in does not raise - it
+    -- hands back nothing usable, and the seat stays empty without a word.
+    -- The model is requested and waited for, with a deadline: a wait without
+    -- a deadline is a hang.
+    RequestModel(hash)
+    local modelDeadline = GetGameTimer() + 10000
+    while not HasModelLoaded(hash) do
+      if GetGameTimer() > modelDeadline then break end
+      Wait(0)
+    end
+
+    if not HasModelLoaded(hash) then
+      print(('[nifty-core] the model "%s" for seat %d did not load - the seat stays empty'):format(
         model, index))
+    else
+      local created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+      if created and created ~= 0 then
+        SetModelAsNoLongerNeeded(hash)
+        passengers[#passengers + 1] = created
+      else
+        print(('[nifty-core] the ped for seat %d ("%s") could not be created - the seat stays empty'):format(
+          index, model))
+      end
     end
   end
 
@@ -189,6 +208,16 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   SetModelAsNoLongerNeeded(JET_HASH)
   SetEntityVisible(jet, false, false)
   SetEntityLodDist(jet, 3000)
+
+  -- THE LOAD SCENE.
+  --
+  -- The jet is 142 metres up and a few hundred metres off the coast. Without
+  -- a load scene, that corner of the world is not streamed in, and the plane
+  -- the whole video is about simply is not there.
+  --
+  -- The coordinates are the ones from Rockstar's own script, so the sphere
+  -- covers the place the cutscene actually uses.
+  NewLoadSceneStartSphere(-1212.79, -1673.52, 7.0, 1000.0, 0)
 
   -- Fade out, request the cutscene, wait for it to load, register the
   -- entities in their cutscene slots, then start it.
@@ -218,6 +247,7 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       for _, p in ipairs(passengers) do
         if DoesEntityExist(p) then DeleteEntity(p) end
       end
+      NewLoadSceneStop()
       SetPlayerInvincible(PlayerId(), false)
       enterTheWorld()
       return
@@ -278,6 +308,7 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     for _, p in ipairs(passengers) do
       if DoesEntityExist(p) then DeleteEntity(p) end
     end
+    NewLoadSceneStop()
     SetPlayerInvincible(PlayerId(), false)
     enterTheWorld()
   end)
