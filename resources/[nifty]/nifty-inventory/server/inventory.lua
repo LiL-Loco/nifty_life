@@ -784,13 +784,30 @@ end)
 
 --- A new character starts with what a person actually has on them. This is the
 --- only place items are handed out for free, and it is deliberately dull.
+---
+--- IDEMPOTENT, and it has to be. This runs when a character enters the world,
+--- not when it is created - so it runs on EVERY reconnect. A handset and an ID
+--- are not stackable (`stackable = 0`, `max_stack = 1`), so an unconditional
+--- `Inventory.add` does not merge into the existing row: it takes a free slot
+--- and writes a SECOND row. The character collected handsets.
+---
+--- The comment in nifty-world claimed this function was idempotent. It was not,
+--- and a comment is not a guarantee - the check is now in the code.
 function Inventory.grantStartingItems(characterId)
   local starters = { 'phone', 'id_card' }
   for _, code in ipairs(starters) do
-    local ok, err = Inventory.add(characterId, code, 1)
-    if not ok then
-      print(('[%s] could not give starting item %s to %s: %s'):format(
-        RESOURCE, code, characterId, tostring(err)))
+    -- Only what is missing. A character who already carries a phone keeps the
+    -- one they have; a character who never got the ID (because the export was
+    -- missing) still gets it.
+    if Inventory.has(characterId, code, 1) then
+      print(('[%s] starting item %s is already there for %s - not given twice')
+        :format(RESOURCE, code, characterId))
+    else
+      local ok, err = Inventory.add(characterId, code, 1)
+      if not ok then
+        print(('[%s] could not give starting item %s to %s: %s'):format(
+          RESOURCE, code, characterId, tostring(err)))
+      end
     end
   end
 end
