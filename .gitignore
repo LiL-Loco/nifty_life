@@ -139,6 +139,24 @@ desktop.ini
 /tmp/
 *.local.*
 
+# MEASUREMENT PROBES inside a resource.
+#
+# A probe is a file that is dropped into a running resource to MEASURE
+# something on the live server - on 2026-10-21 it answered the question of
+# how an export call spells its arguments, and it worked by exporting a
+# function that returns whatever it receives.
+#
+# It must never reach a checkout: the server would start with a `probeArgs`
+# export in it, and the file would sit next to real code forever, because
+# nothing in a diff says "this one is temporary".
+#
+# The brackets are escaped on purpose - gitignore reads `[nifty]` as a
+# character class, so the unescaped form would match `resources/n/` and
+# nothing else, and the rule would fail silently.
+# The `*` is inside the bracket so it matches every resource, not one.
+/resources/\[nifty\]/*/server/sv_probe.lua
+/resources/\[nifty\]/*/client/cl_probe.lua
+
 # Phase 0 voice spike. Raw captured voice audio from staff channels has no
 # business in git history, and it is regenerable by running the spike again.
 /bot/.spike-out/
