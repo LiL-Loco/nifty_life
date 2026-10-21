@@ -210,12 +210,17 @@ function Variation.localForGlobal(ped, kind, slot, collection, global, count)
 
   if kind == 'props' then
     if has('GetPedCollectionLocalIndexFromProp') then
-      local local_index = GetPedCollectionLocalIndexFromProp(ped, wanted, anchor)
+      -- (ped, anchorPoint, propIndex) - the ANCHOR comes second and the
+      -- global prop index third. The other way round answers about a
+      -- different prop.
+      local local_index = GetPedCollectionLocalIndexFromProp(ped, anchor, wanted)
       if local_index == -1 then return nil end
       return local_index
     end
   elseif has('GetPedCollectionLocalIndexFromDrawable') then
-    local local_index = GetPedCollectionLocalIndexFromDrawable(ped, wanted, anchor)
+    -- (ped, componentId, drawableId) - the SLOT comes second and the global
+    -- drawable index third.
+    local local_index = GetPedCollectionLocalIndexFromDrawable(ped, anchor, wanted)
     if local_index == -1 then return nil end
     return local_index
   end
