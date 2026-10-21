@@ -339,7 +339,23 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- Already finished: a resubmitted menu, or a second client racing the first.
   -- Not an error - send them in rather than making a player who already dressed
   -- their character do it again because they pressed Enter twice.
+  --
+  -- UNLESS THE CUTOISCENE IS RUNNING. Then this is a double click on "Fertig":
+  -- the button has no "in progress" state, and two clicks arrive as two
+  -- events. The first one saved the character and started the cutscene; the
+  -- second one would send the world entry right now - the player is teleported
+  -- into the city WHILE the video plays, and then the cutscene ends and sends
+  -- the world entry a second time.
+  --
+  -- The watchdog table is the exact answer to "is the world entry still
+  -- pending?": it is filled before the cutscene starts and emptied when the
+  -- world entry arrives.
   if character.appearance ~= nil and character.appearance ~= '' then
+    if WorldWatchdogs[src] then
+      print(('[%s] slot %d: a second "Fertig" while the cutscene runs - ignored'):format(
+        RESOURCE, src))
+      return
+    end
     return enterWorld(src, character)
   end
 

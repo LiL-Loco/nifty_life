@@ -377,9 +377,21 @@ local function doEnterWorldSpawn(x, y, z, heading, appearance, firstName, lastNa
   -- Register the chosen point with Cfx spawnmanager so death respawns
   -- land here too. Removed on playerDisconnected to keep the map's point
   -- list from leaking entries across reconnects.
-  characterSpawnIndex = exports.spawnmanager:addSpawnPoint(
-    x, y, z, heading or 0.0, appearance and appearance.model
-  )
+  --
+  -- THE SHAPE MATTERS: `addSpawnPoint` takes ONE table - { x, y, z, heading,
+  -- model } - and it validates every field of it. The old call passed five
+  -- positional arguments, so the export received a NUMBER where it expected a
+  -- table, and `spawn.x` on a number is an error. The error was swallowed by
+  -- the export wrapper, so nothing looked broken - the spawn point simply was
+  -- never registered, and a player who died respawned at the default point
+  -- instead of where they stood.
+  characterSpawnIndex = exports.spawnmanager:addSpawnPoint({
+    x = x,
+    y = y,
+    z = z,
+    heading = heading or 0.0,
+    model = appearance and appearance.model,
+  })
 
   -- Dismiss the FiveM loading overlay before the world fades in.
   ShutdownLoadingScreen()
