@@ -36,22 +36,29 @@ export type PhaseKey =
   | 'INIT_AFTER_MAP_LOADED'
   | 'INIT_SESSION';
 
-/** Emoji the stock screen used, kept because they read as phases at a glance. */
-export const PHASE_EMOJI: Record<PhaseKey, string> = {
-  INIT_CORE: '🍇',
-  INIT_BEFORE_MAP_LOADED: '🍉',
-  INIT_AFTER_MAP_LOADED: '🍋🍊',
-  INIT_SESSION: '🍐🍅🍆',
-};
+/**
+ * The init phases, in the order the engine reports them.
+ *
+ * This used to be a table of EMOJI - one per phase, cycling through them as
+ * the phases arrived, so the status line showed a fruit while the game
+ * started. The emoji are gone; the LIST is not, because the bar's weighting
+ * is derived from how many phases there are.
+ */
+export const INIT_PHASES: readonly PhaseKey[] = [
+  'INIT_CORE',
+  'INIT_BEFORE_MAP_LOADED',
+  'INIT_AFTER_MAP_LOADED',
+  'INIT_SESSION',
+];
 
 /**
  * How many init phases there are.
  *
- * Derived from the emoji table rather than written down twice, because the
+ * Derived from the phase list rather than written down twice, because the
  * weighting of the bar depends on it: each phase is worth a quarter of the
  * init segment, and a phase that does not exist would make the bar jump.
  */
-export const INIT_PHASE_COUNT = Object.keys(PHASE_EMOJI).length;
+export const INIT_PHASE_COUNT = INIT_PHASES.length;
 
 /**
  * WHICH PART OF THE BAR THE MAP LOAD GETS.

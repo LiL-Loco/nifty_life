@@ -3,9 +3,7 @@ import * as React from 'react';
 import {
   DEFAULT_PHASE,
   PHASES,
-  PHASE_EMOJI,
   type LoadingScreenMessage,
-  type PhaseKey,
 } from './loadscreen-contract';
 import { createProgressModel } from './loadscreen-progress';
 
@@ -65,7 +63,6 @@ const EASE_PER_FRAME = 0.12;
 
 export function LoadScreen() {
   const [phase, setPhase] = React.useState(DEFAULT_PHASE);
-  const [emoji, setEmoji] = React.useState('');
   const [target, setTarget] = React.useState(0);
   const [shown, setShown] = React.useState(0);
 
@@ -78,7 +75,6 @@ export function LoadScreen() {
    */
   const model = React.useRef(createProgressModel());
 
-  const phaseSeen = React.useRef<Record<string, number>>({});
   const lastAdvance = React.useRef(Date.now());
 
   /** Take the model's answer and put it on the screen. */
@@ -111,13 +107,6 @@ export function LoadScreen() {
         case 'startInitFunctionOrder': {
           raiseTo(composed(data));
 
-          const key = (data.type ?? '') as PhaseKey;
-          const glyphs = PHASE_EMOJI[key];
-          if (glyphs) {
-            const seen = (phaseSeen.current[key] ?? 0) + 1;
-            phaseSeen.current[key] = seen;
-            setEmoji(glyphs[seen - 1] ?? '');
-          }
           break;
         }
 
