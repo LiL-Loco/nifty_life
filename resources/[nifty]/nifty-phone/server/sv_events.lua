@@ -53,7 +53,7 @@ local function accountWithDevice(src)
   local account, accErr = Phone.accountFor(characterId)
   if not account then return nil, accErr end
 
-  local has = Nifty.Inventory.has(characterId, 'phone')
+  local has = Nifty.Inventory:has(characterId, 'phone')
   if not has then
     return nil, 'Du hast kein Handy dabei.'
   end
@@ -273,7 +273,9 @@ CreateThread(function()
     return
   end
 
-  local ok, err = pcall(Nifty.Inventory.registerUseHandler, 'phone',
+  local ok, err = pcall(function(code, fn)
+    return Nifty.Inventory:registerUseHandler(code, fn)
+  end, 'phone',
     function(src)
       TriggerClientEvent(Nifty.Phone.Events.OPEN, src)
     end)
@@ -290,7 +292,9 @@ AddEventHandler('onResourceStop', function(resource)
   if resource ~= RESOURCE then return end
 
   if Nifty.Inventory and type(Nifty.Inventory.unregisterUseHandler) == 'function' then
-    pcall(Nifty.Inventory.unregisterUseHandler, 'phone')
+    pcall(function(code)
+      return Nifty.Inventory:unregisterUseHandler(code)
+    end, 'phone')
   end
 end)
 

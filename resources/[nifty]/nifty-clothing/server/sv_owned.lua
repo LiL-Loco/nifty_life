@@ -41,6 +41,19 @@ end
 -- has no free-mode slot and is intentionally not represented.
 -- ----------------------------------------------------------------------------
 
+-- nifty-inventory owns adding, removing, and the use-handler registry.
+--
+-- DECLARED HERE, at the first use, and not further down. A `local` declared
+-- later is not in scope earlier, so the accessory code below used an
+-- UNDEFINED GLOBAL - and the two failures looked like different bugs: the
+-- add crashed on a nil index, and the lookup, which IS guarded, quietly
+-- answered "no such row" for every piece and so created a duplicate instead
+-- of finding the one that was already there.
+--
+-- nifty-inventory is started before this resource: nifty-clothing depends on
+-- nifty-world, and nifty-world depends on nifty-inventory.
+local Inventory = exports['nifty-inventory']
+
 local ACCESSORY_CODE = {
   component = {
     [1] = 'clothing_mask',
@@ -83,7 +96,7 @@ local function findAccessoryItemRow(characterId, kind, slot_id, collection, draw
   local ok, enc = pcall(json.encode, meta)
   if ok then encoded = enc end
 
-  local view = Inventory.view(characterId)
+  local view = Inventory:view(characterId)
   for _, it in ipairs(view.items or {}) do
     if it.code == code and type(it.metadata) == 'table' then
       if not encoded then return nil end
@@ -108,8 +121,8 @@ ensureAccessoryItem = function(characterId, kind, slot_id, collection, drawable,
     return
   end
 
-  local ok, err = Inventory.add(characterId, code, 1,
-                                accessoryMetadata(kind, slot_id, collection, drawable, texture))
+  local ok, err = Inventory:add(characterId, code, 1,
+                                 accessoryMetadata(kind, slot_id, collection, drawable, texture))
   if not ok then
     -- Most likely 'too heavy' on a fresh character. The wardrobe still
     -- works because the piece is owned; the player just has no inventory
@@ -168,8 +181,8 @@ local function ensureAccessoryItem(characterId, kind, slot_id, collection, drawa
     return
   end
 
-  local ok, err = Inventory.add(characterId, code, 1,
-                                accessoryMetadata(kind, slot_id, collection, drawable, texture))
+  local ok, err = Inventory:add(characterId, code, 1,
+                                 accessoryMetadata(kind, slot_id, collection, drawable, texture))
   if not ok then
     -- Most likely 'too heavy' on a fresh character. The wardrobe still
     -- works because the piece is owned; the player just has no inventory
@@ -186,13 +199,19 @@ end
 -- nifty-inventory owns adding, removing, and the use-handler registry. The
 -- use handler for `clothing_outfit` runs the row that turns an item into a
 -- wearable loadout, then Inventory.remove decrements the row.
-
-local Inventory = exports['nifty-inventory']
+--
+-- THE DECLARATION LIVES AT THE TOP OF THIS FILE, not here. It was here, and
+-- the accessory code above it used `Inventory` - which, this far down, is an
+-- UNDEFINED GLOBAL, because a `local` declared later is not in scope earlier.
+-- So the accessory auto-item crashed on "attempt to index a nil value
+-- (global 'Inventory')", and the lookup above it, which IS guarded, quietly
+-- answered "no such row" for every piece - which made it create a duplicate
+-- instead of finding the one that was there.
 
 -- Read a single inventory row. Used by the use handler to find an outfit_id.
 local function readInventoryRow(characterId, itemId)
   if not Inventory or not Inventory.view then return nil end
-  local view = Inventory.view(characterId)
+  local view = Inventory:view(characterId)
   for _, it in ipairs(view.items or {}) do
     if it.id == itemId then return it end
   end
@@ -281,7 +300,7 @@ local function outfitUseHandler(characterId, code, itemId, quantity)
     -- Skip the repack if the player already has an item for this outfit.
     -- Carrying two outfit items for the same id would be a cheap dup.
     local alreadyHeld = false
-    local view = Inventory.view(characterId)
+    local view = Inventory:view(characterId)
     for _, it in ipairs(view.items or {}) do
       if it.code == 'clothing_outfit'
         and type(it.metadata) == 'table'
@@ -293,7 +312,7 @@ local function outfitUseHandler(characterId, code, itemId, quantity)
     end
 
     if not alreadyHeld then
-      Inventory.add(characterId, 'clothing_outfit', 1,
+      Inventory:add(characterId, 'clothing_outfit', 1,
                     { outfit_id = previousOutfitId })
     end
   end
@@ -304,7 +323,7 @@ end
 -- Register the handler exactly once. Inventory.use will call it for any
 -- row of code `clothing_outfit`.
 local function registerOutfitUseHandler()
-  Inventory.registerUseHandler('clothing_outfit', outfitUseHandler)
+  Inventory:registerUseHandler('clothing_outfit', outfitUseHandler)
 end
 
 -- Wire the registration to happen after the inventory has loaded its
@@ -652,7 +671,7 @@ RegisterNetEvent('nifty:server:outfitPack', function(payload)
     return
   end
 
-  local ok, err = Inventory.add(cid, 'clothing_outfit', 1,
+  local ok, err = Inventory:add(cid, 'clothing_outfit', 1,
                                 { outfit_id = payload.outfitId })
   if not ok then
     TriggerClientEvent('nifty:client:outfitPack', src, { ok = false, reason = err })
@@ -752,7 +771,7 @@ RegisterNetEvent('nifty:server:equippedDrop', function(payload)
   local itemId = findAccessoryItemRow(cid, kind, slot_id,
                                       entry.collection, entry.drawable, entry.texture)
   if itemId then
-    Inventory.remove(cid, accessoryCodeFor(kind, slot_id), 1, itemId)
+    Inventory:remove(cid, accessoryCodeFor(kind, slot_id), 1, itemId)
   end
 
   TriggerClientEvent('nifty:client:equippedDrop', src, {
@@ -822,7 +841,7 @@ RegisterNetEvent('nifty:server:clothingSaveInventoryItem', function(payload)
   local cid = characterOf(src)
   if not cid then return end
 
-  local view = Inventory.view(cid) or { items = {} }
+  local view = Inventory:view(cid) or { items = {} }
   local row = nil
   for _, it in ipairs(view.items or {}) do
     if it.id == payload.itemId then row = it break end
@@ -936,7 +955,7 @@ RegisterNetEvent('nifty:server:clothingSaveInventoryItem', function(payload)
     -- The matching inventory row goes away. max_stack=1 means a single
     -- decrement deletes the row.
     if accessoryCodeFor(kind, sid) == code then
-      Inventory.remove(cid, code, 1, payload.itemId)
+      Inventory:remove(cid, code, 1, payload.itemId)
     else
       TriggerClientEvent('nifty:client:clothingSaveInventoryItem', src,
                          { ok = false, reason = 'code mismatch' })
@@ -964,7 +983,7 @@ RegisterNetEvent('nifty:server:outfitUseFromInventory', function(payload)
   local cid = characterOf(src)
   if not cid then return end
 
-  local ok, err = Inventory.use(cid, 'clothing_outfit', 1, payload.itemId)
+  local ok, err = Inventory:use(cid, 'clothing_outfit', 1, payload.itemId)
   if not ok then
     TriggerClientEvent('nifty:client:outfitUseFromInventory', src,
                        { ok = false, reason = err })
@@ -1053,7 +1072,7 @@ RegisterNetEvent('nifty:server:inventoryGive', function(payload)
   -- compose the wardrobe suffix; we stamp it here so the wardrobe render
   -- path does not need any separate plumbing. GetPlayerName returns the
   -- display string FiveM already shows in the player list (first + last).
-  local ok, err = Inventory.transferBetween(srcCid, targetCid, code,
+  local ok, err = Inventory:transferBetween(srcCid, targetCid, code,
                                             quantity, itemId)
   if not ok then
     TriggerClientEvent('nifty:client:inventoryGive', src,
@@ -1066,7 +1085,7 @@ RegisterNetEvent('nifty:server:inventoryGive', function(payload)
   -- shape as the source, so the lookup-by-code is unique within the
   -- recipient's bag.
   local giverName = GetPlayerName(src) or ('Spieler ' .. tostring(src))
-  local targetView = Inventory.view(targetCid) or { items = {} }
+  local targetView = Inventory:view(targetCid) or { items = {} }
   local matchedId
   for _, it in ipairs(targetView.items or {}) do
     if it.code == code then
@@ -1075,7 +1094,7 @@ RegisterNetEvent('nifty:server:inventoryGive', function(payload)
     end
   end
   if matchedId then
-    Inventory.stampMetadata(targetCid, matchedId, { giver_name = giverName })
+    Inventory:stampMetadata(targetCid, matchedId, { giver_name = giverName })
   end
 
   TriggerClientEvent('nifty:client:inventoryGive', src, {

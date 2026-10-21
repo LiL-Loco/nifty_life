@@ -155,13 +155,13 @@ RegisterNetEvent('nifty:server:pickupGroundItem', function(payload)
 
   -- Capacity preflight on the recipient.
   local Inventory = exports['nifty-inventory']
-  local def = Inventory.getDefinition(drop.code)
+  local def = Inventory:getDefinition(drop.code)
   if not def then
     TriggerClientEvent('nifty:client:pickupGroundItem', src,
                        { ok = false, reason = 'unknown item' })
     return
   end
-  local view = Inventory.view(cid)
+  local view = Inventory:view(cid)
   if view.usedWeight + (def.weight * drop.quantity) > view.maxWeight then
     TriggerClientEvent('nifty:client:pickupGroundItem', src,
                        { ok = false, reason = 'too heavy' })
@@ -176,7 +176,7 @@ RegisterNetEvent('nifty:server:pickupGroundItem', function(payload)
   -- any separate plumbing. Inventory.add now returns the new row id as
   -- its third value; we stamp on the same Lua tick so a hostile client
   -- cannot interfere.
-  local ok, err, newItemId = Inventory.add(cid, drop.code, drop.quantity)
+  local ok, err, newItemId = Inventory:add(cid, drop.code, drop.quantity)
   if not ok then
     TriggerClientEvent('nifty:client:pickupGroundItem', src,
                        { ok = false, reason = err })
@@ -184,7 +184,7 @@ RegisterNetEvent('nifty:server:pickupGroundItem', function(payload)
   end
 
   if newItemId and drop.giverName then
-    Inventory.stampMetadata(cid, newItemId, { giver_name = drop.giverName })
+    Inventory:stampMetadata(cid, newItemId, { giver_name = drop.giverName })
   end
 
   droppedItems[netId] = nil

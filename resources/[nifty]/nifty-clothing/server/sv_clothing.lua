@@ -48,7 +48,7 @@ RegisterNetEvent('nifty:server:hoodNotice', function(message)
 
   -- The notice is ours, not the player's: a client could otherwise use this
   -- channel to put arbitrary text into another player's chat.
-  Chat.system(src, message)
+  Chat:system(src, message)
 end)
 
 --- Diagnostics from the client, straight into the server log.
