@@ -113,8 +113,58 @@ AddEventHandler('playerConnecting', function(name, setKickReason, deferrals)
   deferrals.done()
 end)
 
--- Send the client its character, open a session, and let the world begin.
-local function enterWorld(src, character, hasSession)
+-- The payload the client needs to enter the world.
+--
+-- Built separately from the server-side setup, because the welcome cutscene
+-- needs the SAME payload - it hands it back to the client when the cutscene
+-- ends, so that the world entry happens after the video and not before it.
+--
+-- Two copies of this payload would be two chances for the two to differ, and
+-- the difference would show up as a character who enters the world with
+-- somebody else's name.
+local function worldPayload(character)
+  -- Resume at the player's last known position if the column has one. A
+  -- null `position` means "first time after the creator finished" - use
+  -- the character's `spawn_point` from appearance_config.lua as the
+  -- default landing site, NOT the picker. The picker is only opened by
+  -- an explicit user action (not yet wired), never automatically on
+  -- connect. A malformed value falls back to the default spawn, same as null.
+  local lastPosition = nil
+  if character.position and character.position ~= '' then
+    local ok, decoded = pcall(json.decode, character.position)
+    if ok and type(decoded) == 'table' and decoded.x and decoded.y and decoded.z then
+      lastPosition = decoded
+    end
+  end
+
+  return {
+    character = {
+      id = character.id,
+      firstName = character.first_name,
+      lastName = character.last_name,
+      dateOfBirth = character.date_of_birth,
+      gender = character.gender,
+      appearance = character.appearance and json.decode(character.appearance) or nil,
+      spawnPoint = character.spawn_point,
+    },
+    -- `or SpawnPoints.default` and not `SpawnPoints[x or 'default']`: a row can
+    -- carry a spawn_point that no longer exists (a point removed from
+    -- appearance_config while the character row survives it), and a nil `spawn`
+    -- kills the CLIENT on `data.spawn.x` at the exact moment the player was told
+    -- they had entered the world.
+    spawn = lastPosition or (SpawnPoints[character.spawn_point] or SpawnPoints.default),
+    usePicker = false,
+  }
+end
+
+-- The server-side half of entering the world: the session, the starting items,
+-- the money, the Stütze.
+--
+-- Split out from `enterWorld` because the welcome cutscene path does the same
+-- setup and then hands the CLIENT the world entry to the cutscene's end. The
+-- setup is the same in both cases; only the moment of the client-side entry
+-- differs.
+local function prepareWorld(src, character, hasSession)
   if not hasSession then
     Identity.beginSession(src, character.id)
   end
@@ -134,39 +184,12 @@ local function enterWorld(src, character, hasSession)
   Economy.push(src, character.id)
   Inventory:push(src, character.id)
   Stuetze.start(src, character.id)
+end
 
-  -- Resume at the player's last known position if the column has one. A
-  -- null `position` means "first time after the creator finished" - use
-  -- the character's `spawn_point` from appearance_config.lua as the
-  -- default landing site, NOT the picker. The picker is only opened by
-  -- an explicit user action (not yet wired), never automatically on
-  -- connect. A malformed value falls back to the default spawn, same as null.
-  local lastPosition = nil
-  if character.position and character.position ~= '' then
-    local ok, decoded = pcall(json.decode, character.position)
-    if ok and type(decoded) == 'table' and decoded.x and decoded.y and decoded.z then
-      lastPosition = decoded
-    end
-  end
-
-  TriggerClientEvent('nifty:client:enterWorld', src, {
-    character = {
-      id = character.id,
-      firstName = character.first_name,
-      lastName = character.last_name,
-      dateOfBirth = character.date_of_birth,
-      gender = character.gender,
-      appearance = character.appearance and json.decode(character.appearance) or nil,
-      spawnPoint = character.spawn_point,
-    },
-    -- `or SpawnPoints.default` and not `SpawnPoints[x or 'default']`: a row can
-  -- carry a spawn_point that no longer exists (a point removed from
-  -- appearance_config while the character row survives it), and a nil `spawn`
-  -- kills the CLIENT on `data.spawn.x` at the exact moment the player was told
-  -- they had entered the world.
-  spawn = lastPosition or (SpawnPoints[character.spawn_point] or SpawnPoints.default),
-  usePicker = false,
-  })
+-- Send the client its character, open a session, and let the world begin.
+local function enterWorld(src, character, hasSession)
+  prepareWorld(src, character, hasSession)
+  TriggerClientEvent('nifty:client:enterWorld', src, worldPayload(character))
 end
 
 -- Client signals its resources are up. Used instead of guessing when the
@@ -341,14 +364,27 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- from before the save, and the client would then be told to spawn a ped with no
   -- clothing at all.
   local saved = Identity.getCharacter(account.id)
+
+  -- The creator is DONE. It closes on this signal, and NOT on the world entry:
+  -- the world entry happens after the cutscene, and the creator panel would
+  -- then float over the video for the whole 26 seconds - the NUI is drawn on
+  -- top of the game and does not fade with it.
+  TriggerClientEvent('nifty:client:creatorFinished', src)
+
   -- First-time creator completion plays the Concat plane cutscene (~26s)
-  -- before the world loads. The cutscene handler on the client calls
-  -- enterWorld itself when the cutscene ends, so we do NOT call it here
-  -- on the first run.
+  -- before the world loads. The cutscene handler on the client fires the
+  -- world entry itself when the cutscene ends - so the world payload travels
+  -- WITH the cutscene, and `enterWorld` is not called here on the first run.
+  --
+  -- The payload has to travel with it: the client handler reads
+  -- `data.character.appearance` and `data.spawn.x` without a guard, and a
+  -- cutscene that fires the world entry without them leaves the player on a
+  -- black screen with no error anywhere.
+  prepareWorld(src, saved, true)
   TriggerClientEvent('nifty:client:welcomeCutscene', src, {
     gender = saved.gender,
+    world = worldPayload(saved),
   })
-  enterWorld(src, saved, true)
 end)
 
 -- Leaving the creator on purpose.

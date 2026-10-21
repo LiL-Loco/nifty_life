@@ -1495,6 +1495,19 @@ end)
 
 -- ---------------------------------------------------------------- results
 
+-- THE CREATOR CLOSES ON `creatorFinished`, not on the world entry.
+--
+-- The world entry happens at the END of the welcome cutscene - that is the
+-- whole point of a cutscene - and the NUI panel is drawn ON TOP of the game
+-- and does not fade with it. Closing on the world entry would leave the
+-- creator floating over the video for 26 seconds.
+--
+-- The world entry stays as a second trigger: if the cutscene is skipped or
+-- fails, the creator must still close.
+RegisterNetEvent('nifty:client:creatorFinished', function()
+  closeCreator('submitted')
+end)
+
 RegisterNetEvent('nifty:client:enterWorld', function()
   closeCreator('submitted')
 end)

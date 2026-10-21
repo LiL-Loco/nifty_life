@@ -61,6 +61,26 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   local gender = data and data.gender or 'male'
   local isMale = (gender ~= 'female')
 
+  -- The world payload, handed over by the server.
+  --
+  -- The cutscene ENDS the world entry: it fires `nifty:client:enterWorld`
+  -- with this payload when the video is over, so that the player walks into
+  -- the world AFTER the video and not before it. Without the payload the
+  -- client handler reads `data.character.appearance` and dies on a nil index,
+  -- and the player is left on a black screen.
+  local world = data and data.world or nil
+
+  --- The world entry, with the payload - or without one, if the server did
+  --- not send it. A missing payload must not be a crash: the alternative is a
+  --- black screen with no way out.
+  local function enterTheWorld()
+    if type(world) == 'table' then
+      TriggerEvent('nifty:client:enterWorld', world)
+    else
+      print(('[nifty-core] the cutscene got no world payload - the world entry is skipped'):format())
+    end
+  end
+
   -- Player has to be alive and visible for the cutscene to register them.
   -- Invincibility keeps the cutscene from killing them if the cutscene
   -- ends near an edge of the map.
@@ -98,7 +118,7 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       if DoesEntityExist(jet) then DeleteEntity(jet) end
       if DoesEntityExist(clone) then DeleteEntity(clone) end
       SetPlayerInvincible(PlayerId(), false)
-      TriggerEvent('nifty:client:enterWorld', { skipCutscene = true })
+      enterTheWorld()
       return
     end
     Wait(0)
@@ -130,6 +150,6 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     if DoesEntityExist(jet) then DeleteEntity(jet) end
     if DoesEntityExist(clone) then DeleteEntity(clone) end
     SetPlayerInvincible(PlayerId(), false)
-    TriggerEvent('nifty:client:enterWorld', { skipCutscene = true })
+    enterTheWorld()
   end)
 end)
