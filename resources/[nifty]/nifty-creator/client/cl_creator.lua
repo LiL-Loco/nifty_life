@@ -841,7 +841,19 @@ randomise = function()
 
   for kind, options in pairs(slots) do
     for id, list in pairs(options) do
-      if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
+      -- COMPONENTS ARE ALWAYS FILLED. PROPS MAY BE SKIPPED.
+      --
+      -- A freemode ped wears a garment in every component slot - the base
+      -- collection's drawable 0 is a "Crew T-Shirt", not an empty state. So a
+      -- component slot that the randomiser skips has no empty state to fall
+      -- back to: the OLD garment simply stays on the ped, and the panel and
+      -- the ped end up showing two different characters.
+      --
+      -- A prop CAN be empty - `ClearPedProp` removes it and the game draws
+      -- the ped without the hat - so the props may be skipped, and the apply
+      -- path in nifty-world clears the ones that were.
+      local keep = (kind == 'components') or dressProps or math.random(1, 3) ~= 1
+      if keep then
         local chosen = list[math.random(#list)]
         if chosen then
           local drawable = math.random(0, chosen.drawables - 1)
@@ -914,7 +926,13 @@ randomiseAll = function()
   local dressProps = (math.random(1, 4) == 1)
   for kind, options in pairs(slots) do
     for id, list in pairs(options) do
-      if (kind == 'props') == dressProps or math.random(1, 3) ~= 1 then
+      -- COMPONENTS ARE ALWAYS FILLED. PROPS MAY BE SKIPPED.
+      --
+      -- The same rule as in `randomise`, and for the same reason: a freemode
+      -- component slot has no empty state, so skipping it would leave the
+      -- previous garment on the ped. A prop has one.
+      local keep = (kind == 'components') or dressProps or math.random(1, 3) ~= 1
+      if keep then
         local chosen = list[math.random(#list)]
         if chosen then
           -- The texture is drawn from the DRAWABLE's own count, not from the

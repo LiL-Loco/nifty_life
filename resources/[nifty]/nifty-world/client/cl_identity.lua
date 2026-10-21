@@ -301,6 +301,33 @@ local function applyAppearanceParts(ped, appearance)
     end
   end
 
+  -- THE PROPS THE APPEARANCE DOES NOT MENTION ARE CLEARED.
+  --
+  -- The appearance is the whole truth about what the ped wears. A prop anchor
+  -- that the appearance leaves out is not "unchanged", it is "not worn" - and
+  -- only the props can say that, because a prop is the one thing on a freemode
+  -- ped that has an empty state (`ClearPedProp` removes it, and the game draws
+  -- the ped without the hat).
+  --
+  -- Without this, the creator's randomiser left the previous hat on the ped:
+  -- it drops a prop slot from the selection, the apply path only ever SETS
+  -- the slots that are in the appearance, and the old hat stayed where it was
+  -- while the panel said the slot was empty. The character then spawned
+  -- without the hat, because the SAVED appearance did not have it - the ped
+  -- in the creator and the character in the world were two different people.
+  --
+  -- The components cannot be cleared this way and are not cleared: a
+  -- freemode ped wears a garment in every component slot (the base
+  -- collection's drawable 0 is a "Crew T-Shirt", not an empty state), so
+  -- there is no empty state to go back to. The randomiser therefore always
+  -- fills the component slots.
+  for anchor = AppearanceConfig.MIN_COMPONENT_ID, AppearanceConfig.MAX_COMPONENT_ID do
+    if not (type(appearance.props) == 'table'
+            and appearance.props[tostring(anchor)]) then
+      ClearPedProp(ped, anchor)
+    end
+  end
+
   applyFace(ped, appearance)
 
   return ped

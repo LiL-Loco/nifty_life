@@ -179,52 +179,82 @@ function Identity.saveCharacter(src, patch, opts)
   local sets, params = {}, {}
   local fromCreator = opts and opts.fromCreator
 
+  -- A REFUSAL IS NOT A REASON TO THROW THE REST AWAY.
+  --
+  -- The autosave sends the appearance AND the position in one call, and the
+  -- two have nothing to do with each other. When the appearance was refused
+  -- - a piece the character does not own, a collection the server does not
+  -- permit - the function returned false right there, and the position was
+  -- never written: the character came back where it had been last, forever,
+  -- and nothing in the log said that the position had been dropped as well.
+  --
+  -- So the branches are independent. Each one either contributes its column
+  -- or records why it did not, and the write happens with whatever was
+  -- accepted.
+  local refused = nil
+
   if patch.appearance ~= nil then
     local appearance, err = Validate.appearance(patch.appearance)
     if not appearance then
       print(('[%s] refused to save appearance for %s: %s'):format(RESOURCE, characterId, err))
-      return false
-    end
-    -- Every piece the loadout wears must be one this character owns.
-    -- checkEquipped is what stops a forged saveCharacter from sneaking
-    -- a drawable past - a client cannot claim they own a piece they did
-    -- not buy or pick in the creator.
-    if not fromCreator then
-      local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
-      if not owned then
-        print(('[%s] refused to save appearance for %s: not owned (%s)'):format(
-          RESOURCE, characterId, tostring(ownedErr)))
-        return false
+      refused = err
+    else
+      -- Every piece the loadout wears must be one this character owns.
+      -- checkEquipped is what stops a forged saveCharacter from sneaking
+      -- a drawable past - a client cannot claim they own a piece they did
+      -- not buy or pick in the creator.
+      if not fromCreator then
+        local owned, ownedErr = Owned.checkEquipped(characterId, appearance)
+        if not owned then
+          print(('[%s] refused to save appearance for %s: not owned (%s)'):format(
+            RESOURCE, characterId, tostring(ownedErr)))
+          refused = ownedErr
+        else
+          sets[#sets + 1] = 'appearance = ?'
+          params[#params + 1] = json.encode(appearance)
+        end
+      else
+        sets[#sets + 1] = 'appearance = ?'
+        params[#params + 1] = json.encode(appearance)
       end
     end
-    sets[#sets + 1] = 'appearance = ?'
-    params[#params + 1] = json.encode(appearance)
   end
 
   if patch.spawnPoint ~= nil then
     local spawnPoint, err = Validate.spawnPoint(patch.spawnPoint)
-    if not spawnPoint then return false end
-    sets[#sets + 1] = 'spawn_point = ?'
-    params[#params + 1] = spawnPoint
+    if not spawnPoint then
+      print(('[%s] refused to save spawn point for %s: %s'):format(
+        RESOURCE, characterId, tostring(err)))
+      refused = refused or err
+    else
+      sets[#sets + 1] = 'spawn_point = ?'
+      params[#params + 1] = spawnPoint
+    end
   end
 
   if patch.position ~= nil then
     local position, err = Validate.position(patch.position)
     if not position then
       print(('[%s] refused to save position for %s: %s'):format(RESOURCE, characterId, tostring(err)))
-      return false
+      refused = refused or err
+    else
+      sets[#sets + 1] = 'position = ?'
+      params[#params + 1] = json.encode(position)
     end
-    sets[#sets + 1] = 'position = ?'
-    params[#params + 1] = json.encode(position)
   end
 
+  -- Nothing was accepted: there is nothing to write, and the caller has to
+  -- hear about it - the creator turns this into "Das Aussehen konnte nicht
+  -- gespeichert werden".
   if #sets == 0 then return false end
 
   params[#params + 1] = characterId
   Db.update(('UPDATE characters SET %s WHERE id = ?'):format(table.concat(sets, ', ')),
             params, 'identity:saveCharacter')
 
-  return true
+  -- The write happened. A refused part of the patch does not undo the part
+  -- that was accepted - but the caller is told, so it can say so.
+  return true, refused
 end
 
 function Identity.endSession(src)
