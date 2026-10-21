@@ -144,7 +144,28 @@ local PRE_POS = vector3(-1117.778, -1557.625, 3.3819)
 RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   local ped = PlayerPedId()
   local gender = data and data.gender or 'male'
-  local isMale = (gender ~= 'female')
+
+  -- THE GENDER COMES FROM THE PED, NOT FROM THE STRING.
+  --
+  -- Rockstar decides the playback list by the ped MODEL (fm_intro_cut_dev.c
+  -- func_91: `mp_f_freemode_01` plays the female half), and the same model
+  -- decides which character slot the player sits in. The stored gender is a
+  -- fact about the PLAYER, not about the body - and for 'nonbinary' the
+  -- server takes the model from the creator, because "the gender is a fact
+  -- about the player and the model is a fact about the body" (sv_main.lua).
+  -- The two can therefore disagree, and then the string would pick the wrong
+  -- half of the video and the wrong character slot.
+  --
+  -- The string is only the fallback for a ped that is neither freemode model.
+  local pedModel = GetEntityModel(ped)
+  local isMale
+  if pedModel == joaat('mp_f_freemode_01') then
+    isMale = false
+  elseif pedModel == joaat('mp_m_freemode_01') then
+    isMale = true
+  else
+    isMale = (gender ~= 'female')
+  end
 
   -- The world payload, handed over by the server.
   --
@@ -166,6 +187,17 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     end
   end
 
+  -- BLACK FIRST. EVERYTHING BELOW HAPPENS BEHIND A BLACK SCREEN.
+  --
+  -- What follows puts the player somewhere else, fills the cabin with seven
+  -- people and parks a jet 142 metres up. The player used to watch that
+  -- happen: they stood VISIBLY on the beach at PRE_POS while the passengers
+  -- popped into existence at their own feet, and the cutscene started from
+  -- that picture. From here to the fade-in after `StartCutscene` the screen
+  -- stays black.
+  DoScreenFadeOut(500)
+  Wait(600)
+
   -- Player has to be alive and visible for the cutscene to register them.
   -- Invincibility keeps the cutscene from killing them if the cutscene
   -- ends near an edge of the map.
@@ -176,6 +208,39 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- cutscene is not visible. The cutscene puts the camera wherever
   -- its own scripts decide.
   SetEntityCoords(ped, PRE_POS.x, PRE_POS.y, PRE_POS.z, false, false, false, false)
+
+  -- THE MODELS ARE LOADED ONCE, NOT ONCE PER SEAT.
+  --
+  -- The old code requested the model of every single seat and waited for it,
+  -- with a ten second deadline EACH - seven seats, and a second model as the
+  -- fallback, so up to 140 seconds before the cutscene even started.
+  --
+  -- That is not a slow start, it is a race with the server: the watchdog in
+  -- sv_main.lua fires after 60 seconds and sends the world entry. The player
+  -- was therefore teleported into the city AND the cutscene started
+  -- afterwards, one after the other.
+  --
+  -- Three models, one wait each, a budget per model and a cache. The cache is
+  -- what makes the second seat of the same gender free.
+  local loadedModels = {}
+  local function ensureModel(name, budgetMs)
+    local hash = joaat(name)
+    if loadedModels[hash] then return loadedModels[hash] end
+    if HasModelLoaded(hash) then
+      loadedModels[hash] = hash
+      return hash
+    end
+
+    RequestModel(hash)
+    local deadline = GetGameTimer() + budgetMs
+    while not HasModelLoaded(hash) do
+      if GetGameTimer() > deadline then return 0 end
+      Wait(0)
+    end
+
+    loadedModels[hash] = hash
+    return hash
+  end
 
   -- THE PASSENGERS.
   --
@@ -188,28 +253,27 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- a copy of the player in it are not the same thing.
   local passengers = {}
   for index, model in ipairs(PASSENGER_MODELS) do
-    local hash = joaat(model)
+    local hash = ensureModel(model, 6000)
 
-    -- THE MODEL HAS TO BE LOADED BEFORE THE PED IS CREATED.
-    --
-    -- `CreatePed` with a model that is not streamed in does not raise - it
-    -- hands back nothing usable, and the seat stays empty without a word.
-    -- The model is requested and waited for, with a deadline: a wait without
-    -- a deadline is a hang.
-    RequestModel(hash)
-    local modelDeadline = GetGameTimer() + 10000
-    while not HasModelLoaded(hash) do
-      if GetGameTimer() > modelDeadline then break end
-      Wait(0)
-    end
+    -- A PLACE OF THEIR OWN, so they do not stand in the player.
+    local offsetX = (index - 4) * 0.6
 
     local created = 0
-    if HasModelLoaded(hash) then
-      created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+    if hash ~= 0 then
+      created = CreatePed(26, hash, PRE_POS.x + offsetX, PRE_POS.y, PRE_POS.z, 0.0, false, false)
     end
 
     if created and created ~= 0 then
       SetModelAsNoLongerNeeded(hash)
+      -- INVISIBLE UNTIL THE CUTOISCENE TAKES THE SEAT.
+      --
+      -- A ped that is created visible stands at the spawn point until the
+      -- cutscene moves it into the cabin - and the cutscene's own camera sees
+      -- the world from its first frame, whatever the player's screen does.
+      SetEntityVisible(created, false, false)
+      -- A mission entity is not cleaned up by the streaming system while the
+      -- cutscene is still being set up. The community ports all do this.
+      SetEntityAsMissionEntity(created, true, true)
       passengers[#passengers + 1] = created
     else
       -- THE FALLBACK.
@@ -218,18 +282,15 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       -- filled with the freemode model of that seat's gender - in the suit
       -- Rockstar's passengers wear. Still not the player: different clothes,
       -- and a head that is not the player's head.
+      --
+      -- The freemode is usually ALREADY in memory - the player wears one -
+      -- so this fallback costs nothing.
       local fallbackModel = (index <= 3) and 'mp_m_freemode_01' or 'mp_f_freemode_01'
-      local fallbackHash = joaat(fallbackModel)
-      RequestModel(fallbackHash)
-      local fallbackDeadline = GetGameTimer() + 10000
-      while not HasModelLoaded(fallbackHash) do
-        if GetGameTimer() > fallbackDeadline then break end
-        Wait(0)
-      end
+      local fallbackHash = ensureModel(fallbackModel, 3000)
 
       local fallback = 0
-      if HasModelLoaded(fallbackHash) then
-        fallback = CreatePed(26, fallbackHash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+      if fallbackHash ~= 0 then
+        fallback = CreatePed(26, fallbackHash, PRE_POS.x + offsetX, PRE_POS.y, PRE_POS.z, 0.0, false, false)
       end
 
       if fallback and fallback ~= 0 then
@@ -245,6 +306,8 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
         end
         for prop = 0, 8 do ClearPedProp(fallback, prop) end
         FinalizeHeadBlend(fallback)
+        SetEntityVisible(fallback, false, false)
+        SetEntityAsMissionEntity(fallback, true, true)
         passengers[#passengers + 1] = fallback
         print(('[nifty-core] the model "%s" for seat %d is not available - the seat gets the suit instead'):format(
           model, index))
@@ -255,16 +318,43 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     end
   end
 
-  -- The jet object the cutscene attaches to the plane. CreateObject
-  -- streams the model in if it is not already loaded.
+  -- THE JET.
   --
-  -- It starts INVISIBLE and is made visible when it is registered: at its
-  -- spawn point, 142 metres up, it would otherwise hang in the sky while the
-  -- cutscene loads.
-  local jet = CreateObject(JET_HASH, JET_POS.x, JET_POS.y, JET_POS.z, false, true, false)
-  SetModelAsNoLongerNeeded(JET_HASH)
-  SetEntityVisible(jet, false, false)
-  SetEntityLodDist(jet, 3000)
+  -- The plane the whole video is about. Its model is loaded FIRST: an object
+  -- whose model is not in memory comes back as 0, and the slot 'MP_Plane'
+  -- would then be empty - the video without a plane, and nothing in the log
+  -- to say so.
+  local jet = 0
+  local jetModel = ensureModel('p_cs_mp_jet_01_s', 6000)
+  if jetModel ~= 0 then
+    jet = CreateObject(JET_HASH, JET_POS.x, JET_POS.y, JET_POS.z, false, true, false)
+    SetModelAsNoLongerNeeded(JET_HASH)
+  end
+  if jet ~= 0 then
+    -- It starts INVISIBLE and is made visible when it is registered: at its
+    -- spawn point, 142 metres up, it would otherwise hang in the sky while the
+    -- cutscene loads.
+    SetEntityVisible(jet, false, false)
+    SetEntityLodDist(jet, 3000)
+  else
+    print(('[nifty-core] the jet model is not available - the video has no plane'):format())
+  end
+
+  -- THE CLEANUP, IN ONE PLACE.
+  --
+  -- Two paths leave this handler: the cutscene ended, and the cutscene never
+  -- came. Both have to remove the jet, the passengers and the load scene -
+  -- otherwise the plane stays in the sky and seven people stay in the world.
+  --
+  -- It is one function because it used to be written twice, and the two
+  -- copies were not the same: the fallback path forgot the load scene.
+  local function cleanUp()
+    if DoesEntityExist(jet) then DeleteEntity(jet) end
+    for _, p in ipairs(passengers) do
+      if DoesEntityExist(p) then DeleteEntity(p) end
+    end
+    NewLoadSceneStop()
+  end
 
   -- THE LOAD SCENE.
   --
@@ -276,10 +366,9 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- covers the place the cutscene actually uses.
   NewLoadSceneStartSphere(-1212.79, -1673.52, 7.0, 1000.0, 0)
 
-  -- Fade out, request the cutscene, wait for it to load, register the
-  -- entities in their cutscene slots, then start it.
-  DoScreenFadeOut(500)
-  Wait(600)
+  -- The screen has been black since the beginning of this handler. What is
+  -- left: request the cutscene, wait for it to load, register the entities in
+  -- their cutscene slots, then start it.
 
   -- THE PLAYBACK LIST IS THE GENDER.
   --
@@ -300,11 +389,7 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       -- Fall through to the standard world entry; the picker is still
       -- available, just without the cinematic lead-in.
       print(('[nifty-core] cutscene "%s" failed to load, falling back to plain world entry'):format(cutsceneName))
-      if DoesEntityExist(jet) then DeleteEntity(jet) end
-      for _, p in ipairs(passengers) do
-        if DoesEntityExist(p) then DeleteEntity(p) end
-      end
-      NewLoadSceneStop()
+      cleanUp()
       SetPlayerInvincible(PlayerId(), false)
       enterTheWorld()
       return
@@ -312,9 +397,12 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     Wait(0)
   end
 
-  SetEntityVisible(jet, true, false)
-  RegisterEntityForCutscene(jet, 'MP_Plane', 0, 0, 0)
-  SetCutsceneEntityStreamingFlags('MP_Plane', 0, 1)
+  -- THE JET, IF IT EXISTS.
+  if jet ~= 0 then
+    SetEntityVisible(jet, true, false)
+    RegisterEntityForCutscene(jet, 'MP_Plane', 0, 0, 0)
+    SetCutsceneEntityStreamingFlags('MP_Plane', 0, 1)
+  end
 
   -- THE PLAYER THEMSELVES.
   --
@@ -343,12 +431,28 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   for index, passenger in ipairs(passengers) do
     local slot = PASSENGER_SLOTS[index]
     if slot then
+      -- They become visible HERE and not before: the cutscene's own camera
+      -- sees the world from its first frame, and a visible ped that is not
+      -- yet in its seat stands in the open.
+      SetEntityVisible(passenger, true, false)
       RegisterEntityForCutscene(passenger, slot, 0, 0, 64)
       SetCutsceneEntityStreamingFlags(slot, 0, 1)
     end
   end
 
-  SetEntityAsMissionEntity(jet, true, true)
+  if jet ~= 0 then
+    SetEntityAsMissionEntity(jet, true, true)
+  end
+
+  -- THE SERVER IS TOLD THAT THE VIDEO IS RUNNING.
+  --
+  -- The world entry is the client's job while the cutscene plays, and the
+  -- server has a watchdog that sends the world entry if nobody reports it. The
+  -- watchdog's short deadline is meant for a cutscene that never arrives - not
+  -- for one that is playing right now. Without this signal it fired in the
+  -- middle of the video and teleported the player into the city, and then the
+  -- cutscene ended and did it again.
+  TriggerServerEvent('nifty:server:cutsceneRunning')
 
   StartCutscene(START_FLAGS)
   DoScreenFadeIn(500)
@@ -356,17 +460,40 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- Cutscene runs to its end. Watch for IsCutsceneActive to flip
   -- false, then stop, fade out, and trigger the normal world entry.
   CreateThread(function()
-    while not IsCutsceneActive() do Wait(100) end
+    -- IT HAS TO START.
+    --
+    -- The old code waited for `IsCutsceneActive()` without a deadline. If the
+    -- cutscene never started, the thread spun forever and the only thing that
+    -- rescued the player was the server's watchdog - a minute of black screen
+    -- for a cutscene that was never going to run.
+    local startDeadline = GetGameTimer() + 10000
+    while not IsCutsceneActive() do
+      if GetGameTimer() > startDeadline then
+        print(('[nifty-core] the cutscene did not start - the world entry is sent directly'):format())
+        StopCutsceneImmediately()
+        cleanUp()
+        SetPlayerInvincible(PlayerId(), false)
+        enterTheWorld()
+        return
+      end
+      Wait(100)
+    end
+
     while IsCutsceneActive() do Wait(100) end
     StopCutsceneImmediately()
+
+    -- THE PED IS HANDED BACK.
+    --
+    -- A ped that was registered for a cutscene can stay under the cutscene's
+    -- control: invisible, frozen, or not accepting input. The pre-welcome
+    -- hook froze it as well, and nothing in the project unfroze it again.
+    SetEntityVisible(ped, true, false)
+    FreezeEntityPosition(ped, false)
+    SetPlayerInvincible(PlayerId(), false)
+
     DoScreenFadeOut(500)
     Wait(600)
-    if DoesEntityExist(jet) then DeleteEntity(jet) end
-    for _, p in ipairs(passengers) do
-      if DoesEntityExist(p) then DeleteEntity(p) end
-    end
-    NewLoadSceneStop()
-    SetPlayerInvincible(PlayerId(), false)
+    cleanUp()
     enterTheWorld()
   end)
 end)

@@ -112,8 +112,14 @@ function Identity.resolveAccount(src)
 end
 
 function Identity.getCharacter(accountId)
+  -- `position` IS IN THIS LIST. It was not, and the column it feeds is the one
+  -- the player feels: `worldPayload` reads `character.position` to decide
+  -- whether the character resumes where it stood or starts at the default
+  -- spawn point. Without the column the value was always nil, and every
+  -- character started at the default point - no matter how often the autosave
+  -- had written the position down.
   return Db.one([[
-    SELECT id, first_name, last_name, date_of_birth, gender, appearance, spawn_point
+    SELECT id, first_name, last_name, date_of_birth, gender, appearance, position, spawn_point
       FROM characters
      WHERE account_id = ?
      LIMIT 1

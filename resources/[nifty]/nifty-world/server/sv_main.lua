@@ -71,7 +71,42 @@ local WorldWatchdogs = {}
 -- black screen before the watchdog rescues them - which is why it is not
 -- longer, and not shorter.
 local WORLD_WATCHDOG_MS = 60000
+
+-- The deadline while the cutscene is actually running.
+--
+-- The client says when the cutscene starts (`nifty:server:cutsceneRunning`),
+-- and then the video is allowed to take its time. Without this the watchdog
+-- races the cutscene: the preparation alone can take a while, the video is 26
+-- seconds, and a watchdog that fires in the middle of it sends the world entry
+-- a second time - the player is teleported into the city and the cutscene
+-- starts anyway.
+local WORLD_WATCHDOG_CUTSCENE_MS = 180000
+
+-- A counter per slot, so a re-armed watchdog replaces the old one instead of
+-- running next to it.
+local WatchdogGeneration = {}
 local MAX_BOOTSTRAP_ATTEMPTS = 10
+
+--- Arm the watchdog for one slot.
+---
+--- The thread checks its own generation before it fires, so a watchdog that
+--- was replaced (because the cutscene announced itself) stays quiet.
+local function armWatchdog(src, payload, deadlineMs)
+  WatchdogGeneration[src] = (WatchdogGeneration[src] or 0) + 1
+  local generation = WatchdogGeneration[src]
+  WorldWatchdogs[src] = payload
+
+  CreateThread(function()
+    Wait(deadlineMs)
+    if WatchdogGeneration[src] ~= generation then return end
+    local pending = WorldWatchdogs[src]
+    if not pending then return end
+    WorldWatchdogs[src] = nil
+    print(('[%s] slot %d: the world entry never came - the watchdog sends it'):format(
+      RESOURCE, src))
+    TriggerClientEvent('nifty:client:enterWorld', src, pending)
+  end)
+end
 
 -- Identity.discordIdOf owns the identifier read (identity.lua). This file only
 -- decides what an answer means.
@@ -153,6 +188,25 @@ local function worldPayload(character)
     end
   end
 
+  -- The stored appearance is decoded defensively.
+  --
+  -- `json.decode` THROWS on a malformed string, and this runs in the middle of
+  -- the creator's finish: a throw here meant no world payload, no world entry
+  -- and a player in front of a black screen. The appearance is written by the
+  -- server itself, so it is valid JSON - but "written by us" is not the same
+  -- as "cannot be wrong", and a character row that was edited by hand is
+  -- exactly the case where a loud crash is the wrong answer.
+  local appearance = nil
+  if character.appearance and character.appearance ~= '' then
+    local ok, decoded = pcall(json.decode, character.appearance)
+    if ok and type(decoded) == 'table' then
+      appearance = decoded
+    else
+      print(('[%s] character %s: the stored appearance is not valid JSON - the client gets none'):format(
+        RESOURCE, tostring(character.id)))
+    end
+  end
+
   return {
     character = {
       id = character.id,
@@ -160,7 +214,7 @@ local function worldPayload(character)
       lastName = character.last_name,
       dateOfBirth = character.date_of_birth,
       gender = character.gender,
-      appearance = character.appearance and json.decode(character.appearance) or nil,
+      appearance = appearance,
       spawnPoint = character.spawn_point,
     },
     -- `or SpawnPoints.default` and not `SpawnPoints[x or 'default']`: a row can
@@ -339,6 +393,20 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
       'Das Aussehen konnte nicht gespeichert werden. Bitte erneut versuchen.')
   end
 
+  -- THE CREATOR IS DONE, AND IT CLOSES HERE - FIRST.
+  --
+  -- The creator closes on this signal, and NOT on the world entry: the world
+  -- entry happens after the cutscene, and the creator panel would then float
+  -- over the video for the whole 26 seconds - the NUI is drawn on top of the
+  -- game and does not fade with it.
+  --
+  -- It is sent HERE, right after the save, because everything that follows can
+  -- throw: the accessory mirror, the grant loop, the world payload, the
+  -- cutscene. It used to be sent at the very END of the handler, and a single
+  -- error in the grant loop left the player sitting in front of an open
+  -- creator with a saved character and no world - the worst of both.
+  TriggerClientEvent('nifty:client:creatorFinished', src)
+
   -- Side-effect: nifty-clothing listens for this and creates an inventory
   -- mirror for every accessory slot (mask, hat, glasses, etc.). One event
   -- keeps the dependency direction one-way: nifty-world does not import
@@ -349,10 +417,11 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- Now that the save is in stone, treat every selected piece as owned. The
   -- creator grants the outfit (per-drawable rows in `character_clothing`),
   -- so the wardrobe can offer them back later and the store can skip them.
-  -- INSERT IGNORE inside Owned.grant makes this idempotent — re-completing
-  -- the creator would re-grant the same pieces, but `Identity.saveCharacter`
-  -- already returns early when appearance is non-null (line 251), so this
-  -- path runs exactly once per character.
+  -- INSERT IGNORE inside Owned.grant makes this idempotent, so re-completing
+  -- the creator re-grants the same pieces instead of failing.
+  --
+  -- The path itself runs once per character: the handler above returns early
+  -- when the character already has an appearance.
   if type(appearance.components) == 'table' then
     for slotId, slot in pairs(appearance.components) do
       if type(slot) == 'table' then
@@ -381,12 +450,6 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- clothing at all.
   local saved = Identity.getCharacter(account.id)
 
-  -- The creator is DONE. It closes on this signal, and NOT on the world entry:
-  -- the world entry happens after the cutscene, and the creator panel would
-  -- then float over the video for the whole 26 seconds - the NUI is drawn on
-  -- top of the game and does not fade with it.
-  TriggerClientEvent('nifty:client:creatorFinished', src)
-
   -- First-time creator completion plays the Concat plane cutscene (~26s)
   -- before the world loads. The cutscene handler on the client fires the
   -- world entry itself when the cutscene ends - so the world payload travels
@@ -396,18 +459,14 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- `data.character.appearance` and `data.spawn.x` without a guard, and a
   -- cutscene that fires the world entry without them leaves the player on a
   -- black screen with no error anywhere.
-  prepareWorld(src, saved, true)
+  --
   -- NOT named `payload`: that is the client's own appearance payload, which
   -- arrived as an argument of this handler.
   local worldEntry = worldPayload(saved)
-  TriggerClientEvent('nifty:client:welcomeCutscene', src, {
-    gender = saved.gender,
-    world = worldEntry,
-  })
 
-  -- THE WATCHDOG.
+  -- THE WATCHDOG, BEFORE ANYTHING THAT CAN THROW.
   --
-  -- The world entry now depends on the CLIENT: the cutscene ends it. If the
+  -- The world entry depends on the CLIENT: the cutscene ends it. If the
   -- cutscene event never arrives - the handler died, the event was dropped,
   -- the client hiccuped - the player sits in a black screen with no way out,
   -- because the screen was faded to black when they spawned and nobody fades
@@ -416,16 +475,31 @@ RegisterNetEvent('nifty:server:finishAppearance', function(payload)
   -- So: if nobody reports the world entry within a minute, the server sends
   -- it. The cutscene path is the good path; this one only ever runs when the
   -- good path did not happen.
-  WorldWatchdogs[src] = worldEntry
-  CreateThread(function()
-    Wait(WORLD_WATCHDOG_MS)
-    local pending = WorldWatchdogs[src]
-    if not pending then return end
-    WorldWatchdogs[src] = nil
-    print(('[%s] slot %d: the world entry never came - the watchdog sends it'):format(
-      RESOURCE, src))
-    TriggerClientEvent('nifty:client:enterWorld', src, pending)
-  end)
+  --
+  -- It is armed BEFORE `prepareWorld`, because `prepareWorld` opens a session,
+  -- grants the starting items and arms the Stütze - three things that can
+  -- fail, and none of them is worth a player staring into a black screen.
+  armWatchdog(src, worldEntry, WORLD_WATCHDOG_MS)
+
+  prepareWorld(src, saved, true)
+
+  TriggerClientEvent('nifty:client:welcomeCutscene', src, {
+    gender = saved.gender,
+    world = worldEntry,
+  })
+end)
+
+-- The cutscene has started: the world entry is not overdue yet.
+--
+-- The client says this before it starts the video. The watchdog then waits
+-- for the video's own length instead of the short deadline - otherwise it
+-- would fire in the middle of the cutscene and send the world entry a second
+-- time, on top of the one the cutscene sends when it ends.
+RegisterNetEvent('nifty:server:cutsceneRunning', function()
+  local src = source
+  local pending = WorldWatchdogs[src]
+  if not pending then return end
+  armWatchdog(src, pending, WORLD_WATCHDOG_CUTSCENE_MS)
 end)
 
 -- The client reports that the world entry happened.

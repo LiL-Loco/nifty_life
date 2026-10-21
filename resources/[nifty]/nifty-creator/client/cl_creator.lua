@@ -1437,11 +1437,21 @@ exports('pickTattoo', function(zoneId, collection, preset)
     if other.zoneId ~= zoneId then kept[#kept + 1] = other end
   end
   if #kept < AppearanceConfig.MAX_TATTOOS then
-    -- The collection is stored as a HASH, because that is what the native
-    -- wants: `AddPedDecorationFromHashes(ped, collection, overlay)`. The panel
-    -- sends the collection NAME - that is what it has - and a name handed to a
-    -- native that wants a number is a zero, which draws nothing at all.
-    kept[#kept + 1] = { collection = joaat(collection), preset = preset, zoneId = zoneId }
+    -- THE COLLECTION IS STORED AS THE NAME, NOT AS A HASH.
+    --
+    -- The server validates a tattoo against `ALLOWED_TATTOO_COLLECTIONS`, and
+    -- that list is keyed by NAME. A hash is not a key, so a tattoo stored as a
+    -- hash was dropped by the validation without a word - and every tattoo
+    -- disappeared at the next save, while the creator still showed it.
+    --
+    -- The native wants a hash: `AddPedDecorationFromHashes(ped, collection,
+    -- overlay)`. That conversion is not this file's job - `applyDecorations` in
+    -- nifty-world does it, and it accepts both forms.
+    --
+    -- The hair overlay is the opposite case, and deliberately so: the server
+    -- range-checks it (`Validate.hairOverlay` wants a number) because it has
+    -- no name list for it.
+    kept[#kept + 1] = { collection = collection, preset = preset, zoneId = zoneId }
     face.tattoos = kept
     applyDecorations()
   end

@@ -472,8 +472,23 @@ AddEventHandler('playerDisconnected', function()
   end
 end)
 
--- Periodic save. Everything a player can change about themselves is stored, and
--- none of it is worth losing to an event that is documented not to fire reliably.
+-- Periodic save. The position is what this is for.
+--
+-- NOT THE APPEARANCE, and that needs saying out loud, because the old comment
+-- claimed both. The client does not keep a copy of the appearance it is
+-- wearing: `currentAppearance` is set in `applyAppearance`, which nobody calls
+-- (the world entry goes through `applyAppearanceParts`), so it was always nil
+-- and the autosave always sent nothing.
+--
+-- Sending it anyway would be WORSE than not sending it. Every path that
+-- changes the appearance saves it itself and immediately - the creator, the
+-- store, the wardrobe, the hood - and those saves happen on the SERVER. The
+-- client's copy would be the one from the world entry, so the autosave would
+-- write the OLD appearance back over the new one and take the player's
+-- purchase with it.
+--
+-- The position has no such problem: the server reads it from the ped's actual
+-- coordinates, so the client cannot even get it wrong.
 local AUTOSAVE_INTERVAL_MS = 60000
 
 CreateThread(function()
@@ -487,9 +502,7 @@ CreateThread(function()
     -- `waitingForWorld` is false from the moment the player has a character, so
     -- this only starts saving for someone who is actually in the world.
     if not waitingForWorld then
-      TriggerServerEvent('nifty:server:saveCharacter', {
-        appearance = getCurrentAppearance(),
-      })
+      TriggerServerEvent('nifty:server:saveCharacter', {})
     end
   end
 end)
