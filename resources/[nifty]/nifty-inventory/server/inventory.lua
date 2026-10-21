@@ -798,8 +798,23 @@ end
 exports('view', Inventory.view)
 exports('add', Inventory.add)
 exports('getDefinition', Inventory.getDefinition)
+-- The whole catalogue, for the shop: it prices every item it offers.
+--
+-- This export was MISSING as well - the function existed at line 81 and was
+-- simply never handed out, so the shop's catalogue crashed on its first
+-- `Inventory:getAllDefinitions()` with the same "No such export" as the
+-- starting items. The function being there is not the same as the export
+-- being there.
+exports('getAllDefinitions', Inventory.getAllDefinitions)
 exports('remove', Inventory.remove)
 exports('count', Inventory.count)
+-- The starting items (a phone and an ID card). ADR-0018: every character
+-- begins with a handset and an ID.
+--
+-- This export was MISSING, and it is called the moment a character enters the
+-- world - so every character entered without a phone, and the client console
+-- said "No such export grantStartingItems in resource nifty-inventory".
+exports('grantStartingItems', Inventory.grantStartingItems)
 exports('has', Inventory.has)
 exports('use', Inventory.use)
 exports('move', Inventory.move)
