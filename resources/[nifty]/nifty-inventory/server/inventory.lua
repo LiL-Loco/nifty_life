@@ -26,6 +26,7 @@ local Db = Nifty.Db
 local GetSetting = Nifty.GetSetting
 local Identity = Nifty.Identity
 
+
 --- Item weights are DECIMAL money values, so rounding belongs to the economy system.
 --- Reached through the facade: nifty-economy was absorbed into nifty-core, so
 --- the table is now a field on the bridge.
@@ -772,15 +773,7 @@ end
 -- Life cycle
 -- ---------------------------------------------------------------------------
 
-AddEventHandler('onResourceStart', function(resource)
-  if resource ~= RESOURCE then return end
 
-  -- The catalogue must be read AFTER settings, because every capacity answer
-  -- depends on both. `Db.ready` callbacks fire in registration order and
-  -- settings.lua registers before inventory.lua in fxmanifest, so this one runs
-  -- second — same guarantee the fixed two-second timeout was only hoping for.
-  Db.ready(loadDefinitions)
-end)
 
 --- A new character starts with what a person actually has on them. This is the
 --- only place items are handed out for free, and it is deliberately dull.
@@ -841,6 +834,27 @@ exports('unregisterUseHandler', Inventory.unregisterUseHandler)
 exports('transferBetween', Inventory.transferBetween)
 exports('stampMetadata', Inventory.stampMetadata)
 exports('splitStack', Inventory.splitStack)
+
+-- THE CATALOGUE IS READ LAST - after the exports, and never before.
+--
+-- Two things were wrong with it, and both had the same shape: it was read
+-- through `Db.ready`, and it was read BEFORE the exports were registered.
+--
+-- `Db.ready` belongs to the base. From here, across the resource boundary,
+-- it is not a function the inventory can call (measured: `type()` says
+-- 'table', and the callback never ran). nifty-core can call it because it IS
+-- nifty-core; nobody else can.
+--
+-- And the ORDER was the reason every export of this resource was missing for
+-- the first half-minute of every boot. The catalogue read blocks until the
+-- database answers - which is a second or two after the start - and the
+-- resource counts as STARTED before its script is finished. The phone starts
+-- in that window, calls `registerUseHandler`, and gets "No such export".
+--
+-- So: the exports are registered first (they are above), and only then is
+-- the catalogue read. The read blocks until the database is there, which is
+-- exactly what it should do - and by then everything can call this resource.
+loadDefinitions()
 
 -- ---------------------------------------------------------------------------
 -- NUI-driven actions
