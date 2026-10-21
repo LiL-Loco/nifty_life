@@ -129,7 +129,6 @@ export function LoadScreen() {
         case 'startDataFileEntries': {
           // The map load starts here. Its count is announced once and never
           // again, which is why `performMapLoadFunction` carries only an idx.
-          setEmoji('🍕');
           raiseTo(composed(data));
           break;
         }
@@ -229,7 +228,6 @@ export function LoadScreen() {
 
         <p className="stage-status" role="status" aria-live="polite">
           {phase}
-          {emoji ? <span className="stage-emoji">{emoji}</span> : null}
         </p>
       </div>
 
