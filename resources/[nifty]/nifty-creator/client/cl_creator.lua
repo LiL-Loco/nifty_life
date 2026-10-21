@@ -367,7 +367,6 @@ end
 -- ----------------------------------------------------------------- camera
 
 local creatorCam = nil
-local camYaw = 0.0
 local camPitch = 0.0
 local camRadius = 2.6
 
@@ -676,6 +675,12 @@ end
 
 --- ------------------------------------------------------------- hair overlays
 
+--- Which hair overlays have already been reported to the server.
+---
+--- A set, not a history: it exists so that the same combination does not
+--- produce a second log line, and it is allowed to forget.
+local reportedHairOverlays = {}
+
 --- The face natives, resolved once by nifty-world. Fetched at use, not at load:
 --- an export called while the other resource is still starting returns nil, and
 --- indexing nil at load time would take this whole file down.
@@ -683,152 +688,80 @@ local function natives()
   return exports['nifty-world']:faceNatives() or {}
 end
 
---- 'unchecked' | 'available' | 'unavailable:<reason>'
-local hairOverlayState = 'unchecked'
-
---- preset hash -> collection hash, for every tattoo-shop item in the
---- `hairOverlay` update group.
-local hairOverlayMap = nil
-
---- The overlay presets, in a stable order, so the menu rows do not move between
---- sessions.
-local hairOverlayPresets = nil
-
---- Build the preset -> collection map from the tattoo shop.
----
---- THE UNCERTAIN PART, and the reason this is behind a probe. GTA exposes the
---- tattoo shop items through `GET_TATTOO_SHOP_DLC_ITEM_DATA`, whose third argument
---- is a POINTER to a three-field struct. Lua cannot build that pointer. FiveM ships
---- a C# helper, `GetTattooCollectionData`, that wraps it - but nothing in the
---- documentation says whether that helper is reachable from Lua, and calling a
---- name that turns out not to exist is a nil-call error at runtime rather than a
---- compile error.
----
---- So: probe, and if the map cannot be built, say so in the log and leave the menu
---- row out. A feature that is missing and a feature that is silently broken look
---- identical to a player, and only the first is acceptable.
-local function probeHairOverlays()
-  if hairOverlayState ~= 'unchecked' then return hairOverlayState end
-
-  local n = natives()
-  local function missing(reason)
-    hairOverlayState = 'unavailable:' .. reason
-    print(('[%s] hair overlays unavailable - %s'):format(RESOURCE, reason))
-    return hairOverlayState
-  end
-
-  if type(n.numTattooShopDlcItems) ~= 'function' then
-    return missing('GetNumTattooShopDlcItems is not available in this runtime')
-  end
-  if type(n.tattooCollectionData) ~= 'function' then
-    return missing('GetTattooCollectionData is not callable from Lua here')
-  end
-
-  -- Character index 3 is male, 4 is female. Not our own numbering.
-  local characterIndex = (currentModel == 'mp_f_freemode_01') and 4 or 3
-
-  local ok, count = pcall(n.numTattooShopDlcItems, characterIndex)
-  if not ok or type(count) ~= 'number' then
-    return missing('the tattoo shop item count did not come back as a number')
-  end
-  if count <= 0 then
-    return missing(('the tattoo shop reports %d items'):format(count))
-  end
-
-  local map = {}
-  local groupHash = joaat('hairOverlay')
-
-  for i = 0, count - 1 do
-    local got, data = pcall(n.tattooCollectionData, characterIndex, i)
-    if got and type(data) == 'table' and data.preset and data.collection then
-      -- `updateGroup` is a uint in some builds and a string in others. Both are
-      -- accepted, because whichever this build hands back is the one it uses to
-      -- group the shop.
-      local group = data.updateGroup
-      if group == groupHash or group == 'hairOverlay' or tostring(group) == 'hairOverlay' then
-        map[data.preset] = data.collection
-      end
-    end
-  end
-
-  local presets = {}
-  for preset in pairs(map) do presets[#presets + 1] = preset end
-  if #presets == 0 then
-    return missing(('none of the %d shop items belong to the hairOverlay group'):format(count))
-  end
-  table.sort(presets)
-
-  hairOverlayMap = map
-  hairOverlayPresets = presets
-  hairOverlayState = 'available'
-
-  print(('[%s] hair overlays: %d presets across %d shop items'):format(
-    RESOURCE, #presets, count))
-
-  return hairOverlayState
-end
-
---- The decal preset the game ties to the hairstyle currently on the ped.
----
---- The hairstyle is read back with `GetPedDrawableVariation`, which reports the
---- GLOBAL index the engine actually applied. Going through
---- `GET_HASH_NAME_FOR_COMPONENT` with that is deliberate: the creator stores
---- collection-local drawables, and passing one of those to a native that expects
---- a global one would silently ask about a different hairstyle.
-local function presetForCurrentHair(ped)
-  local n = natives()
-  if type(n.hashNameForComponent) ~= 'function' then return nil end
-  if type(n.forcedComponentCount) ~= 'function' then return nil end
-  if type(n.getForcedComponent) ~= 'function' then return nil end
-
-  local okHash, hash = pcall(n.hashNameForComponent, ped, 2, GetPedDrawableVariation(ped, 2), 0)
-  if not okHash or type(hash) ~= 'number' or hash == 0 then return nil end
-
-  local okCount, count = pcall(n.forcedComponentCount, hash)
-  if not okCount or type(count) ~= 'number' then return nil end
-
-  for i = 0, count - 1 do
-    -- Out-pointer parameters in FiveM Lua are the least documented corner of the
-    -- runtime, so the call is wrapped and its return values read. If this build
-    -- hands them back as arguments instead, the probe below finds nothing and the
-    -- feature degrades to "no overlay" rather than to an error.
-    local ok, fHash, fIndex, fType = pcall(n.getForcedComponent, hash, i, 0, 0, 0)
-    if ok and type(fHash) == 'number' and fHash ~= 0 then
-      -- Type 10 is the decal component, which is what carries hair overlays.
-      if fType == 10 or (fType == nil and hairOverlayMap and hairOverlayMap[fHash]) then
-        return fHash
-      end
-    end
-  end
-
-  return nil
-end
-
---- The hair overlay, resolved to hashes and stored.
+--- The hair overlay of the hairstyle that is on the ped.
 ---
 --- IT IS NOT A MENU ROW, and that is a correction of the earlier design. The game
---- ties one specific decal to each hairstyle - that is what the forced-component
---- table below is walking - so offering a list of eighty overlays to pick from
---- would be offering the player a choice the game itself does not have, and the
---- wrong pair simply draws nothing. Picking a hairstyle picks its overlay.
+--- ties one specific decal to each hairstyle, so offering a list of eighty
+--- overlays to pick from would be offering the player a choice the game itself
+--- does not have, and the wrong pair simply draws nothing. Picking a hairstyle
+--- picks its overlay.
+---
+--- THE MAP IS NOT BUILT AT RUNTIME. It used to be: the tattoo shop was walked
+--- through `GET_TATTOO_SHOP_DLC_ITEM_DATA`, whose third argument is a POINTER to
+--- a three-field struct that Lua cannot build, wrapped in a C# helper
+--- `GetTattooCollectionData` that does not exist in the runtime at all - the
+--- native list has `GET_TATTOO_SHOP_DLC_ITEM_DATA` and nothing else of that
+--- shape. The probe therefore always failed, the overlay was never applied, and
+--- the hair had no fading. The creator said so in the log every time and then
+--- did nothing, which is the honest failure but still a missing feature.
+---
+--- The mapping was in the data the whole time: every row of
+--- `data/<gender>_hair.json` carries `HairTattooCollection` and
+--- `HairTattooOverlay`, keyed by the GLOBAL drawable and the texture - the very
+--- key the names and the tags use.
 ---
 --- The stored value is `{ collection, preset }`, both hashes, NOT the hairstyle.
 --- That matters on login: nifty-world re-applies a stored appearance without
 --- knowing which ped model was picked, and asking the engine again there would
---- mean duplicating a probe whose out-pointer parameters are the least documented
---- corner of the runtime. Resolve once, here, where the uncertainty already lives.
+--- mean duplicating a lookup whose out-pointer parameters are the least
+--- documented corner of the runtime. Resolve once, here, where the uncertainty
+--- already lives.
 resolveHairOverlay = function()
-  if probeHairOverlays() ~= 'available' then
+  -- The opacity is the player's own choice and survives a re-resolve: the
+  -- slider writes it, and a new hairstyle must not throw it away.
+  local opacity = face.hairOverlay and face.hairOverlay.opacity or 1.0
+
+  local pick = selection.components and selection.components['2']
+  if not pick or not pick.collection then
     face.hairOverlay = nil
     return
   end
 
-  local preset = presetForCurrentHair(PlayerPedId())
-  local collection = preset and hairOverlayMap and hairOverlayMap[preset] or nil
+  local ped = PlayerPedId()
 
-  face.hairOverlay = (preset and collection)
-    and { collection = collection, preset = preset, opacity = face.hairOverlay and face.hairOverlay.opacity or 1.0 }
-    or  nil
+  -- The GLOBAL drawable, because the data is keyed by it. The project stores
+  -- the collection-local one, and for the same hairstyle the two are different
+  -- numbers.
+  local global = Variation.global(ped, 'components', 2, pick.collection, pick.drawable)
+  if not global then
+    face.hairOverlay = nil
+    return
+  end
+
+  local collection, overlay = GameData.hairTattoo(global, pick.texture)
+  if not collection then
+    face.hairOverlay = nil
+    return
+  end
+
+  face.hairOverlay = {
+    collection = collection,
+    preset = overlay,
+    opacity = opacity,
+  }
+
+  -- To the server, because the client's own console is a place nobody reads.
+  -- "Did the overlay resolve?" is a question with an answer, and the answer
+  -- has to be readable from outside the game.
+  --
+  -- Once per combination, not once per call: this runs on every hair change,
+  -- and a log line per frame is a log nobody reads.
+  local key = ('%d/%d/%d/%d'):format(pick.drawable, pick.texture or 0, collection, overlay)
+  if not reportedHairOverlays[key] then
+    reportedHairOverlays[key] = true
+    TriggerServerEvent('nifty:server:variationDiag', ('%s: Haar-Overlay %d/%d -> collection %d, overlay %d')
+      :format(RESOURCE, pick.drawable, pick.texture or 0, collection, overlay))
+  end
 end
 
 --- Re-apply everything that shares the facial-decoration channel.
@@ -1152,13 +1085,6 @@ exports('openCreator', function(data)
   face.eyeColour = 0
   face.headBlend = { father = 0, mother = 21, third = 21, motherWeight = 0.5, fatherWeight = 0.5, thirdWeight = 0.0, skinTone = 0.5 }
 
-  -- The probe result is per model, so it is re-run when the model changes. A
-  -- female ped has its own tattoo shop, and a map built for the male one would
-  -- offer presets that do not exist here.
-  hairOverlayState = 'unchecked'
-  hairOverlayMap = nil
-  hairOverlayPresets = nil
-
   local scene = CreatorScene
   local ped = PlayerPedId()
   SetEntityCoords(ped, scene.x, scene.y, scene.z, false, false, false, false)
@@ -1307,7 +1233,10 @@ exports('getState', function()
     overlayLabels    = OVERLAY_LABELS,
     zoneLabels       = ZONE_LABELS,
     maxTexture       = AppearanceConfig and AppearanceConfig.MAX_TEXTURE or 80,
-    hairOverlayState = hairOverlayState,
+    -- Whether the hair overlay resolved for the CURRENT hairstyle. It is not
+    -- a probe result any more: the data answers per hairstyle, and most
+    -- hairstyles have no tattoo at all.
+    hairOverlayState = face.hairOverlay and 'available' or 'unavailable:this hairstyle has no tattoo',
     modelIsUndecided = modelIsUndecided,
     skinCam          = skinCam and 'face' or 'body',
   }
@@ -1441,7 +1370,11 @@ exports('pickTattoo', function(zoneId, collection, preset)
     if other.zoneId ~= zoneId then kept[#kept + 1] = other end
   end
   if #kept < AppearanceConfig.MAX_TATTOOS then
-    kept[#kept + 1] = { collection = collection, preset = preset, zoneId = zoneId }
+    -- The collection is stored as a HASH, because that is what the native
+    -- wants: `AddPedDecorationFromHashes(ped, collection, overlay)`. The panel
+    -- sends the collection NAME - that is what it has - and a name handed to a
+    -- native that wants a number is a zero, which draws nothing at all.
+    kept[#kept + 1] = { collection = joaat(collection), preset = preset, zoneId = zoneId }
     face.tattoos = kept
     applyDecorations()
   end
@@ -1588,7 +1521,6 @@ end)
 -- player is looking at (degrees, GTA's right-handed convention); each Q
 -- or E press adds or subtracts exactly one degree. Zoom is the FOV;
 -- smaller = closer, larger = further. Both clamped.
-local camYaw = 0.0
 -- Assigned, not declared: zoomCamera is defined ABOVE here and reads all four,
 -- so they are the forward declarations made near the top of the file. Declaring
 -- them `local` again at this line would shadow them and zoomCamera would reach

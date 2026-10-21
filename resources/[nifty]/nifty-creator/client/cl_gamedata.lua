@@ -246,6 +246,46 @@ function GameData.hasTag(isProp, id, collection, drawable, texture, count, tag)
   return false
 end
 
+-- ---------------------------------------------------------- hair tattoo
+
+--- The hair tattoo of one hairstyle: the two hashes the engine needs to draw the
+--- hair's own overlay (its fading, its colour gradient).
+---
+--- THE DATA WAS HERE THE WHOLE TIME. Every row of `data/<gender>_hair.json`
+--- carries `HairTattooCollection` and `HairTattooOverlay`, keyed exactly like
+--- the names are keyed: by the GLOBAL drawable and the texture.
+---
+--- The creator used to build this map at runtime, out of the tattoo shop:
+--- `GET_TATTOO_SHOP_DLC_ITEM_DATA` (whose third argument is a POINTER to a
+--- struct that Lua cannot build) and the C# helper `GetTattooCollectionData`
+--- (which does not exist in the runtime at all - the native list has
+--- `GET_TATTOO_SHOP_DLC_ITEM_DATA` and nothing else of that shape). So the
+--- probe always failed, and the hair never got its overlay.
+---
+--- A row without a tattoo says so with -1 in both fields. That is a real
+--- answer, not a missing row: most hairstyles have no overlay at all.
+---
+--- @return number|nil collection, number|nil overlay
+function GameData.hairTattoo(global, texture)
+  local table_ = load(genderPrefix() .. 'hair')
+  if not table_ then return nil end
+
+  local row = table_[tostring(global)]
+  if not row then return nil end
+
+  local entry = row[tostring(texture or 0)]
+  if not entry then return nil end
+
+  local collection = tonumber(entry.HairTattooCollection)
+  local overlay = tonumber(entry.HairTattooOverlay)
+  if not collection or not overlay then return nil end
+
+  -- -1 means "this hairstyle has no tattoo". Both fields are -1 together.
+  if collection == -1 or overlay == -1 then return nil end
+
+  return collection, overlay
+end
+
 -- ------------------------------------------------------------- best torso
 
 --- The torso that fits under a top, as (globalDrawable, texture), or nil.
