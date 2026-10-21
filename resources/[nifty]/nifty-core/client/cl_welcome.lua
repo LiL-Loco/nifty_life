@@ -113,6 +113,26 @@ local PASSENGER_MODELS = {
   'a_f_m_business_01',
 }
 
+-- THE FALLBACK OUTFIT.
+--
+-- If an NPC model is not available, the seat is filled with the freemode model
+-- of that seat's gender - but in the suit ROCKSTAR puts its passengers in.
+-- The point of the fallback is that the passenger still does not look like the
+-- player: different clothes, and a head that is not the player's head.
+--
+-- These are the component variations from Rockstar's own script (the outfit
+-- table there, one row per seat, one pair per component: drawable and
+-- texture). Same numbers in all four community ports.
+local PASSENGER_OUTFITS = {
+  { [0] = { 21, 0 }, [1] = { 0, 0 }, [2] = { 9, 0 },  [3] = { 1, 0 },  [4] = { 9, 0 },  [5] = { 0, 0 }, [6] = { 4, 8 },   [7] = { 0, 0 },  [8] = { 15, 0 }, [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 10, 0 } },
+  { [0] = { 13, 0 }, [1] = { 0, 0 }, [2] = { 5, 4 },  [3] = { 1, 0 },  [4] = { 10, 0 }, [5] = { 0, 0 }, [6] = { 10, 0 }, [7] = { 11, 2 }, [8] = { 13, 6 }, [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 10, 0 } },
+  { [0] = { 15, 0 }, [1] = { 0, 0 }, [2] = { 1, 4 },  [3] = { 1, 0 },  [4] = { 0, 1 },  [5] = { 0, 0 }, [6] = { 1, 7 },   [7] = { 0, 0 },  [8] = { 2, 9 },  [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 6, 0 } },
+  { [0] = { 14, 0 }, [1] = { 0, 0 }, [2] = { 5, 3 },  [3] = { 3, 0 },  [4] = { 1, 6 },  [5] = { 0, 0 }, [6] = { 11, 5 }, [7] = { 0, 0 },  [8] = { 2, 0 },  [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 3, 12 } },
+  { [0] = { 18, 0 }, [1] = { 0, 0 }, [2] = { 15, 3 }, [3] = { 15, 0 }, [4] = { 2, 5 },  [5] = { 0, 0 }, [6] = { 4, 6 },   [7] = { 4, 0 },  [8] = { 3, 0 },  [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 4, 0 } },
+  { [0] = { 27, 0 }, [1] = { 0, 0 }, [2] = { 7, 3 },  [3] = { 11, 0 }, [4] = { 4, 8 },  [5] = { 0, 0 }, [6] = { 13, 14 },[7] = { 5, 3 },  [8] = { 3, 0 },  [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 2, 7 } },
+  { [0] = { 16, 0 }, [1] = { 0, 0 }, [2] = { 15, 1 }, [3] = { 3, 0 },  [4] = { 5, 6 },  [5] = { 0, 0 }, [6] = { 2, 8 },   [7] = { 0, 0 },  [8] = { 2, 0 },  [9] = { 0, 0 }, [10] = { 0, 0 }, [11] = { 3, 7 } },
+}
+
 -- The two character slots of the cutscene.
 local MALE_SLOT = 'MP_Male_Character'
 local FEMALE_SLOT = 'MP_Female_Character'
@@ -183,17 +203,54 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       Wait(0)
     end
 
-    if not HasModelLoaded(hash) then
-      print(('[nifty-core] the model "%s" for seat %d did not load - the seat stays empty'):format(
-        model, index))
+    local created = 0
+    if HasModelLoaded(hash) then
+      created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+    end
+
+    if created and created ~= 0 then
+      SetModelAsNoLongerNeeded(hash)
+      passengers[#passengers + 1] = created
     else
-      local created = CreatePed(26, hash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
-      if created and created ~= 0 then
-        SetModelAsNoLongerNeeded(hash)
-        passengers[#passengers + 1] = created
+      -- THE FALLBACK.
+      --
+      -- The NPC model is not available. Rather than an empty seat, the seat is
+      -- filled with the freemode model of that seat's gender - in the suit
+      -- Rockstar's passengers wear. Still not the player: different clothes,
+      -- and a head that is not the player's head.
+      local fallbackModel = (index <= 3) and 'mp_m_freemode_01' or 'mp_f_freemode_01'
+      local fallbackHash = joaat(fallbackModel)
+      RequestModel(fallbackHash)
+      local fallbackDeadline = GetGameTimer() + 10000
+      while not HasModelLoaded(fallbackHash) do
+        if GetGameTimer() > fallbackDeadline then break end
+        Wait(0)
+      end
+
+      local fallback = 0
+      if HasModelLoaded(fallbackHash) then
+        fallback = CreatePed(26, fallbackHash, PRE_POS.x, PRE_POS.y, PRE_POS.z, 0.0, false, false)
+      end
+
+      if fallback and fallback ~= 0 then
+        SetModelAsNoLongerNeeded(fallbackHash)
+        local outfit = PASSENGER_OUTFITS[index]
+        if outfit then
+          for component = 0, 11 do
+            local variation = outfit[component]
+            if variation then
+              SetPedComponentVariation(fallback, component, variation[1], variation[2], 0)
+            end
+          end
+        end
+        for prop = 0, 8 do ClearPedProp(fallback, prop) end
+        FinalizeHeadBlend(fallback)
+        passengers[#passengers + 1] = fallback
+        print(('[nifty-core] the model "%s" for seat %d is not available - the seat gets the suit instead'):format(
+          model, index))
       else
-        print(('[nifty-core] the ped for seat %d ("%s") could not be created - the seat stays empty'):format(
-          index, model))
+        print(('[nifty-core] neither the model "%s" nor the suit for seat %d could be created - the seat stays empty'):format(
+          model, index))
       end
     end
   end
