@@ -89,6 +89,19 @@ local COMPONENT_FILE = {
   [11] = 'tops',
 }
 
+--- THE ONE FAMILY WHOSE FILES ARE NAMED THE OTHER WAY ROUND.
+---
+--- The game's own dumps carry the gender as a PREFIX almost everywhere
+--- ('male_hair', 'female_tops') - but the masks carry it as a SUFFIX
+--- ('masks_male', 'masks_female'). The loader builds the prefix form, so this
+--- one family needs its own names.
+---
+--- It matters: the old code asked for 'male_masks', and that file does not
+--- exist, so the mask slot had no names at all.
+local FILE_BY_GENDER = {
+  masks = { male = 'masks_male', female = 'masks_female' },
+}
+
 local PROP_FILE = {
   [0] = 'hats',
   [1] = 'glasses',
@@ -96,6 +109,26 @@ local PROP_FILE = {
   [6] = 'watches',
   [7] = 'bracelets',
 }
+
+--- The data file for one slot, with the gender in it.
+---
+--- It is a function and not an inline expression because the two tables above
+--- have to be in scope first: a local declared LATER is not visible inside a
+--- function body, and the function would look the name up as a global.
+---
+--- @return string|nil the file name without the extension, or nil for a slot
+---                  that has no file (the engine has no drawables there).
+local function fileForSlot(isProp, id)
+  local file = (isProp and PROP_FILE[id]) or COMPONENT_FILE[id]
+  if not file then return nil end
+
+  local exception = FILE_BY_GENDER[file]
+  if exception then
+    return exception[GameData.gender] or exception.male
+  end
+
+  return (isProp and propPrefix() or genderPrefix()) .. file
+end
 
 --- Set by the creator before anything is looked up.
 function GameData.setGender(gender)
@@ -197,11 +230,10 @@ end
 --- built a whole collection at a time, and passing a count of 1 would cache a map
 --- that only knows index 0 - which then looks like "no data" for every other item.
 function GameData.itemName(isProp, id, collection, drawable, texture, count)
-  local prefix = isProp and propPrefix() or genderPrefix()
-  local file = (isProp and PROP_FILE[id]) or COMPONENT_FILE[id]
-  if not file then return nil end
+  local fileName = fileForSlot(isProp, id)
+  if not fileName then return nil end
 
-  local table_ = load(prefix .. file)
+  local table_ = load(fileName)
   if not table_ then return nil end
 
   local global = GameData.globalFor(PlayerPedId(), isProp and 'props' or 'components',
@@ -222,7 +254,13 @@ end
 --- explicitly that a missing row means either "these are the original freemode
 --- clothes" or "Rockstar gave it no tags". Both are normal.
 function GameData.itemTags(isProp, id, collection, drawable, texture, count)
-  local file = load((isProp and 'prop' or 'component') .. '_tags_' .. GameData.gender)
+  -- The tag files carry the gender as a PREFIX, like everything else:
+  -- 'male_component_tags', 'male_prop_tags'. The old code asked for
+  -- 'component_tags_male', and that file does not exist - so no piece ever had
+  -- a restriction tag, and the restrictions the tags describe (a hat that
+  -- clashes with a mask, a jacket that cannot be worn with a bag) were never
+  -- checked on the client.
+  local file = load(genderPrefix() .. (isProp and 'prop_tags' or 'component_tags'))
   if not file then return {} end
 
   local global = GameData.globalFor(PlayerPedId(), isProp and 'props' or 'components',

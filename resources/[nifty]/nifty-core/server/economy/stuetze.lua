@@ -65,11 +65,22 @@ function Stuetze.start(src, characterId)
     Stuetze.pay(src, characterId)
 
     if Timers[src] then
-      Timers[src] = SetTimeout(interval, tick)
+      Timers[src] = SetTimeout(interval * 1000, tick)
     end
   end
 
-  Timers[src] = SetTimeout(interval, tick)
+  -- THE SETTING IS IN SECONDS, `SetTimeout` COUNTS IN MILLISECONDS.
+  --
+  -- `economy.stuetze.interval_sec` is 900 - a quarter of an hour - and it was
+  -- handed to SetTimeout unchanged, so the timer fired after 900 MILLISECONDS.
+  -- The Stütze paid every second, and the session cap (8 instalments) was the
+  -- only thing that stopped it: the log said "armed for slot 1 every 900s"
+  -- while the money moved nine hundred times faster than that.
+  --
+  -- The mistake stayed hidden because the second place the interval is used -
+  -- the `niftystuetze` command, which prints "amount * (3600 / interval)" euros
+  -- per hour - counts in SECONDS and therefore said the right thing.
+  Timers[src] = SetTimeout(interval * 1000, tick)
 
   print(('[%s] Stütze armed for slot %s every %ss'):format(RESOURCE, src, tostring(interval)))
 end

@@ -57,6 +57,25 @@ files {
   'ui/dist/assets/*.js',
   'ui/dist/assets/*.css',
   'ui/dist/images/*.webp',
+  -- THE DATA FOLDER, because the CLIENT reads it.
+  --
+  -- A client can only read files it downloaded, and what it downloads is what
+  -- the `files` directive lists. Without the data folder here, every lookup on
+  -- the client came back empty - with the message "data file missing:
+  -- data/<name>.json" in the client's console, which is the one console nobody
+  -- reads.
+  --
+  -- What that cost: the names of every piece, the restriction tags, the torso
+  -- mapping, the hair overlays and the whole tattoo catalogue. The creator ran
+  -- without a single name and without a single tattoo, and it had always been
+  -- like that - the server can read the files from disk, so the pricebook scan
+  -- found them and nobody noticed that the client could not.
+  --
+  -- The 8 MB are downloaded once per client, when the player joins. DECODING
+  -- them is what costs a player who never opens a menu, and the lazy loading
+  -- in cl_gamedata.lua takes care of that.
+  'data/*.json',
+  'data/tattoos/*.json',
 }
 
 -- The panel is BUILT from ui-monorepo/packages/creator (React + shadcn + Vite).

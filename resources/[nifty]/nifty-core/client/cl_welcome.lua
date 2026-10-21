@@ -105,20 +105,33 @@ local PASSENGER_SLOTS = {
 -- original casting - the first three are male, the last four female - so the
 -- cabin does not look lopsided.
 --
+-- THE FREEMODE, NOT A BUSINESS PED. This used to name 'a_m_m_business_01'
+-- and 'a_f_m_business_01', on the assumption that an ambient ped would look
+-- less like the player. Two things were wrong with that: those models are not
+-- in every FiveM build's CD image (measured - the seats fell back after a
+-- twelve second wait, and the wait was the visible "the scene takes forever
+-- to load"), and the outfit table does not apply to them anyway, because its
+-- drawable indices are freemode indices.
+--
+-- So the freemode it is, exactly as Rockstar does it: the same model the
+-- player wears, but in the suit, and with a head that is not the player's
+-- head. Rockstar's script also overrides the HEAD of every passenger; this
+-- does not - the probe measures the heads, so that has an answer instead of
+-- an assumption.
+--
 -- If a model cannot be created, the seat stays empty and the log says so.
 -- An empty seat is honest; a seat with a copy of the player in it is not.
 local PASSENGER_MODELS = {
-  'a_m_m_business_01', 'a_m_m_business_01', 'a_m_m_business_01',
-  'a_f_m_business_01', 'a_f_m_business_01', 'a_f_m_business_01',
-  'a_f_m_business_01',
+  'mp_m_freemode_01', 'mp_m_freemode_01', 'mp_m_freemode_01',
+  'mp_f_freemode_01', 'mp_f_freemode_01', 'mp_f_freemode_01',
+  'mp_f_freemode_01',
 }
 
--- THE FALLBACK OUTFIT.
+-- THE OUTFIT EACH SEAT WEARS.
 --
--- If an NPC model is not available, the seat is filled with the freemode model
--- of that seat's gender - but in the suit ROCKSTAR puts its passengers in.
--- The point of the fallback is that the passenger still does not look like the
--- player: different clothes, and a head that is not the player's head.
+-- The suit ROCKSTAR puts its passengers in. The point of the outfit is that
+-- the passenger does not look like the player: different clothes, and a head
+-- that is not the player's head.
 --
 -- These are the component variations from Rockstar's own script (the outfit
 -- table there, one row per seat, one pair per component: drawable and
@@ -187,6 +200,21 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
     end
   end
 
+  -- THE SERVER IS TOLD THAT THE SCENE IS ABOUT TO RUN.
+  --
+  -- The world entry is the client's job while the cutscene plays, and the
+  -- server has a watchdog that sends the world entry if nobody reports it. The
+  -- watchdog's short deadline is meant for a cutscene that never arrives - not
+  -- for one that is being prepared and loaded. Without this signal it fired
+  -- in the middle of the load and teleported the player into the city, and
+  -- then the cutscene started anyway.
+  --
+  -- It is sent HERE, before the preparation, because the preparation and the
+  -- asset load together are what take the time - the assets of a cutscene are
+  -- big, and the first request after the client downloaded them is the slow
+  -- one.
+  TriggerServerEvent('nifty:server:cutsceneRunning')
+
   -- BLACK FIRST. EVERYTHING BELOW HAPPENS BEHIND A BLACK SCREEN.
   --
   -- What follows puts the player somewhere else, fills the cabin with seven
@@ -253,6 +281,9 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   -- a copy of the player in it are not the same thing.
   local passengers = {}
   for index, model in ipairs(PASSENGER_MODELS) do
+    -- The freemode the player wears is ALREADY in memory, so this wait is
+    -- normally over before it starts. The other gender's freemode has to be
+    -- streamed in, and that is the one wait the scene really pays for.
     local hash = ensureModel(model, 6000)
 
     -- A PLACE OF THEIR OWN, so they do not stand in the player.
@@ -265,6 +296,24 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
 
     if created and created ~= 0 then
       SetModelAsNoLongerNeeded(hash)
+
+      -- THE SUIT.
+      --
+      -- The freemode is the same model the player wears, so without this the
+      -- passenger would be the player in a different seat. The outfit table is
+      -- Rockstar's own, one row per seat.
+      local outfit = PASSENGER_OUTFITS[index]
+      if outfit then
+        for component = 0, 11 do
+          local variation = outfit[component]
+          if variation then
+            SetPedComponentVariation(created, component, variation[1], variation[2], 0)
+          end
+        end
+      end
+      for prop = 0, 8 do ClearPedProp(created, prop) end
+      FinalizeHeadBlend(created)
+
       -- INVISIBLE UNTIL THE CUTOISCENE TAKES THE SEAT.
       --
       -- A ped that is created visible stands at the spawn point until the
@@ -276,45 +325,11 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
       SetEntityAsMissionEntity(created, true, true)
       passengers[#passengers + 1] = created
     else
-      -- THE FALLBACK.
-      --
-      -- The NPC model is not available. Rather than an empty seat, the seat is
-      -- filled with the freemode model of that seat's gender - in the suit
-      -- Rockstar's passengers wear. Still not the player: different clothes,
-      -- and a head that is not the player's head.
-      --
-      -- The freemode is usually ALREADY in memory - the player wears one -
-      -- so this fallback costs nothing.
-      local fallbackModel = (index <= 3) and 'mp_m_freemode_01' or 'mp_f_freemode_01'
-      local fallbackHash = ensureModel(fallbackModel, 3000)
-
-      local fallback = 0
-      if fallbackHash ~= 0 then
-        fallback = CreatePed(26, fallbackHash, PRE_POS.x + offsetX, PRE_POS.y, PRE_POS.z, 0.0, false, false)
-      end
-
-      if fallback and fallback ~= 0 then
-        SetModelAsNoLongerNeeded(fallbackHash)
-        local outfit = PASSENGER_OUTFITS[index]
-        if outfit then
-          for component = 0, 11 do
-            local variation = outfit[component]
-            if variation then
-              SetPedComponentVariation(fallback, component, variation[1], variation[2], 0)
-            end
-          end
-        end
-        for prop = 0, 8 do ClearPedProp(fallback, prop) end
-        FinalizeHeadBlend(fallback)
-        SetEntityVisible(fallback, false, false)
-        SetEntityAsMissionEntity(fallback, true, true)
-        passengers[#passengers + 1] = fallback
-        print(('[nifty-core] the model "%s" for seat %d is not available - the seat gets the suit instead'):format(
-          model, index))
-      else
-        print(('[nifty-core] neither the model "%s" nor the suit for seat %d could be created - the seat stays empty'):format(
-          model, index))
-      end
+      -- The model could not be streamed in. The seat stays empty, and the log
+      -- says so - an empty seat is honest, a seat with a copy of the player
+      -- in it is not.
+      print(('[nifty-core] the model "%s" for seat %d could not be created - the seat stays empty'):format(
+        model, index))
     end
   end
 
@@ -382,10 +397,17 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   local section = isMale and SECTION_MALE or SECTION_FEMALE
   RequestCutsceneWithPlaybackList(cutsceneName, section, PLAYBACK_FLAGS)
 
-  local deadline = GetGameTimer() + 15000
+  -- THE CUTSCENE HAS TO LOAD, AND ITS ASSETS ARE BIG.
+  --
+  -- The first request after the client downloaded them is the slow one, and
+  -- fifteen seconds was not enough - the scene gave up, the video never ran,
+  -- and the player landed in the world without it. Forty-five seconds is
+  -- still far less than the watchdog's window in the cutscene phase, so a
+  -- cutscene that is merely slow no longer costs the player the video.
+  local deadline = GetGameTimer() + 45000
   while not HasCutsceneLoaded() do
     if GetGameTimer() > deadline then
-      -- Cutscene didn't load in 15s (asset missing or build-different).
+      -- Cutscene didn't load in 45s (asset missing or build-different).
       -- Fall through to the standard world entry; the picker is still
       -- available, just without the cinematic lead-in.
       print(('[nifty-core] cutscene "%s" failed to load, falling back to plain world entry'):format(cutsceneName))
@@ -443,16 +465,6 @@ RegisterNetEvent('nifty:client:welcomeCutscene', function(data)
   if jet ~= 0 then
     SetEntityAsMissionEntity(jet, true, true)
   end
-
-  -- THE SERVER IS TOLD THAT THE VIDEO IS RUNNING.
-  --
-  -- The world entry is the client's job while the cutscene plays, and the
-  -- server has a watchdog that sends the world entry if nobody reports it. The
-  -- watchdog's short deadline is meant for a cutscene that never arrives - not
-  -- for one that is playing right now. Without this signal it fired in the
-  -- middle of the video and teleported the player into the city, and then the
-  -- cutscene ended and did it again.
-  TriggerServerEvent('nifty:server:cutsceneRunning')
 
   StartCutscene(START_FLAGS)
   DoScreenFadeIn(500)

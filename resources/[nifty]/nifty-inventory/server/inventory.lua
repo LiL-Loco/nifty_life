@@ -153,6 +153,32 @@ end
 -- Adding
 -- ---------------------------------------------------------------------------
 
+--- The slots a character has occupied, ALL of them.
+---
+--- The unique key on the table is (character_id, slot): one row per slot, no
+--- matter which item sits in it. So the set of used slots has to be the
+--- character's WHOLE inventory.
+---
+--- The old code built it from the rows of the same item code only, and every
+--- other item therefore believed slot 0 was free. The insert then collided
+--- with whatever was in it:
+---
+---     Duplicate entry 'a92f02e4-...-0' for key 'uq_inventory_slot'
+---
+--- and the character ended up with ONE item: the id card, the glasses and the
+--- earring were all refused the same way, every single time.
+local function occupiedSlots(characterId, label)
+  local rows = Db.all([[
+    SELECT slot FROM inventory_items WHERE character_id = ?
+  ]], { characterId }, label or 'inventory:occupied')
+
+  local used = {}
+  for _, row in ipairs(rows or {}) do
+    used[tonumber(row.slot)] = true
+  end
+  return used
+end
+
 --- Where should a new stack of `code` go?
 ---
 --- Stack merging is tried first — a player who picks up four coffees should see
@@ -174,11 +200,10 @@ local function findTargetSlot(characterId, def, quantity, metadataKey)
     ]], { characterId, def.code }, 'inventory:slots')
   end
 
-  local used = {}
-
-  for _, row in ipairs(rows) do
-    used[tonumber(row.slot)] = true
-  end
+  -- The rows of the same item are the ones that can be MERGED into. The slots
+  -- that are taken are a different question, and they are answered by the
+  -- character's whole inventory.
+  local used = occupiedSlots(characterId, 'inventory:slots')
 
   if def.stackable then
     for _, row in ipairs(rows) do
@@ -605,24 +630,12 @@ end
 -- findTargetSlot but does not stack-merge - the destination gets its
 -- own stack of the same item. Must be declared before Inventory.transferBetween
 -- because the call site binds to the local at parse time.
-local function findFreeTargetSlot(characterId, def, metadataKey)
-  local rows
-  if metadataKey ~= nil then
-    rows = Db.all([[
-      SELECT slot FROM inventory_items
-       WHERE character_id = ? AND item_code = ? AND metadata = ?
-    ]], { characterId, def.code, metadataKey }, 'inventory:transfer:slot')
-  else
-    rows = Db.all([[
-      SELECT slot FROM inventory_items
-       WHERE character_id = ? AND item_code = ? AND metadata IS NULL
-    ]], { characterId, def.code }, 'inventory:transfer:slot')
-  end
-
-  local used = {}
-  for _, row in ipairs(rows or {}) do
-    used[tonumber(row.slot)] = true
-  end
+local function findFreeTargetSlot(characterId)
+  -- The destination gets its own stack of the same item - no merging - so the
+  -- only question is which slot is free. And "free" is a question about the
+  -- WHOLE inventory, because the unique key is (character_id, slot). See
+  -- `occupiedSlots`.
+  local used = occupiedSlots(characterId, 'inventory:transfer:slot')
 
   for slot = 0, slotCapacity() - 1 do
     if not used[slot] then
@@ -690,7 +703,7 @@ function Inventory.transferBetween(srcCid, targetCid, code, quantity, itemId)
   if metadataEnc == '' then metadataEnc = nil end
 
   local newId = Nifty.newUuid()
-  local slot = findFreeTargetSlot(targetCid, def, metadataEnc)
+  local slot = findFreeTargetSlot(targetCid)
 
   -- Build the insert SQL once, parameterised either way.
   local insertSql
