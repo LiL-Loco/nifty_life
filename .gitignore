@@ -154,8 +154,16 @@ desktop.ini
 # character class, so the unescaped form would match `resources/n/` and
 # nothing else, and the rule would fail silently.
 # The `*` is inside the bracket so it matches every resource, not one.
+#
+# EXCEPTION, and it is a temporary one: the cutscene probe (nifty-core's
+# cl_probe.lua) is TRACKED while it is in use, because its manifest line is
+# tracked too - and a manifest that names a file the checkout does not have
+# does not start at all. The probe and the manifest line are removed
+# together, the day the measurement is done. The rules below still keep a
+# NEW probe from being committed by accident.
 /resources/\[nifty\]/*/server/sv_probe.lua
 /resources/\[nifty\]/*/client/cl_probe.lua
+!/resources/\[nifty\]/nifty-core/client/cl_probe.lua
 
 # Phase 0 voice spike. Raw captured voice audio from staff channels has no
 # business in git history, and it is regenerable by running the spike again.
