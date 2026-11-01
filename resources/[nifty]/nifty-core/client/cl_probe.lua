@@ -180,98 +180,141 @@ CreateThread(function()
     Wait(500)
   end
 
-  -- 2. MEASURE EVERYTHING, IN ONE PASS.
+  -- The measurement pass runs INSIDE a pcall.
   --
-  -- Native calls are milliseconds. Sending is the slow part, and the channel
-  -- allows four messages per ten seconds while the cutscene lasts half a
-  -- minute. So the facts are collected here, and sent afterwards.
-  local facts = {}
+  -- The first version collected everything and sent it afterwards, and one
+  -- native that did not exist took the whole pass down - the script error
+  -- killed the thread, and every fact that HAD been collected died with it,
+  -- because the sending comes after the collecting. A probe that loses
+  -- everything because of one call is worth nothing.
+  local function measure()
+    -- 2. MEASURE EVERYTHING, IN ONE PASS.
+    --
+    -- Native calls are milliseconds. Sending is the slow part, and the channel
+    -- allows four messages per ten seconds while the cutscene lasts half a
+    -- minute. So the facts are collected here, and sent afterwards.
+    local facts = {}
 
-  -- M1: THE SLOTS.
-  --
-  -- `cut` is the entity the CUTSCENE has in the slot, `reg` the one THIS
-  -- PROJECT registered. If they are the same, the baked entity was displaced.
-  -- The model says what is sitting there.
-  local slotFacts = {}
-  for _, name in ipairs(CANDIDATE_SLOTS) do
-    local short = name:gsub('MP_Plane_Passenger_', 'P')
-    if try('DoesCutsceneEntityExist', name, 0) then
-      local cut = try('GetEntityIndexOfCutsceneEntity', name, 0) or 0
-      local reg = try('GetEntityIndexOfRegisteredEntity', name, 0) or 0
-      local model = 0
-      if cut ~= 0 and DoesEntityExist(cut) then model = GetEntityModel(cut) end
-      slotFacts[#slotFacts + 1] = ('%s cut=%d reg=%d %s'):format(
-        short, cut, reg, modelName(model))
-    else
-      slotFacts[#slotFacts + 1] = ('%s leer'):format(short)
-    end
-  end
-  facts[#facts + 1] = 'M1 slots: ' .. table.concat(slotFacts, ' | ')
-
-  -- M3: THE PLAYBACK FLAGS.
-  --
-  -- The direct answer. The male list is 31 (bits 1, 2, 4, 8, 16), the female
-  -- one 103 (bits 1, 2, 4, 32, 64). Which bits are set says which half of
-  -- the video is playing - without waiting for the video to end.
-  if available('IsCutscenePlaybackFlagSet') then
-    local active = {}
-    for _, flag in ipairs({ 1, 2, 4, 8, 16, 32, 64, 128 }) do
-      if try('IsCutscenePlaybackFlagSet', flag) then active[#active + 1] = tostring(flag) end
-    end
-    facts[#facts + 1] = 'M3 flags aktiv: ' ..
-      (#active > 0 and table.concat(active, ',') or 'keine') ..
-      ' (maennlich erwartet 1,2,4,8,16 - weiblich 1,2,4,32,64)'
-  end
-
-  -- M2: WHERE THE PEDS ARE.
-  --
-  -- The horizontal distance to the jet decides who counts, and the HEIGHT is
-  -- reported separately - the jet is at z ~ 142, the ground at z ~ 3. The old
-  -- probe used a three-dimensional distance, so the ground was 139 metres
-  -- away from the jet and the answer was always "nobody".
-  local jetAnchor = vector3(-1200.0, -1490.0, 142.385)
-  if available('GetGamePool') then
-    for _, obj in ipairs(GetGamePool('CObject')) do
-      if GetEntityModel(obj) == joaat('p_cs_mp_jet_01_s') then
-        jetAnchor = GetEntityCoords(obj)
-        break
+    -- M1: THE SLOTS.
+    --
+    -- `cut` is the entity the CUTSCENE has in the slot, `reg` the one THIS
+    -- PROJECT registered. If they are the same, the baked entity was displaced.
+    -- The model says what is sitting there.
+    local slotFacts = {}
+    for _, name in ipairs(CANDIDATE_SLOTS) do
+      local short = name:gsub('MP_Plane_Passenger_', 'P')
+      if try('DoesCutsceneEntityExist', name, 0) then
+        local cut = try('GetEntityIndexOfCutsceneEntity', name, 0) or 0
+        local reg = try('GetEntityIndexOfRegisteredEntity', name, 0) or 0
+        local model = 0
+        if cut ~= 0 then
+          local okExists, exists = pcall(DoesEntityExist, cut)
+          local okModel, m = pcall(GetEntityModel, cut)
+          if okExists and exists and okModel then model = m end
+        end
+        slotFacts[#slotFacts + 1] = ('%s cut=%d reg=%d %s'):format(
+          short, cut, reg, modelName(model))
+      else
+        slotFacts[#slotFacts + 1] = ('%s leer'):format(short)
       end
     end
-  end
+    facts[#facts + 1] = 'M1 slots: ' .. table.concat(slotFacts, ' | ')
 
-  local pedFacts, passengerPed = {}, nil
-  if available('GetGamePool') then
-    for _, p in ipairs(GetGamePool('CPed')) do
-      local c = GetEntityCoords(p)
-      local flat = vector3(c.x - jetAnchor.x, c.y - jetAnchor.y, 0.0)
-      if #flat < 60.0 then
-        pedFacts[#pedFacts + 1] = ('%d %s z=%.1f'):format(
-          p, modelName(GetEntityModel(p)), c.z)
-        if passengerPed == nil and GetEntityModel(p) ~= joaat('mp_m_freemode_01')
-          and GetEntityModel(p) ~= joaat('mp_f_freemode_01') then
-          passengerPed = p
+    -- M3: THE PLAYBACK FLAGS.
+    --
+    -- The direct answer. The male list is 31 (bits 1, 2, 4, 8, 16), the female
+    -- one 103 (bits 1, 2, 4, 32, 64). Which bits are set says which half of
+    -- the video is playing - without waiting for the video to end.
+    if available('IsCutscenePlaybackFlagSet') then
+      local active = {}
+      for _, flag in ipairs({ 1, 2, 4, 8, 16, 32, 64, 128 }) do
+        if try('IsCutscenePlaybackFlagSet', flag) then active[#active + 1] = tostring(flag) end
+      end
+      facts[#facts + 1] = 'M3 flags aktiv: ' ..
+        (#active > 0 and table.concat(active, ',') or 'keine') ..
+        ' (maennlich erwartet 1,2,4,8,16 - weiblich 1,2,4,32,64)'
+    end
+
+    -- M2: WHERE THE PEDS ARE.
+    --
+    -- The horizontal distance to the jet decides who counts, and the HEIGHT is
+    -- reported separately - the jet is at z ~ 142, the ground at z ~ 3. The old
+    -- probe used a three-dimensional distance, so the ground was 139 metres
+    -- away from the jet and the answer was always "nobody".
+    local jetAnchor = vector3(-1200.0, -1490.0, 142.385)
+    if available('GetGamePool') then
+      local ok, objects = pcall(GetGamePool, 'CObject')
+      for _, obj in ipairs(ok and objects or {}) do
+        local okModel, model = pcall(GetEntityModel, obj)
+        if okModel and model == joaat('p_cs_mp_jet_01_s') then
+          local okCoords, coords = pcall(GetEntityCoords, obj)
+          if okCoords then jetAnchor = coords end
+          break
         end
       end
     end
-  end
-  facts[#facts + 1] = 'M2 peds (x/y nahe Jet, z lautet die Hoehe): ' ..
-    (#pedFacts > 0 and table.concat(pedFacts, ' ') or 'keine')
 
-  -- M5: THE PASSENGER'S HEAD AGAINST THE PLAYER'S.
-  --
-  -- Component 0 is the head. A passenger that wears the player's head is the
-  -- symptom the player reported; a different head with the same clothes is
-  -- not.
-  if passengerPed then
-    local playerPed = PlayerPedId()
-    local playerHead = select(1, GetPedComponentVariation(playerPed, 0))
-    local passengerHead = select(1, GetPedComponentVariation(passengerPed, 0))
-    local playerTorso = select(1, GetPedComponentVariation(playerPed, 3))
-    local passengerTorso = select(1, GetPedComponentVariation(passengerPed, 3))
-    facts[#facts + 1] = ('M5 kopf spieler=%d gast=%d | torso spieler=%d gast=%d'):format(
-      playerHead or -1, passengerHead or -1, playerTorso or -1, passengerTorso or -1)
-  else
-    facts[#facts + 1] = 'M5 kein Passagier-Ped gefunden'
+    local pedFacts, passengerPed = {}, nil
+    if available('GetGamePool') then
+      local ok, peds = pcall(GetGamePool, 'CPed')
+      for _, p in ipairs(ok and peds or {}) do
+        local okCoords, c = pcall(GetEntityCoords, p)
+        if okCoords then
+          local flat = vector3(c.x - jetAnchor.x, c.y - jetAnchor.y, 0.0)
+          if #flat < 60.0 then
+            local okModel, model = pcall(GetEntityModel, p)
+            pedFacts[#pedFacts + 1] = ('%d %s z=%.1f'):format(
+              p, modelName(model), c.z)
+            -- The player is one of the peds near the jet, and the passengers are
+            -- the ones that are NOT the player. The freemode models are the
+            -- passengers' model - so the player is the freemode AND the
+            -- passenger is too. The difference is the position: the passengers
+            -- are in the cabin, the player is at the window.
+            if passengerPed == nil and model ~= joaat('mp_m_freemode_01')
+              and model ~= joaat('mp_f_freemode_01') then
+              passengerPed = p
+            end
+          end
+        end
+      end
+    end
+    facts[#facts + 1] = 'M2 peds (x/y nahe Jet, z lautet die Hoehe): ' ..
+      (#pedFacts > 0 and table.concat(pedFacts, ' ') or 'keine')
+
+    -- M5: THE PASSENGER'S HEAD AGAINST THE PLAYER'S.
+    --
+    -- Component 0 is the head. A passenger that wears the player's head is the
+    -- symptom the player reported; a different head with the same clothes is
+    -- not.
+    --
+    -- `GetPedComponentVariation` DOES NOT EXIST. It is not in the native
+    -- database - the first version of this probe called it and took the whole
+    -- measurement pass down with it:
+    --
+    --     SCRIPT ERROR: cl_probe.lua:267: attempt to call a nil value
+    --                  (global 'GetPedComponentVariation')
+    --
+    -- and with it every OTHER fact of the pass, because they were all collected
+    -- before the sending. The reading native is `GetPedDrawableVariation` (the
+    -- GLOBAL drawable of the slot) plus `GetPedTextureVariation` - the same two
+    -- the hood feature reads.
+    if passengerPed then
+      local playerPed = PlayerPedId()
+      local okHead, playerHead = pcall(GetPedDrawableVariation, playerPed, 0)
+      local okGuest, passengerHead = pcall(GetPedDrawableVariation, passengerPed, 0)
+      local okTorso, playerTorso = pcall(GetPedDrawableVariation, playerPed, 3)
+      local okTorso2, passengerTorso = pcall(GetPedDrawableVariation, passengerPed, 3)
+      facts[#facts + 1] = ('M5 kopf spieler=%s gast=%s | torso spieler=%s gast=%s'):format(
+        tostring(okHead and playerHead or '?'), tostring(okGuest and passengerHead or '?'),
+        tostring(okTorso and playerTorso or '?'), tostring(okTorso2 and passengerTorso or '?'))
+    else
+      facts[#facts + 1] = 'M5 kein Passagier-Ped gefunden'
+    end
+  end
+
+  local measured, measureErr = pcall(measure)
+  if not measured then
+    facts[#facts + 1] = ('Messung abgebrochen: %s'):format(tostring(measureErr))
   end
 
   -- 3. THE TIMELINE.
