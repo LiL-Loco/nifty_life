@@ -333,6 +333,47 @@ local function applyAppearanceParts(ped, appearance)
   return ped
 end
 
+--- Set the player's model - and WAIT UNTIL THE MODEL IS REALLY THERE.
+---
+--- `SetPlayerModel` destroys the ped and creates a new one, and it CRASHES the
+--- client when the model is not in memory yet. That is not a theory: the
+--- client's own log says
+---
+---     script error in native 00a1cadd00108836: exception at address ...
+---
+--- and 0x00a1cadd00108836 is SET_PLAYER_MODEL. It killed the client at every
+--- world entry - the first test and the one after it - because the model was
+--- streamed in on demand and never waited for.
+---
+--- So: request the model, wait for it with a deadline, and only then set it.
+--- If it does not load, the player keeps his ped. A player with the wrong
+--- model is a bug report; a crashed client is a dead server.
+---
+--- @return boolean true, wenn das Modell gesetzt wurde
+local function setPlayerModel(modelName)  if type(modelName) ~= 'string' or modelName == '' then return false end
+
+  local hash = joaat(modelName)
+  if hash == 0 then return false end
+
+  if not HasModelLoaded(hash) then
+    RequestModel(hash)
+    local deadline = GetGameTimer() + 10000
+    while not HasModelLoaded(hash) do
+      if GetGameTimer() > deadline then
+        print(('[nifty-world] the model "%s" did not load in 10s - the player keeps his ped'):format(
+          tostring(modelName)))
+        SetModelAsNoLongerNeeded(hash)
+        return false
+      end
+      Wait(0)
+    end
+  end
+
+  SetPlayerModel(PlayerId(), hash)
+  SetModelAsNoLongerNeeded(hash)
+  return true
+end
+
 -- Apply a saved appearance to a ped, model included.
 -- Components and props are set per slot; anything the stored data omits is left
 -- at the model's default, which is why a partially specified appearance still
@@ -341,9 +382,7 @@ local function applyAppearance(ped, appearance)
   if not appearance then return end
 
   if appearance.model then
-    local model = joaat(appearance.model)
-    SetPlayerModel(PlayerId(), model)
-    SetModelAsNoLongerNeeded(model)
+    setPlayerModel(appearance.model)
     -- Changing the model resets the ped, so the handle has to be re-fetched.
     ped = PlayerPedId()
   end
@@ -363,9 +402,7 @@ local function doEnterWorldSpawn(x, y, z, heading, appearance, firstName, lastNa
   while not IsScreenFadedOut() do Wait(0) end
 
   if appearance and appearance.model then
-    local model = joaat(appearance.model)
-    SetPlayerModel(PlayerId(), model)
-    SetModelAsNoLongerNeeded(model)
+    setPlayerModel(appearance.model)
   end
 
   applyAppearanceParts(PlayerPedId(), appearance)
