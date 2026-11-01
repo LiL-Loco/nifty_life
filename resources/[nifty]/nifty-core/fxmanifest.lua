@@ -110,6 +110,10 @@ server_script 'server/sv_diag.lua'
 client_script 'client/cl_welcome.lua'
 client_script 'client/cl_variation.lua'
 
+-- TEMPORARY PROBE (2026-10-21): reports what is actually inside the welcome
+-- cutscene to the server log. Remove the file AND this line together.
+client_script 'client/cl_probe.lua'
+
 -- Only the schema is served from here now. The colour tokens and the NUI
 -- helper were moved out: nifty-chat vendored its own copy, and no other
 -- resource referenced them.
